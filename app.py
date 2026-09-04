@@ -6,7 +6,7 @@ from functools import wraps
 
 from flask import (
     Flask, render_template, request, redirect, url_for, session, flash, g,
-    send_from_directory, abort, send_file
+    send_from_directory, abort, send_file, jsonify
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -94,7 +94,11 @@ def fmt_duracion(total_minutos):
 
 
 def demora_minutos(demora):
-    ini, fin = _parse_dt(demora["fecha_inicio"]), _parse_dt(demora["fecha_fin"])
+    """Minutos que duró la demora. Si todavía está abierta (pausa en curso,
+    fecha_fin es NULL), cuenta desde que empezó hasta ahora mismo, así las
+    horas de trabajo dejan de sumar mientras el ítem sigue pausado."""
+    ini = _parse_dt(demora["fecha_inicio"])
+    fin = _parse_dt(demora["fecha_fin"]) if demora["fecha_fin"] else datetime.now()
     if not (ini and fin) or fin <= ini:
         return 0
     return (fin - ini).total_seconds() / 60
@@ -1078,10 +1082,17 @@ def cosesa_item_detail(item_id):
     fotos_todas = db.execute("SELECT * FROM fotos WHERE item_id = ? ORDER BY subida_en DESC", (item_id,)).fetchall()
     fotos = [f for f in fotos_todas if f["tipo"] != "certificado_lavado"]
     fotos_checklist = [f for f in fotos_todas if f["tipo"] == "certificado_lavado"]
-    demoras = db.execute(
+    todas_las_demoras = db.execute(
         "SELECT * FROM demoras WHERE item_id = ? ORDER BY fecha_inicio", (item_id,)
     ).fetchall()
-    total_demoras_min = sum(demora_minutos(d) for d in demoras)
+    total_demoras_min = sum(demora_minutos(d) for d in todas_las_demoras)
+    pausa_actual = db.execute(
+        "SELECT * FROM demoras WHERE item_id = ? AND fecha_fin IS NULL ORDER BY id DESC LIMIT 1",
+        (item_id,),
+    ).fetchone()
+    # La demora todavía abierta (pausa en curso) se maneja con los botones de
+    # pausar/reanudar, no desde la lista genérica de demoras editables.
+    demoras = [d for d in todas_las_demoras if d["fecha_fin"]]
     checklist = get_or_create_checklist(db, item_id)
     checklist_puntos = get_checklist_puntos(db, item_id)
     piezas = db.execute(
@@ -1097,7 +1108,7 @@ def cosesa_item_detail(item_id):
     db.close()
     return render_template(
         "cosesa_item_detail.html", item=item, avances=avances, fotos=fotos, today=now_local_str(),
-        demoras=demoras, total_demoras=fmt_duracion(total_demoras_min),
+        demoras=demoras, total_demoras=fmt_duracion(total_demoras_min), pausa_actual=pausa_actual,
         checklist=checklist, checklist_puntos=checklist_puntos, checklist_estados=CHECKLIST_ESTADOS,
         fotos_checklist=fotos_checklist, piezas=piezas, piezas_sugeridas=PIEZAS_SUGERIDAS,
         personal=personal, cargos_personal=CARGOS_PERSONAL, turnos=TURNOS, horas=horas,
@@ -1153,6 +1164,99 @@ def registrar_avance(item_id):
     flash("Avance registrado.", "success")
     if request.form.get("volver") == "obra":
         return redirect(url_for("cosesa_obra_detail", obra_id=item["obra_id"]))
+    return redirect(url_for("cosesa_item_detail", item_id=item_id))
+
+
+@app.route("/cosesa/items/<int:item_id>/pausar", methods=["POST"])
+@cosesa_required
+def pausar_item(item_id):
+    db = get_db()
+    item = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    if item is None:
+        abort(404)
+    if item["estado"] != "en_curso":
+        flash("Solo se puede pausar una tarea que esté en curso.", "error")
+    elif item["pausado_en"]:
+        flash("Esta tarea ya está pausada.", "error")
+    else:
+        motivo = request.form.get("motivo", "").strip()
+        if not motivo:
+            flash("Contá brevemente el motivo de la pausa.", "error")
+        else:
+            user = get_current_user()
+            ahora = now_local_str()
+            db.execute(
+                "INSERT INTO demoras (item_id, fecha_inicio, fecha_fin, motivo, usuario_id) "
+                "VALUES (?, ?, NULL, ?, ?)",
+                (item_id, ahora, motivo, user["id"]),
+            )
+            db.execute("UPDATE items SET pausado_en = ? WHERE id = ?", (ahora, item_id))
+            db.commit()
+            recompute_item_horas(db, item_id)
+            flash("Tarea pausada. Deja de sumar horas hombre y horas máquina hasta que la reanudes.", "success")
+    db.close()
+    return redirect(url_for("cosesa_item_detail", item_id=item_id))
+
+
+@app.route("/cosesa/items/<int:item_id>/reanudar", methods=["POST"])
+@cosesa_required
+def reanudar_item(item_id):
+    db = get_db()
+    item = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    if item is None:
+        abort(404)
+    demora_abierta = db.execute(
+        "SELECT * FROM demoras WHERE item_id = ? AND fecha_fin IS NULL ORDER BY id DESC LIMIT 1",
+        (item_id,),
+    ).fetchone()
+    if not item["pausado_en"] and demora_abierta is None:
+        flash("Esta tarea no está pausada.", "error")
+    else:
+        ahora = now_local_str()
+        if demora_abierta:
+            db.execute("UPDATE demoras SET fecha_fin = ? WHERE id = ?", (ahora, demora_abierta["id"]))
+        db.execute("UPDATE items SET pausado_en = NULL WHERE id = ?", (item_id,))
+        db.commit()
+        recompute_item_horas(db, item_id)
+        flash("Tarea reanudada.", "success")
+    db.close()
+    return redirect(url_for("cosesa_item_detail", item_id=item_id))
+
+
+@app.route("/cosesa/items/<int:item_id>/finalizar", methods=["POST"])
+@cosesa_required
+def finalizar_item(item_id):
+    db = get_db()
+    item = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    if item is None:
+        abort(404)
+    if item["estado"] == "finalizado":
+        flash("Esta tarea ya estaba finalizada.", "error")
+        db.close()
+        return redirect(url_for("cosesa_item_detail", item_id=item_id))
+
+    user = get_current_user()
+    ahora = now_local_str()
+    # Si estaba pausada, cerramos la pausa abierta para que no quede un hueco sin fin.
+    demora_abierta = db.execute(
+        "SELECT * FROM demoras WHERE item_id = ? AND fecha_fin IS NULL ORDER BY id DESC LIMIT 1",
+        (item_id,),
+    ).fetchone()
+    if demora_abierta:
+        db.execute("UPDATE demoras SET fecha_fin = ? WHERE id = ?", (ahora, demora_abierta["id"]))
+    fecha_inicio = item["fecha_inicio"] or ahora
+    db.execute(
+        "UPDATE items SET estado = 'finalizado', fecha_inicio = ?, fecha_fin = ?, pausado_en = NULL WHERE id = ?",
+        (fecha_inicio, ahora, item_id),
+    )
+    db.execute(
+        "INSERT INTO avance_log (item_id, fecha, avance_pct, comentario, usuario_id) VALUES (?, ?, ?, ?, ?)",
+        (item_id, ahora, item["avance_pct"], "Tarea finalizada manualmente, con el avance que tenía.", user["id"]),
+    )
+    db.commit()
+    recompute_item_horas(db, item_id)
+    db.close()
+    flash(f"Tarea finalizada con {item['avance_pct']}% de avance.", "success")
     return redirect(url_for("cosesa_item_detail", item_id=item_id))
 
 

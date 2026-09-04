@@ -61,6 +61,7 @@ CREATE TABLE items (
     horas_hombre REAL NOT NULL DEFAULT 0,
     horas_maquina REAL NOT NULL DEFAULT 0,
     observaciones TEXT,
+    pausado_en TEXT,               -- si no es NULL, el ítem está pausado desde esa fecha/hora
     creado_en TEXT DEFAULT (datetime('now'))
 );
 
@@ -78,11 +79,12 @@ CREATE TABLE avance_log (
 );
 
 -- Demoras / tiempos muertos registrados durante la ejecución de un ítem
+-- fecha_fin NULL = demora todavía abierta (el ítem está pausado ahora mismo).
 CREATE TABLE demoras (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
     fecha_inicio TEXT NOT NULL,
-    fecha_fin TEXT NOT NULL,
+    fecha_fin TEXT,
     motivo TEXT,
     usuario_id INTEGER REFERENCES usuarios(id),
     creado_en TEXT DEFAULT (datetime('now'))

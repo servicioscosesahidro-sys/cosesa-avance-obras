@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ obra['nombre'] }} · Mis obras{% endblock %}
+{% block back_link %}
+<a class="btn btn-outline btn-sm btn-back no-print" href="{{ url_for('cliente_dashboard') }}">&larr; Volver</a>
+{% endblock %}
 {% block content %}
 <div class="breadcrumb"><a href="{{ url_for('cliente_dashboard') }}">Mis obras</a> / {{ obra['nombre'] }}</div>
 <div style="display:flex;justify-content:space-between;align-items:flex-start;">
@@ -46,7 +49,7 @@
     {% for i in items %}
     <tr>
       <td>{{ i['nombre'] }}</td>
-      <td><span class="pill pill-{{ i['estado'] }}">{{ i['estado'].replace('_',' ') }}</span></td>
+      <td><span class="pill pill-{{ i['estado'] }}">{{ i['estado'].replace('_',' ') }}</span>{% if i['pausado_en'] %} <span class="pill pill-pausado">Pausado</span>{% endif %}</td>
       <td style="min-width:140px;">
         <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:{{ i['avance_pct'] }}%;"></div></div>
         <span class="subtitle">{{ i['avance_pct'] }}%</span>

@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Editar {{ usuario['nombre'] }} · COSESA{% endblock %}
+{% block back_link %}
+<a class="btn btn-outline btn-sm btn-back no-print" href="{{ url_for('cosesa_usuarios') }}">&larr; Volver</a>
+{% endblock %}
 {% block content %}
 <div class="breadcrumb"><a href="{{ url_for('cosesa_dashboard') }}">Panel COSESA</a> / <a href="{{ url_for('cosesa_usuarios') }}">Usuarios</a> / {{ usuario['nombre'] }}</div>
 <h1>Editar usuario cliente</h1>

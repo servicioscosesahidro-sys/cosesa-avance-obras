@@ -30,9 +30,11 @@
   {% endif %}
 
   <div class="{% block container_class %}container{% endblock %}">
+    {% block back_link %}
     {% if current_user and request.endpoint not in ('cosesa_dashboard', 'cliente_dashboard') %}
       <a class="btn btn-outline btn-sm btn-back no-print" href="javascript:history.back()">&larr; Volver</a>
     {% endif %}
+    {% endblock %}
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         {% for category, message in messages %}

@@ -17,22 +17,72 @@ def get_db():
     return conn
 
 
+def _column_exists(conn, table, column):
+    cols = [row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+    return column in cols
+
+
+def _column_is_not_null(conn, table, column):
+    for row in conn.execute(f"PRAGMA table_info({table})").fetchall():
+        if row[1] == column:
+            return bool(row[3])
+    return False
+
+
+def _migrate_schema(conn):
+    """Ajustes al esquema para bases de datos creadas con una versión anterior
+    de schema.sql, sin perder los datos que ya tengan cargados. Se puede
+    llamar las veces que sea: cada paso primero revisa si hace falta."""
+    changed = False
+
+    if not _column_exists(conn, "items", "pausado_en"):
+        conn.execute("ALTER TABLE items ADD COLUMN pausado_en TEXT")
+        changed = True
+
+    if _column_is_not_null(conn, "demoras", "fecha_fin"):
+        # SQLite no permite quitar un NOT NULL con ALTER TABLE: se recrea la
+        # tabla con el nuevo esquema y se copian los datos existentes.
+        conn.executescript(
+            """
+            CREATE TABLE demoras_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+                fecha_inicio TEXT NOT NULL,
+                fecha_fin TEXT,
+                motivo TEXT,
+                usuario_id INTEGER REFERENCES usuarios(id),
+                creado_en TEXT DEFAULT (datetime('now'))
+            );
+            INSERT INTO demoras_new (id, item_id, fecha_inicio, fecha_fin, motivo, usuario_id, creado_en)
+                SELECT id, item_id, fecha_inicio, fecha_fin, motivo, usuario_id, creado_en FROM demoras;
+            DROP TABLE demoras;
+            ALTER TABLE demoras_new RENAME TO demoras;
+            """
+        )
+        changed = True
+
+    if changed:
+        conn.commit()
+
+
 def init_db():
-    """Crea la base de datos si todavía no existe. Con gunicorn corriendo
-    varios workers, más de un proceso puede llamar a esto al mismo tiempo en
-    el arranque — se usa un lock de archivo para que solo uno cree las
-    tablas, y el resto no choquen contra un "table already exists"."""
+    """Crea la base de datos si todavía no existe, y aplica migraciones
+    livianas si ya existe pero es de una versión anterior. Con gunicorn
+    corriendo varios workers, más de un proceso puede llamar a esto al mismo
+    tiempo en el arranque — se usa un lock de archivo para que solo uno
+    escriba a la vez, y el resto no choquen entre sí."""
     os.makedirs(DATA_DIR, exist_ok=True)
     lock_path = os.path.join(DATA_DIR, ".init.lock")
     with open(lock_path, "w") as lockfile:
         fcntl.flock(lockfile, fcntl.LOCK_EX)
         try:
-            if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) > 0:
-                return
+            need_create = not (os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) > 0)
             conn = get_db()
-            with open(os.path.join(BASE_DIR, "schema.sql"), "r", encoding="utf-8") as f:
-                conn.executescript(f.read())
-            conn.commit()
+            if need_create:
+                with open(os.path.join(BASE_DIR, "schema.sql"), "r", encoding="utf-8") as f:
+                    conn.executescript(f.read())
+                conn.commit()
+            _migrate_schema(conn)
             conn.close()
         finally:
             fcntl.flock(lockfile, fcntl.LOCK_UN)

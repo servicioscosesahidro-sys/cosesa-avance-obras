@@ -155,17 +155,24 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
             fill_w = full_w * (avance / 100)
             svg.append(f'<rect x="{rx0:.1f}" y="{bar_y}" width="{fill_w:.1f}" height="{bar_h}" rx="4" fill="#33456b"/>')
 
-            # demoras en rojo, superpuestas sobre la barra de avance real
+            # demoras en rojo, superpuestas sobre la barra de avance real. Una
+            # demora sin fecha_fin es una pausa todavía abierta: se dibuja
+            # hasta "hoy" con un borde punteado para diferenciarla de una
+            # demora ya cerrada.
             for dem in d["demoras"]:
-                dini, dfin = _parse(dem["fecha_inicio"]), _parse(dem["fecha_fin"])
-                if not (dini and dfin) or dfin <= dini:
+                dini = _parse(dem["fecha_inicio"])
+                abierta = not dem["fecha_fin"]
+                dfin = _parse(dem["fecha_fin"]) if not abierta else today
+                if not dini or not dfin or dfin <= dini:
                     continue
                 ddx0, ddx1 = max(x(dini), rx0), min(x(dfin), rx1)
                 if ddx1 <= ddx0:
                     continue
-                svg.append(f'<rect x="{ddx0:.1f}" y="{bar_y}" width="{(ddx1-ddx0):.1f}" height="{bar_h}" fill="#c0392b"/>')
+                borde = ' stroke="#7a1f14" stroke-width="1.5" stroke-dasharray="3,2"' if abierta else ''
+                svg.append(f'<rect x="{ddx0:.1f}" y="{bar_y}" width="{(ddx1-ddx0):.1f}" height="{bar_h}" fill="#c0392b"{borde}/>')
 
-            svg.append(f'<text x="{rx1 + 6:.1f}" y="{y + row_h/2 + 4}" font-size="11" fill="#33456b" font-weight="600">{avance}%</text>')
+            etiqueta_avance = f'{avance}%' + (' ⏸ pausado' if it["pausado_en"] else '')
+            svg.append(f'<text x="{rx1 + 6:.1f}" y="{y + row_h/2 + 4}" font-size="11" fill="#33456b" font-weight="600">{etiqueta_avance}</text>')
         else:
             svg.append(f'<text x="{chart_x0}" y="{y + row_h/2 + 4}" font-size="11" fill="#9aa4ab">Pendiente de inicio</text>')
 
@@ -177,6 +184,7 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
         '<span><span style="display:inline-block;width:12px;height:12px;background:#eef2f5;border:1px solid #c7d0d6;border-radius:3px;vertical-align:middle;"></span> Planificado</span>'
         '<span><span style="display:inline-block;width:12px;height:12px;background:#33456b;border-radius:3px;vertical-align:middle;"></span> Avance real</span>'
         '<span><span style="display:inline-block;width:12px;height:12px;background:#c0392b;border-radius:3px;vertical-align:middle;"></span> Demora</span>'
+        '<span><span style="display:inline-block;width:12px;height:12px;background:#c0392b;border:1.5px dashed #7a1f14;border-radius:3px;vertical-align:middle;"></span> Pausa en curso</span>'
         '<span><span style="display:inline-block;width:12px;height:12px;border:1px dashed #c0392b;border-radius:3px;vertical-align:middle;"></span> Hoy</span>'
         '<span><span style="display:inline-block;width:12px;height:12px;border:1px dashed #d5dade;border-radius:3px;vertical-align:middle;"></span> Cambio de día</span>'
         '</div>'
