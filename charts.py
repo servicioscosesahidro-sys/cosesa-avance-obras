@@ -91,17 +91,36 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
     for d in items_con_demoras:
         it = d["item"]
         nombre = it["nombre"]
+        tag = (it["tag_equipo"] or "").strip() if "tag_equipo" in it.keys() else ""
         plan_ini, plan_fin = _parse(it["fecha_inicio_plan"]), _parse(it["fecha_fin_plan"])
         real_ini, real_fin = _parse(it["fecha_inicio"]), _parse(it["fecha_fin"]) or today
         avance = it["avance_pct"]
 
-        nombre_corto = nombre[:34] if not interactive else nombre[:26]
+        max_chars = 34 if not interactive else 26
+        nombre_corto = nombre[:max_chars]
+        tag_corto = tag[:max_chars]
+        # Con TAG: línea de arriba en negrita con el TAG (lo más importante para
+        # identificar el equipo en planta), línea de abajo con el nombre en gris.
+        # Sin TAG: una sola línea centrada con el nombre, como antes.
+        tag_y = y + row_h / 2 - 5
+        nombre_y = y + row_h / 2 + 9
+        sola_y = y + row_h / 2 + 4
         if interactive:
-            svg.append(
-                f'<a href="/cosesa/items/{it["id"]}"><text x="0" y="{y + row_h/2 + 4}" '
-                f'font-size="12" fill="#23272b" text-decoration="underline" style="cursor:pointer;">'
-                f'{nombre_corto}</text></a>'
-            )
+            if tag_corto:
+                svg.append(
+                    f'<a href="/cosesa/items/{it["id"]}">'
+                    f'<text x="0" y="{tag_y:.1f}" font-size="12" font-weight="700" fill="#33456b" '
+                    f'text-decoration="underline" style="cursor:pointer;">{tag_corto}</text>'
+                    f'<text x="0" y="{nombre_y:.1f}" font-size="10" fill="#7a848c" '
+                    f'style="cursor:pointer;">{nombre_corto}</text>'
+                    f'</a>'
+                )
+            else:
+                svg.append(
+                    f'<a href="/cosesa/items/{it["id"]}"><text x="0" y="{sola_y:.1f}" '
+                    f'font-size="12" fill="#23272b" text-decoration="underline" style="cursor:pointer;">'
+                    f'{nombre_corto}</text></a>'
+                )
             btn_y = y + row_h / 2
             svg.append(
                 f'<g style="cursor:pointer;" onclick="ajustarAvanceObra({it["id"]}, -10)">'
@@ -116,7 +135,11 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
                 f'</g>'
             )
         else:
-            svg.append(f'<text x="0" y="{y + row_h/2 + 4}" font-size="12" fill="#23272b">{nombre_corto}</text>')
+            if tag_corto:
+                svg.append(f'<text x="0" y="{tag_y:.1f}" font-size="12" font-weight="700" fill="#33456b">{tag_corto}</text>')
+                svg.append(f'<text x="0" y="{nombre_y:.1f}" font-size="10" fill="#7a848c">{nombre_corto}</text>')
+            else:
+                svg.append(f'<text x="0" y="{sola_y:.1f}" font-size="12" fill="#23272b">{nombre_corto}</text>')
 
         bar_y = y + 6
         bar_h = row_h - 16
