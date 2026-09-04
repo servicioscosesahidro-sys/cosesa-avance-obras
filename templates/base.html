@@ -6,6 +6,24 @@
   <title>{% block title %}AVANCE DE OBRAS - APP 03{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <link rel="icon" href="{{ url_for('static', filename='img/logo.png') }}">
+  <style>
+    /* Se saca apenas la posición de scroll ya se restauró (ver script al
+       final del body). Evita el "parpadeo" de aparecer arriba de todo un
+       instante antes de saltar al lugar correcto. */
+    html.scroll-restoring body { visibility: hidden; }
+  </style>
+  <script>
+    // Tiene que ejecutarse ya, antes de que el body empiece a dibujarse
+    // (por eso va en el head, sin defer/async), para poder ocultar la
+    // página a tiempo si hay que restaurar el scroll.
+    (function () {
+      try {
+        if (sessionStorage.getItem('scrollpos:' + location.pathname) !== null) {
+          document.documentElement.classList.add('scroll-restoring');
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   {% block body %}
@@ -51,6 +69,12 @@
     (function () {
       if ('scrollRestoration' in history) { history.scrollRestoration = 'manual'; }
       var key = 'scrollpos:' + location.pathname;
+      var revelada = false;
+      function revelar() {
+        if (revelada) return;
+        revelada = true;
+        document.documentElement.classList.remove('scroll-restoring');
+      }
       window.addEventListener('beforeunload', function () {
         try { sessionStorage.setItem(key, window.scrollY); } catch (e) {}
       });
@@ -62,7 +86,11 @@
             sessionStorage.removeItem(key);
           }
         } catch (e) {}
+        revelar();
       });
+      // Red de seguridad: si por lo que sea DOMContentLoaded tarda o falla,
+      // la página no puede quedar invisible para siempre.
+      setTimeout(revelar, 1500);
     })();
   </script>
   {% endblock %}
