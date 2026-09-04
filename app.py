@@ -1143,7 +1143,14 @@ def registrar_avance(item_id):
     elif avance_pct > 0:
         nuevo_estado = "en_curso"
         fecha_inicio = fecha_inicio or fecha
-        fecha_fin = None
+        # Si la tarea ya estaba finalizada y el avance bajó de 100%, se está
+        # reabriendo: ahí sí hay que borrar la fecha de fin real, porque ya
+        # no está terminada. Si NO estaba finalizada, no se toca la fecha de
+        # fin real que se haya cargado a mano (por ejemplo, planificando el
+        # cierre con anticipación) — antes se borraba siempre, y eso hacía
+        # que el cronograma "retrocediera" cada vez que se sumaba avance.
+        if item["estado"] == "finalizado":
+            fecha_fin = None
     else:
         nuevo_estado = "pendiente"
 
