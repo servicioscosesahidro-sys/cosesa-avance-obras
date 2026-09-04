@@ -13,6 +13,7 @@ from werkzeug.utils import secure_filename
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from db import get_db, init_db, DB_PATH
+from backup import restore_latest, backup_now, iniciar_backup_periodico
 from charts import gantt_svg, curve_svg
 from excel_io import generar_plantilla_cronograma, generar_plantilla_reales, leer_cronograma, leer_reales
 
@@ -533,10 +534,20 @@ def cosesa_usuarios():
         ).fetchall()
         usuarios_cliente.append({"u": u, "obras": obras_asignadas})
     db.close()
+    backup_configurado = bool(os.environ.get("GITHUB_BACKUP_TOKEN") and os.environ.get("GITHUB_BACKUP_REPO"))
     return render_template(
         "cosesa_usuarios.html", usuarios_cosesa=usuarios_cosesa,
         usuarios_cliente=usuarios_cliente, clientes=clientes, obras=obras,
+        backup_configurado=backup_configurado,
     )
+
+
+@app.route("/cosesa/backup-ahora", methods=["POST"])
+@admin_required
+def backup_ahora_route():
+    ok, mensaje = backup_now()
+    flash(mensaje, "success" if ok else "error")
+    return redirect(url_for("cosesa_usuarios"))
 
 
 @app.route("/cosesa/usuarios/<int:usuario_id>/editar", methods=["GET", "POST"])
@@ -1732,11 +1743,15 @@ def uploaded_file(filename):
 
 # Se ejecuta siempre al importar el módulo (tanto con `python3 app.py` en
 # desarrollo como al arrancar con gunicorn en producción, con uno o varios
-# workers), así la base de datos queda creada la primera vez que corre en un
-# disco nuevo o vacío. init_db() ya es segura para llamar siempre: si la base
-# ya existe no hace nada, y si varios workers arrancan a la vez, un lock de
-# archivo evita que choquen entre sí.
+# workers). Primero intenta restaurar el último backup guardado en GitHub
+# (si el backup está configurado y hay uno disponible) — así, en un hosting
+# que borra el disco en cada despliegue, los datos reales sobreviven. Recién
+# si no hay nada que restaurar se crea una base de datos vacía. init_db() ya
+# es segura para llamar siempre: si la base ya existe no hace nada, y si
+# varios workers arrancan a la vez, un lock de archivo evita que choquen.
+restore_latest()
 init_db()
+iniciar_backup_periodico()
 
 
 def _bootstrap_admin():
