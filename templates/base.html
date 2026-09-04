@@ -42,6 +42,27 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </div>
+  <script>
+    // Mantiene la posición de scroll al recargar la página (por ejemplo, después
+    // de cargar un avance o guardar cualquier formulario), en vez de saltar
+    // siempre al inicio de la hoja.
+    (function () {
+      if ('scrollRestoration' in history) { history.scrollRestoration = 'manual'; }
+      var key = 'scrollpos:' + location.pathname;
+      window.addEventListener('beforeunload', function () {
+        try { sessionStorage.setItem(key, window.scrollY); } catch (e) {}
+      });
+      document.addEventListener('DOMContentLoaded', function () {
+        try {
+          var saved = sessionStorage.getItem(key);
+          if (saved !== null) {
+            window.scrollTo(0, parseInt(saved, 10));
+            sessionStorage.removeItem(key);
+          }
+        } catch (e) {}
+      });
+    })();
+  </script>
   {% endblock %}
 </body>
 </html>
