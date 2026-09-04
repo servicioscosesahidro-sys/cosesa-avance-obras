@@ -164,4 +164,16 @@ document.getElementById('form-nuevo-usuario-cliente')?.addEventListener('submit'
   this.action = "{{ url_for('crear_usuario_cliente', cliente_id=0) }}".replace('/0/', '/' + sel.value + '/');
 });
 </script>
+
+<div class="card">
+  <h2>Copia de seguridad</h2>
+  {% if backup_configurado %}
+  <p class="subtitle">La app guarda una copia automática de la base de datos y las fotos cada 20 minutos en un repositorio privado aparte. También podés forzar una copia ahora mismo (por ejemplo, justo antes de pedir una actualización de la app).</p>
+  <form method="post" action="{{ url_for('backup_ahora_route') }}">
+    <button class="btn btn-dark" type="submit">Hacer backup ahora</button>
+  </form>
+  {% else %}
+  <p class="subtitle">El backup automático todavía no está configurado en este servidor.</p>
+  {% endif %}
+</div>
 {% endblock %}
