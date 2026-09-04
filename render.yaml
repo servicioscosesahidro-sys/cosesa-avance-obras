@@ -14,8 +14,16 @@ services:
         sync: false
       - key: ADMIN_NOMBRE
         value: Administrador
+      - key: GITHUB_BACKUP_TOKEN
+        sync: false
+      - key: GITHUB_BACKUP_REPO
+        sync: false
+      - key: GITHUB_BACKUP_BRANCH
+        value: main
     # Disco persistente opcional (plan pago). Sin esto, /var/data se reinicia
-    # en cada nuevo despliegue y se pierde la base de datos y las fotos.
+    # en cada nuevo despliegue — pero con GITHUB_BACKUP_* configurado, la app
+    # restaura sola el último backup al arrancar, así que no hace falta pagar
+    # este disco para no perder datos.
     # disks:
     #   - name: cosesa-data
     #     mountPath: /var/data

@@ -2,5 +2,6 @@ Flask>=2.3
 openpyxl>=3.1
 Werkzeug>=2.3
 itsdangerous>=2.1
+requests>=2.31
 playwright==1.56.0
 gunicorn>=21.2
