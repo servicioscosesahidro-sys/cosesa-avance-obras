@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Checklist de certificación de lavado - {{ item['nombre'] }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+  .chk-box { display:inline-block; width:16px; height:16px; border:1.5px solid var(--cosesa-navy, #0a2540); border-radius:3px; text-align:center; line-height:14px; font-weight:bold; margin-right:4px; }
+  .chk-row { display:flex; align-items:center; justify-content:space-between; border:1px solid var(--cosesa-border, #d8dde3); border-radius:8px; padding:10px 16px; margin-bottom:10px; }
+  .chk-opts { display:flex; gap:18px; white-space:nowrap; }
+  .chk-opt { display:flex; align-items:center; font-size:14px; }
+  .firma-box { border-top:1px solid #333; margin-top:32px; padding-top:8px; text-align:center; font-size:13px; }
+  .firma-box.compact { margin-top:26px; }
+  table.piezas th, table.piezas td { font-size:13px; }
+  .pieza-card { border:1px solid var(--cosesa-border, #d8dde3); border-radius:8px; padding:12px 16px; margin-bottom:12px; page-break-inside:avoid; }
+  .pieza-meta { display:flex; flex-wrap:wrap; gap:6px 22px; font-size:13px; margin-bottom:4px; }
+  .pieza-meta span strong { font-weight:600; }
+</style>
+</head>
+<body style="background:white;">
+<div class="container">
+  <div class="print-btn-bar no-print" style="text-align:right;">
+    <a class="btn" href="{{ url_for('checklist_item_pdf', item_id=item['id']) }}">Descargar PDF</a>
+    <button class="btn btn-outline" onclick="window.print()">Imprimir</button>
+  </div>
+
+  <div class="report-header">
+    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="COSESA">
+    <div style="text-align:right;">
+      <h2 style="margin:0;">Checklist de certificación de lavado</h2>
+      <div class="subtitle">Reporte N° {{ checklist['numero_reporte'] }} · Generado el {{ generado_en }}</div>
+    </div>
+  </div>
+
+  <div class="grid grid-3" style="margin:20px 0;">
+    <div class="card stat">
+      <div class="num" style="font-size:16px;">{{ item['cliente_nombre'] }}</div>
+      <div class="lbl">Cliente</div>
+    </div>
+    <div class="card stat">
+      <div class="num" style="font-size:16px;">{{ item['obra_nombre'] }}{% if item['ubicacion'] %} · {{ item['ubicacion'] }}{% endif %}</div>
+      <div class="lbl">Obra</div>
+    </div>
+    <div class="card stat">
+      <div class="num" style="font-size:16px;">{{ checklist['tipo_servicio'] }}</div>
+      <div class="lbl">Tipo de servicio</div>
+    </div>
+  </div>
+
+  <h1 style="margin-bottom:2px;">{{ item['nombre'] }}{% if item['tag_equipo'] %} <span class="subtitle">({{ item['tag_equipo'] }})</span>{% endif %}</h1>
+  <p class="subtitle">{{ item['descripcion'] or '' }}</p>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Checklist de tareas realizadas</h2>
+    {% for p in checklist_puntos %}
+    <div class="chk-row">
+      <strong>{{ p['etiqueta'] }}</strong>
+      <div class="chk-opts">
+        <span class="chk-opt"><span class="chk-box">{{ 'X' if p['estado'] == 'ok' else '' }}</span> Cumplido</span>
+        <span class="chk-opt"><span class="chk-box">{{ 'X' if p['estado'] == 'na' else '' }}</span> No aplica</span>
+      </div>
+    </div>
+    {% else %}
+    <p class="subtitle">Sin puntos de checklist cargados.</p>
+    {% endfor %}
+
+    <div class="grid grid-2" style="margin-top:26px;">
+      <div class="firma-box compact">Responsable de Calidad COSESA<br><span class="subtitle">Firma y aclaración</span></div>
+      <div class="firma-box compact">Responsable de Planta ({{ item['cliente_nombre'] }})<br><span class="subtitle">Firma y aclaración</span></div>
+    </div>
+    <p class="subtitle" style="margin-top:6px;">Estas dos firmas certifican el ítem completo{% if piezas %} (independientemente de las firmas por pieza, más abajo){% endif %}.</p>
+  </div>
+
+  {% if piezas %}
+  <div class="card">
+    <h2 style="margin-top:0;">Piezas del equipo</h2>
+    <p class="subtitle" style="margin-top:-6px;">Cada pieza puede lavarse y certificarse en una fecha distinta: llevan su propio par de firmas.</p>
+    {% for p in piezas %}
+    <div class="pieza-card">
+      <div class="pieza-meta">
+        <span><strong>Pieza:</strong> {{ p['nombre'] }}</span>
+        <span><strong>Recepción:</strong> {{ p['fecha_recepcion']|fmtdt if p['fecha_recepcion'] else '—' }}</span>
+        <span><strong>Lavado:</strong> {{ p['fecha_lavado']|fmtdt if p['fecha_lavado'] else '—' }}</span>
+        <span><strong>Precinto:</strong> {{ p['precinto'] or '—' }}</span>
+        <span><strong>Confirmado:</strong> <span class="chk-box" style="margin-left:2px;">{{ 'X' if p['confirmado'] == 'ok' else '' }}</span></span>
+      </div>
+      <div class="grid grid-2" style="margin-top:10px;">
+        <div class="firma-box compact">Responsable de Calidad COSESA{% if p['firmado_por_cosesa'] %} — {{ p['firmado_por_cosesa'] }}{% endif %}<br><span class="subtitle">Firma y aclaración</span></div>
+        <div class="firma-box compact">Responsable de Planta ({{ item['cliente_nombre'] }}){% if p['firmado_por_cliente'] %} — {{ p['firmado_por_cliente'] }}{% endif %}<br><span class="subtitle">Firma y aclaración</span></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <p class="subtitle" style="text-align:center;margin-top:30px;">COSESA Servicios Industriales · Especialistas en Hidrocinética · Reporte N° {{ checklist['numero_reporte'] }}</p>
+</div>
+</body>
+</html>

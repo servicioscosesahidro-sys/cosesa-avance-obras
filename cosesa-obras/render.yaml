@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: cosesa-avance-obras
+    runtime: docker
+    plan: free
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATA_DIR
+        value: /var/data
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_NOMBRE
+        value: Administrador
+    # Disco persistente opcional (plan pago). Sin esto, /var/data se reinicia
+    # en cada nuevo despliegue y se pierde la base de datos y las fotos.
+    # disks:
+    #   - name: cosesa-data
+    #     mountPath: /var/data
+    #     sizeGB: 1

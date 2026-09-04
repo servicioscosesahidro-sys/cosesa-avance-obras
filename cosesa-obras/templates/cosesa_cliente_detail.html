@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}{{ cliente['nombre'] }} · COSESA{% endblock %}
+{% block content %}
+<div class="breadcrumb"><a href="{{ url_for('cosesa_dashboard') }}">Panel COSESA</a> / {{ cliente['nombre'] }}</div>
+<h1>{{ cliente['nombre'] }}</h1>
+{% if cliente['cuit'] %}<p class="subtitle">CUIT: {{ cliente['cuit'] }}{% if cliente['contacto'] %} · Contacto: {{ cliente['contacto'] }}{% endif %}</p>{% endif %}
+
+<div class="grid grid-2">
+  <div class="card">
+    <h2>Obras de este cliente</h2>
+    {% if obras %}
+    <table>
+      <tr><th>Obra</th><th>Estado</th><th>Ítems</th><th>Avance</th><th></th></tr>
+      {% for o in obras %}
+      <tr>
+        <td>{{ o['nombre'] }}</td>
+        <td><span class="pill pill-{{ o['estado'] }}">{{ o['estado'].replace('_',' ') }}</span></td>
+        <td>{{ o['n_items'] }}</td>
+        <td>{{ '%.0f' % o['avance_prom'] }}%</td>
+        <td style="white-space:nowrap;">
+          <a class="btn btn-sm" href="{{ url_for('cosesa_obra_detail', obra_id=o['id']) }}">Abrir</a>
+          {% if is_admin(current_user) %}
+          <form method="post" action="{{ url_for('eliminar_obra', obra_id=o['id']) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar la obra \'{{ o['nombre'] }}\' y todos sus ítems, fotos y avances? Esta acción no se puede deshacer.');">
+            <button class="btn btn-sm btn-danger" type="submit">Eliminar</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+      <p class="subtitle">Este cliente todavía no tiene obras cargadas.</p>
+    {% endif %}
+    {% if is_admin(current_user) %}
+    <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+    <h3>Nueva obra</h3>
+    <form method="post" action="{{ url_for('crear_obra', cliente_id=cliente['id']) }}">
+      <label>Nombre de la obra</label>
+      <input type="text" name="nombre" required placeholder="Ej: Parada de planta - Sector caldera">
+      <label>Descripción</label>
+      <textarea name="descripcion"></textarea>
+      <label>Ubicación</label>
+      <input type="text" name="ubicacion">
+      <div class="field-inline">
+        <div>
+          <label>Fecha de inicio</label>
+          <input type="datetime-local" name="fecha_inicio">
+        </div>
+        <div>
+          <label>Fin estimado</label>
+          <input type="datetime-local" name="fecha_fin_estimada">
+        </div>
+      </div>
+      <button class="btn" type="submit">Crear obra</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Accesos del cliente</h2>
+    <p class="subtitle">Usuarios con los que el cliente puede ingresar. Cada uno ve solo las obras que le asignes, no todas las de esta empresa.</p>
+    {% if usuarios_cliente %}
+    <table>
+      <tr><th>Nombre</th><th>Usuario</th><th></th></tr>
+      {% for u in usuarios_cliente %}
+      <tr>
+        <td>{{ u['nombre'] }}</td>
+        <td>{{ u['username'] }}</td>
+        <td><a class="btn btn-sm btn-outline" href="{{ url_for('editar_usuario_cliente', usuario_id=u['id']) }}">Editar accesos</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+      <p class="subtitle">Todavía no creaste un usuario de acceso para este cliente.</p>
+    {% endif %}
+    {% if is_admin(current_user) %}
+    <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+    <h3>Nuevo usuario de acceso</h3>
+    <form method="post" action="{{ url_for('crear_usuario_cliente', cliente_id=cliente['id']) }}">
+      <input type="hidden" name="volver" value="cliente">
+      <label>Nombre de la persona</label>
+      <input type="text" name="nombre" required>
+      <label>Usuario</label>
+      <input type="text" name="username" required>
+      <label>Contraseña</label>
+      <input type="password" name="password" required>
+      <label>Obras que puede ver</label>
+      {% if obras %}
+      <div class="checkbox-list">
+        {% for o in obras %}
+        <label class="check-inline"><input type="checkbox" name="obras" value="{{ o['id'] }}"> {{ o['nombre'] }}</label>
+        {% endfor %}
+      </div>
+      {% else %}
+        <p class="subtitle">Este cliente todavía no tiene obras cargadas: creá una obra primero.</p>
+      {% endif %}
+      <button class="btn btn-dark" type="submit" style="margin-top:10px;">Crear acceso</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

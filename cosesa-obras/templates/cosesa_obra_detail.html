@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}{{ obra['nombre'] }} · COSESA{% endblock %}
+{% block content %}
+<div class="breadcrumb">
+  <a href="{{ url_for('cosesa_dashboard') }}">Panel COSESA</a> /
+  <a href="{{ url_for('cosesa_cliente_detail', cliente_id=obra['cliente_id']) }}">{{ obra['cliente_nombre'] }}</a> /
+  {{ obra['nombre'] }}
+</div>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;">
+  <div>
+    <h1>{{ obra['nombre'] }} <span class="pill pill-{{ obra['estado'] }}">{{ obra['estado'].replace('_',' ') }}</span></h1>
+    <p class="subtitle">{{ obra['descripcion'] or '' }}{% if obra['ubicacion'] %} · {{ obra['ubicacion'] }}{% endif %}</p>
+    <p class="subtitle">Inicio: {{ obra['fecha_inicio']|fmtdt }} · Fin estimado: {{ obra['fecha_fin_estimada']|fmtdt }}</p>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <a class="btn btn-outline" target="_blank" href="{{ url_for('reporte_obra', obra_id=obra['id']) }}">Reporte cliente</a>
+    <a class="btn btn-outline" target="_blank" href="{{ url_for('reporte_interno_obra', obra_id=obra['id']) }}">Informe interno (hs)</a>
+    {% if is_admin(current_user) %}
+    {% if obra['estado'] != 'finalizada' %}
+    <form method="post" action="{{ url_for('finalizar_obra', obra_id=obra['id']) }}" onsubmit="return confirm('¿Marcar la obra como finalizada?');">
+      <button class="btn btn-success" type="submit">Finalizar obra</button>
+    </form>
+    {% endif %}
+    <form method="post" action="{{ url_for('eliminar_obra', obra_id=obra['id']) }}" onsubmit="return confirm('¿Eliminar la obra \'{{ obra['nombre'] }}\' y todos sus ítems, fotos y avances? Esta acción no se puede deshacer.');">
+      <button class="btn btn-danger" type="submit">Eliminar obra</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Cronograma de la obra (diagrama de barras)</h2>
+  <p class="subtitle">Barra clara: cronograma planificado. Barra azul: avance real, con el % alcanzado.</p>
+  {{ gantt_html|safe }}
+</div>
+
+<div class="card">
+  <h2>Avance planificado vs. avance real</h2>
+  <p class="subtitle">Compará día a día el avance que deberíamos tener (según el cronograma cargado) contra el avance real registrado.</p>
+  {{ curve_html|safe }}
+</div>
+
+<div class="card">
+  <h2>Ítems / equipos de esta obra</h2>
+  {% if items %}
+  <p class="subtitle">Tocá la barra de avance para fijar el % en ese punto, o usá los botones −/+ (de a 10%). Pensado para cargar avance rápido desde el campo, sin tener que entrar al ítem.</p>
+  <table>
+    <tr><th>Ítem / equipo</th><th>Estado</th><th>Avance</th><th>Hs. hombre</th><th>Hs. máquina</th><th></th></tr>
+    {% for i in items %}
+    <tr>
+      <td><a href="{{ url_for('cosesa_item_detail', item_id=i['id']) }}">{{ i['nombre'] }}</a>{% if i['tag_equipo'] %} <span class="subtitle">({{ i['tag_equipo'] }})</span>{% endif %}</td>
+      <td><span class="pill pill-{{ i['estado'] }}">{{ i['estado'].replace('_',' ') }}</span></td>
+      <td style="min-width:160px;">
+        <form method="post" action="{{ url_for('registrar_avance', item_id=i['id']) }}" id="avance-form-{{ i['id'] }}" style="margin:0;">
+          <input type="hidden" name="volver" value="obra">
+          <input type="hidden" name="avance_pct" id="avance-input-{{ i['id'] }}" value="{{ i['avance_pct'] }}">
+          <div class="progress-bar-bg avance-click" data-item="{{ i['id'] }}" style="cursor:pointer;height:22px;" title="Tocá para fijar el % de avance en ese punto">
+            <div class="progress-bar-fill" style="width:{{ i['avance_pct'] }}%;"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+            <button type="button" class="btn btn-sm btn-outline" onclick="ajustarAvanceObra({{ i['id'] }}, -10)">−</button>
+            <span class="subtitle">{{ i['avance_pct'] }}%</span>
+            <button type="button" class="btn btn-sm btn-outline" onclick="ajustarAvanceObra({{ i['id'] }}, 10)">+</button>
+          </div>
+        </form>
+      </td>
+      <td>{{ i['horas_hombre'] }}</td>
+      <td>{{ i['horas_maquina'] }}</td>
+      <td style="white-space:nowrap;">
+        <a class="btn btn-sm" href="{{ url_for('cosesa_item_detail', item_id=i['id']) }}">Abrir</a>
+        {% if is_admin(current_user) %}
+        <form method="post" action="{{ url_for('eliminar_item', item_id=i['id']) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar el ítem \'{{ i['nombre'] }}\'? Esta acción no se puede deshacer.');">
+          <button class="btn btn-sm btn-danger" type="submit">Eliminar</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <script>
+    function ajustarAvanceObra(itemId, delta) {
+      const input = document.getElementById('avance-input-' + itemId);
+      let val = parseInt(input.value, 10) + delta;
+      val = Math.max(0, Math.min(100, val));
+      input.value = val;
+      document.getElementById('avance-form-' + itemId).submit();
+    }
+    document.querySelectorAll('.avance-click').forEach(function (bar) {
+      bar.addEventListener('click', function (e) {
+        const rect = this.getBoundingClientRect();
+        let pct = Math.round(((e.clientX - rect.left) / rect.width) * 100 / 5) * 5;
+        pct = Math.max(0, Math.min(100, pct));
+        const itemId = this.dataset.item;
+        document.getElementById('avance-input-' + itemId).value = pct;
+        document.getElementById('avance-form-' + itemId).submit();
+      });
+    });
+  </script>
+  {% else %}
+    <p class="subtitle">Esta obra todavía no tiene ítems cargados.</p>
+  {% endif %}
+
+  <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+  <button type="button" class="btn" id="nuevo-item-toggle" onclick="toggleNuevoItem()">+ Nuevo ítem</button>
+
+  <div id="nuevo-item-panel" style="display:none;margin-top:16px;">
+    {% if is_admin(current_user) %}
+    <h3>Agregar ítem / equipo a intervenir</h3>
+    <p class="subtitle">Podés cargar el cronograma planificado (antes de empezar la obra) para poder comparar después el avance real contra lo previsto.</p>
+    <form method="post" action="{{ url_for('crear_item', obra_id=obra['id']) }}">
+      <div class="field-inline">
+        <div>
+          <label>Nombre del ítem / equipo</label>
+          <input type="text" name="nombre" required placeholder="Ej: Bomba centrífuga P-101">
+        </div>
+        <div>
+          <label>TAG (opcional)</label>
+          <input type="text" name="tag_equipo" placeholder="Ej: P-101">
+        </div>
+      </div>
+      <label>Descripción del trabajo</label>
+      <textarea name="descripcion"></textarea>
+      <div class="field-inline">
+        <div>
+          <label>Fecha de inicio planificada</label>
+          <input type="datetime-local" name="fecha_inicio_plan">
+        </div>
+        <div>
+          <label>Fecha de fin planificada</label>
+          <input type="datetime-local" name="fecha_fin_plan">
+        </div>
+      </div>
+      <label>Fecha de inicio real (si ya arrancó)</label>
+      <input type="datetime-local" name="fecha_inicio">
+      <label>Observaciones</label>
+      <textarea name="observaciones" placeholder="Observaciones generales sobre esta tarea (opcional)"></textarea>
+      <button class="btn" type="submit">Agregar ítem</button>
+    </form>
+
+    <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+    <h3>Importar cronograma planificado (Excel)</h3>
+    <p class="subtitle">Cargá de una sola vez todas las tareas de la obra con su cronograma teórico (inicio y fin planificados). Se usa para crear las tareas antes de arrancar la obra, o para sumar tareas nuevas.</p>
+    <a class="btn btn-outline" href="{{ url_for('descargar_plantilla_cronograma', obra_id=obra['id']) }}">Descargar plantilla de cronograma</a>
+    <p class="subtitle" style="margin-top:10px;">Si esta obra ya tiene tareas cargadas, la plantilla se descarga precargada con sus datos actuales.</p>
+    <form method="post" action="{{ url_for('importar_cronograma_excel', obra_id=obra['id']) }}" enctype="multipart/form-data" style="margin-top:10px;">
+      <label>Archivo Excel (.xlsx) de cronograma</label>
+      <input type="file" name="archivo" accept=".xlsx" required>
+      <p class="subtitle">Una tarea con un TAG que ya existe en esta obra se actualiza; si el TAG es nuevo (o está vacío) se crea una tarea nueva. Esta importación puede crear tareas nuevas, por eso está reservada al Administrador.</p>
+      <button class="btn" type="submit">Importar cronograma</button>
+    </form>
+    <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+    {% endif %}
+
+    <h3>Importar tiempos reales y demoras (Excel)</h3>
+    <p class="subtitle">Una vez que las tareas ya existen (importadas o cargadas a mano), subí este segundo Excel para cargar de una sola vez el inicio y fin real de cada tarea junto con sus demoras.</p>
+    <a class="btn btn-outline" href="{{ url_for('descargar_plantilla_reales', obra_id=obra['id']) }}">Descargar plantilla de tiempos reales</a>
+    <p class="subtitle" style="margin-top:10px;">Si esta obra ya tiene fechas reales o demoras cargadas, la plantilla se descarga precargada con esos datos.</p>
+    <form method="post" action="{{ url_for('importar_reales_excel', obra_id=obra['id']) }}" enctype="multipart/form-data" style="margin-top:10px;">
+      <label>Archivo Excel (.xlsx) de tiempos reales</label>
+      <input type="file" name="archivo" accept=".xlsx" required>
+      <p class="subtitle">Las tareas se identifican por TAG (tienen que existir ya en la obra). Si una tarea tuvo más de una demora, repetí una fila extra con el mismo tag.</p>
+      <button class="btn" type="submit">Importar tiempos reales</button>
+    </form>
+  </div>
+  <script>
+    function toggleNuevoItem() {
+      const panel = document.getElementById('nuevo-item-panel');
+      const btn = document.getElementById('nuevo-item-toggle');
+      const abierto = panel.style.display !== 'none';
+      panel.style.display = abierto ? 'none' : 'block';
+      btn.textContent = abierto ? '+ Nuevo ítem' : '− Ocultar';
+    }
+  </script>
+</div>
+
+<div class="card">
+  <h3>Editar cronograma planificado de un ítem existente</h3>
+  <p class="subtitle">Usalo si ya cargaste el ítem y querés agregar o corregir sus fechas planificadas.</p>
+  {% if items %}
+  {% for i in items %}
+  <form method="post" action="{{ url_for('actualizar_plan_item', item_id=i['id']) }}" class="field-inline" style="align-items:flex-end;margin-bottom:8px;">
+    <div style="flex:2;"><label>{{ i['nombre'] }}</label><span class="subtitle">Cronograma planificado</span></div>
+    <div><label>Inicio</label><input type="datetime-local" name="fecha_inicio_plan" value="{{ i['fecha_inicio_plan'] or '' }}"></div>
+    <div><label>Fin</label><input type="datetime-local" name="fecha_fin_plan" value="{{ i['fecha_fin_plan'] or '' }}"></div>
+    <div><button class="btn btn-outline btn-sm" type="submit" style="margin-bottom:14px;">Guardar</button></div>
+  </form>
+  {% endfor %}
+  {% else %}
+  <p class="subtitle">Todavía no hay ítems cargados.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Certificados de obra</h2>
+  <p class="subtitle">Adjuntá las tablas de certificación firmadas por el cliente. El cliente podrá descargarlas desde su informe.</p>
+  {% if certificados %}
+  <table>
+    <tr><th>Documento</th><th>Fecha</th><th></th></tr>
+    {% for c in certificados %}
+    <tr>
+      <td>{{ c['nombre_original'] }}</td>
+      <td>{{ c['subida_en']|fmtdt }}</td>
+      <td style="white-space:nowrap;">
+        <a class="btn btn-outline btn-sm" href="{{ url_for('uploaded_file', filename=c['filename']) }}" target="_blank">Descargar</a>
+        {% if is_admin(current_user) %}
+        <form method="post" action="{{ url_for('eliminar_certificado', cert_id=c['id']) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar el certificado \'{{ c['nombre_original'] }}\'?');">
+          <button class="btn btn-sm btn-danger" type="submit">Eliminar</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="subtitle">Todavía no se cargaron certificados para esta obra.</p>
+  {% endif %}
+  <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+  <h3>Subir certificado</h3>
+  <form method="post" action="{{ url_for('subir_certificado', obra_id=obra['id']) }}" enctype="multipart/form-data">
+    <label>Archivo (PDF o imagen)</label>
+    <input type="file" name="certificado" accept=".pdf,.png,.jpg,.jpeg,.webp" required>
+    <button class="btn btn-dark" type="submit">Subir certificado</button>
+  </form>
+</div>
+
+{% endblock %}

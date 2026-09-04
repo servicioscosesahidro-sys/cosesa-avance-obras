@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Reporte de obra - {{ obra['nombre'] }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body style="background:white;">
+<div class="container">
+  <div class="print-btn-bar no-print" style="text-align:right;">
+    <a class="btn" href="{{ url_for('reporte_obra_pdf', obra_id=obra['id']) }}">Descargar PDF</a>
+    <button class="btn btn-outline" onclick="window.print()">Imprimir</button>
+  </div>
+
+  <div class="report-header">
+    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="COSESA">
+    <div style="text-align:right;">
+      <h2 style="margin:0;">Reporte de avance de obra</h2>
+      <div class="subtitle">Generado el {{ generado_en }}</div>
+    </div>
+  </div>
+
+  <h1 style="margin-bottom:2px;">{{ obra['nombre'] }}</h1>
+  <p class="subtitle">Cliente: {{ obra['cliente_nombre'] }}{% if obra['ubicacion'] %} · {{ obra['ubicacion'] }}{% endif %}</p>
+  <p>{{ obra['descripcion'] or '' }}</p>
+
+  <div class="grid grid-3" style="margin:20px 0;">
+    <div class="card stat">
+      <div class="num">{{ obra['fecha_inicio']|fmtdt }}</div>
+      <div class="lbl">Inicio de obra</div>
+    </div>
+    <div class="card stat">
+      <div class="num">{{ obra['fecha_fin_estimada']|fmtdt }}</div>
+      <div class="lbl">Fin estimado</div>
+    </div>
+    <div class="card stat">
+      <div class="num">{{ obra['estado'].replace('_',' ')|capitalize }}</div>
+      <div class="lbl">Estado general</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Cronograma de la obra</h2>
+    <p class="subtitle">Barra clara: cronograma planificado. Barra azul: avance real, con el % alcanzado.</p>
+    {{ gantt_html|safe }}
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Avance planificado vs. avance real</h2>
+    {{ curve_html|safe }}
+  </div>
+
+  {% if certificados %}
+  <div class="card">
+    <h2 style="margin-top:0;">Certificados de obra</h2>
+    <p class="subtitle">Tablas de certificación firmadas por el cliente. Podés descargar una copia.</p>
+    <table>
+      <tr><th>Documento</th><th>Fecha</th><th></th></tr>
+      {% for c in certificados %}
+      <tr>
+        <td>{{ c['nombre_original'] }}</td>
+        <td>{{ c['subida_en']|fmtdt }}</td>
+        <td><a class="btn btn-outline btn-sm" href="{{ url_for('uploaded_file', filename=c['filename']) }}" target="_blank" download="{{ c['nombre_original'] }}">Descargar</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  <h2>Detalle por ítem / equipo</h2>
+  {% for d in items_data %}
+  {% set item = d['item'] %}
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h3 style="margin:0;">{{ item['nombre'] }}{% if item['tag_equipo'] %} ({{ item['tag_equipo'] }}){% endif %}</h3>
+      <span class="pill pill-{{ item['estado'] }}">{{ item['estado'].replace('_',' ') }}</span>
+    </div>
+    <p class="subtitle">{{ item['descripcion'] or '' }}</p>
+    <div class="progress-bar-bg" style="height:12px;"><div class="progress-bar-fill" style="width:{{ item['avance_pct'] }}%;"></div></div>
+    <p class="subtitle">{{ item['avance_pct'] }}% de avance ·
+      Inicio: {{ item['fecha_inicio']|fmtdt }} ·
+      Fin: {{ item['fecha_fin']|fmtdt }}
+    </p>
+
+    {% if item['observaciones'] %}
+    <p><strong>Observaciones:</strong> {{ item['observaciones'] }}</p>
+    {% endif %}
+
+    {% if d['checklist'] %}
+    <h4 style="margin-bottom:6px;">Checklist de certificación de lavado</h4>
+    <p class="subtitle">Reporte N° {{ d['checklist']['numero_reporte'] }} · {{ d['checklist']['tipo_servicio'] }}</p>
+    <table>
+      <tr><th>Tarea</th><th>Estado</th></tr>
+      {% for p in d['checklist_puntos'] %}
+      <tr>
+        <td>{{ p['etiqueta'] }}</td>
+        <td>
+          {% if p['estado'] == 'ok' %}Cumplido
+          {% elif p['estado'] == 'na' %}No aplica
+          {% else %}Pendiente{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% if d['piezas'] %}
+    <table style="margin-top:8px;">
+      <tr><th>Pieza</th><th>Fecha de recepción</th><th>Fecha de lavado</th><th>N° de precinto</th><th>Estado</th><th>Certificado por COSESA</th><th>Certificado por Cliente</th></tr>
+      {% for p in d['piezas'] %}
+      <tr>
+        <td>{{ p['nombre'] }}</td>
+        <td>{{ p['fecha_recepcion']|fmtdt if p['fecha_recepcion'] else '—' }}</td>
+        <td>{{ p['fecha_lavado']|fmtdt if p['fecha_lavado'] else '—' }}</td>
+        <td>{{ p['precinto'] or '—' }}</td>
+        <td>{{ 'Confirmado' if p['confirmado'] == 'ok' else 'Pendiente' }}</td>
+        <td>{{ p['firmado_por_cosesa'] or '—' }}</td>
+        <td>{{ p['firmado_por_cliente'] or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+    {% if d['fotos_checklist'] %}
+    <div class="photo-grid" style="margin-top:8px;">
+      {% for f in d['fotos_checklist'] %}
+      <figure><img src="{{ url_for('uploaded_file', filename=f['filename']) }}"><figcaption>Documento firmado</figcaption></figure>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% if d['fotos_antes'] or d['fotos_despues'] %}
+    <div class="grid grid-2">
+      {% if d['fotos_antes'] %}
+      <div>
+        <h4 style="margin-bottom:6px;">Antes</h4>
+        <div class="photo-grid">
+          {% for f in d['fotos_antes'] %}
+          <figure><img src="{{ url_for('uploaded_file', filename=f['filename']) }}">{% if f['comentario'] %}<figcaption>{{ f['comentario'] }}</figcaption>{% endif %}</figure>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      {% if d['fotos_despues'] %}
+      <div>
+        <h4 style="margin-bottom:6px;">Después</h4>
+        <div class="photo-grid">
+          {% for f in d['fotos_despues'] %}
+          <figure><img src="{{ url_for('uploaded_file', filename=f['filename']) }}">{% if f['comentario'] %}<figcaption>{{ f['comentario'] }}</figcaption>{% endif %}</figure>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% if d['fotos_progreso'] %}
+    <h4 style="margin-bottom:6px;">Fotos de avance durante el trabajo</h4>
+    <div class="photo-grid">
+      {% for f in d['fotos_progreso'] %}
+      <figure><img src="{{ url_for('uploaded_file', filename=f['filename']) }}">{% if f['comentario'] %}<figcaption>{{ f['comentario'] }}</figcaption>{% endif %}</figure>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if d['avances'] %}
+    <h4>Cronograma de avance</h4>
+    <table>
+      <tr><th>Fecha</th><th>Avance</th><th>Comentario</th></tr>
+      {% for a in d['avances'] %}
+      <tr><td>{{ a['fecha']|fmtdt }}</td><td>{{ a['avance_pct'] }}%</td><td>{{ a['comentario'] or '' }}</td></tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <p class="subtitle" style="text-align:center;margin-top:30px;">COSESA Servicios Industriales · Especialistas en Hidrocinética</p>
+</div>
+</body>
+</html>

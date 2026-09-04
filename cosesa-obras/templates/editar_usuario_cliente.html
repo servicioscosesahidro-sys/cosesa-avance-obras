@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Editar {{ usuario['nombre'] }} · COSESA{% endblock %}
+{% block content %}
+<div class="breadcrumb"><a href="{{ url_for('cosesa_dashboard') }}">Panel COSESA</a> / <a href="{{ url_for('cosesa_usuarios') }}">Usuarios</a> / {{ usuario['nombre'] }}</div>
+<h1>Editar usuario cliente</h1>
+<p class="subtitle">Cambiá los datos de acceso y qué obras puede ver este usuario. Dejá la contraseña vacía para no cambiarla.</p>
+
+<div class="card" style="max-width:640px;">
+  <form method="post">
+    <div class="field-inline">
+      <div>
+        <label>Nombre de la persona</label>
+        <input type="text" name="nombre" value="{{ usuario['nombre'] }}" required>
+      </div>
+      <div>
+        <label>Usuario</label>
+        <input type="text" name="username" value="{{ usuario['username'] }}" required>
+      </div>
+    </div>
+    <label>Nueva contraseña (opcional)</label>
+    <input type="password" name="password" placeholder="Dejar vacío para no cambiarla">
+
+    <label>Cliente (empresa)</label>
+    <select name="cliente_id" id="sel-cliente-editar" onchange="filtrarObrasPorCliente('sel-cliente-editar', 'obras-editar')" required>
+      {% for c in clientes %}
+      <option value="{{ c['id'] }}" {{ 'selected' if c['id'] == usuario['cliente_id'] else '' }}>{{ c['nombre'] }}</option>
+      {% endfor %}
+    </select>
+
+    <label>Obras que puede ver</label>
+    <div class="checkbox-list" id="obras-editar">
+      {% for o in obras %}
+      <label class="check-inline" data-cliente="{{ o['cliente_id'] }}" style="display: {{ 'block' if o['cliente_id'] == usuario['cliente_id'] else 'none' }};">
+        <input type="checkbox" name="obras" value="{{ o['id'] }}" {{ 'checked' if o['id'] in obras_asignadas_ids else '' }}> {{ o['nombre'] }} <span class="subtitle">({{ o['cliente_nombre'] }})</span>
+      </label>
+      {% endfor %}
+    </div>
+    <p class="subtitle">Si cambiás de cliente, revisá qué obras quedan marcadas: solo se guardan las que pertenecen al cliente seleccionado.</p>
+
+    <div style="display:flex;gap:10px;margin-top:10px;">
+      <button class="btn btn-dark" type="submit">Guardar cambios</button>
+      <a class="btn btn-outline" href="{{ url_for('cosesa_usuarios') }}">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+<script>
+function filtrarObrasPorCliente(selectId, listId) {
+  const sel = document.getElementById(selectId);
+  const clienteId = sel.value;
+  const list = document.getElementById(listId);
+  const labels = list.querySelectorAll('label[data-cliente]');
+  labels.forEach(l => {
+    const match = clienteId && l.dataset.cliente === clienteId;
+    l.style.display = match ? 'block' : 'none';
+  });
+}
+</script>
+{% endblock %}

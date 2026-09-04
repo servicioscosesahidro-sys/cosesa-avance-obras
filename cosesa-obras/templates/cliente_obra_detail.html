@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ obra['nombre'] }} · Mis obras{% endblock %}
+{% block content %}
+<div class="breadcrumb"><a href="{{ url_for('cliente_dashboard') }}">Mis obras</a> / {{ obra['nombre'] }}</div>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;">
+  <div>
+    <h1>{{ obra['nombre'] }} <span class="pill pill-{{ obra['estado'] }}">{{ obra['estado'].replace('_',' ') }}</span></h1>
+    <p class="subtitle">{{ obra['descripcion'] or '' }}{% if obra['ubicacion'] %} · {{ obra['ubicacion'] }}{% endif %}</p>
+  </div>
+  <a class="btn btn-outline" target="_blank" href="{{ url_for('reporte_obra', obra_id=obra['id']) }}">Ver reporte completo</a>
+</div>
+
+<div class="card">
+  <h2>Cronograma de la obra</h2>
+  <p class="subtitle">Barra clara: cronograma planificado. Barra azul: avance real, con el % alcanzado.</p>
+  {{ gantt_html|safe }}
+</div>
+
+<div class="card">
+  <h2>Avance planificado vs. avance real</h2>
+  {{ curve_html|safe }}
+</div>
+
+{% if certificados %}
+<div class="card">
+  <h2>Certificados de obra</h2>
+  <p class="subtitle">Tablas de certificación firmadas por el cliente.</p>
+  <table>
+    <tr><th>Documento</th><th>Fecha</th><th></th></tr>
+    {% for c in certificados %}
+    <tr>
+      <td>{{ c['nombre_original'] }}</td>
+      <td>{{ c['subida_en']|fmtdt }}</td>
+      <td><a class="btn btn-outline btn-sm" href="{{ url_for('uploaded_file', filename=c['filename']) }}" target="_blank" download="{{ c['nombre_original'] }}">Descargar</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Ítems / equipos</h2>
+  {% if items %}
+  <table>
+    <tr><th>Ítem / equipo</th><th>Estado</th><th>Avance</th><th></th></tr>
+    {% for i in items %}
+    <tr>
+      <td>{{ i['nombre'] }}</td>
+      <td><span class="pill pill-{{ i['estado'] }}">{{ i['estado'].replace('_',' ') }}</span></td>
+      <td style="min-width:140px;">
+        <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:{{ i['avance_pct'] }}%;"></div></div>
+        <span class="subtitle">{{ i['avance_pct'] }}%</span>
+      </td>
+      <td><a class="btn btn-sm" href="{{ url_for('cliente_item_detail', item_id=i['id']) }}">Ver detalle</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="subtitle">Todavía no hay ítems cargados para esta obra.</p>
+  {% endif %}
+</div>
+{% endblock %}

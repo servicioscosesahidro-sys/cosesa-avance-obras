@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Panel COSESA{% endblock %}
+{% block content %}
+<h1>Panel COSESA</h1>
+<p class="subtitle">Gestión de clientes, obras e ítems de trabajo.</p>
+
+<div class="grid grid-2">
+  <div class="card">
+    <h2>Obras activas</h2>
+    {% if obras_activas %}
+    <table>
+      <tr><th>Obra</th><th>Cliente</th><th>Ítems</th><th>Avance prom.</th><th></th></tr>
+      {% for o in obras_activas %}
+      <tr>
+        <td>{{ o['nombre'] }}</td>
+        <td>{{ o['cliente_nombre'] }}</td>
+        <td>{{ o['n_items'] }}</td>
+        <td>{{ '%.0f' % o['avance_prom'] }}%</td>
+        <td><a class="btn btn-sm" href="{{ url_for('cosesa_obra_detail', obra_id=o['id']) }}">Abrir</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+      <p class="subtitle">Todavía no hay obras activas.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Clientes</h2>
+    <table>
+      <tr><th>Cliente</th><th>Obras</th><th></th></tr>
+      {% for c in clientes %}
+      <tr>
+        <td>{{ c['nombre'] }}</td>
+        <td>{{ c['n_obras'] }}</td>
+        <td><a class="btn btn-sm btn-outline" href="{{ url_for('cosesa_cliente_detail', cliente_id=c['id']) }}">Ver</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% if is_admin(current_user) %}
+    <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+    <h3>Nuevo cliente</h3>
+    <form method="post" action="{{ url_for('crear_cliente') }}">
+      <label>Nombre / Razón social</label>
+      <input type="text" name="nombre" required>
+      <div class="field-inline">
+        <div>
+          <label>CUIT (opcional)</label>
+          <input type="text" name="cuit">
+        </div>
+        <div>
+          <label>Contacto (opcional)</label>
+          <input type="text" name="contacto">
+        </div>
+      </div>
+      <button class="btn" type="submit">Crear cliente</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if is_admin(current_user) %}
+<div class="card">
+  <h2>Usuarios y accesos</h2>
+  <p class="subtitle">Gestioná los usuarios de COSESA (operadores y administradores) y los accesos de los clientes, incluyendo a qué obras puede entrar cada usuario cliente.</p>
+  <a class="btn btn-dark" href="{{ url_for('cosesa_usuarios') }}">Gestionar usuarios →</a>
+</div>
+{% endif %}
+{% endblock %}

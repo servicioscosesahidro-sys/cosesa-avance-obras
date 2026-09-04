@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Ingresar · COSESA{% endblock %}
+{% block body %}
+<div class="login-wrapper">
+  <div class="login-box">
+    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="COSESA Servicios Industriales">
+    <h2 style="margin-top:0;">AVANCE DE OBRAS - APP 03</h2>
+    <p class="subtitle" style="margin-bottom:20px;">Ingresá con tu usuario</p>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <form method="post" style="text-align:left;">
+      <label>Usuario</label>
+      <input type="text" name="username" required autofocus>
+      <label>Contraseña</label>
+      <input type="password" name="password" required>
+      <button class="btn" type="submit" style="width:100%;">Ingresar</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

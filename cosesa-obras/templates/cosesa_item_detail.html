@@ -1,0 +1,413 @@
+{% extends "base.html" %}
+{% block title %}{{ item['nombre'] }} · COSESA{% endblock %}
+{% block content %}
+<div class="breadcrumb">
+  <a href="{{ url_for('cosesa_dashboard') }}">Panel COSESA</a> /
+  <a href="{{ url_for('cosesa_cliente_detail', cliente_id=item['cliente_id']) }}">{{ item['cliente_nombre'] }}</a> /
+  <a href="{{ url_for('cosesa_obra_detail', obra_id=item['obra_id']) }}">{{ item['obra_nombre'] }}</a> /
+  {{ item['nombre'] }}
+</div>
+<h1>{{ item['nombre'] }} <span class="pill pill-{{ item['estado'] }}">{{ item['estado'].replace('_',' ') }}</span></h1>
+<p class="subtitle">{{ item['descripcion'] or '' }}</p>
+
+<div class="card">
+  <h3 style="margin-top:0;">Editar datos del ítem</h3>
+  <form method="post" action="{{ url_for('editar_item', item_id=item['id']) }}">
+    <div class="field-inline">
+      <div>
+        <label>Nombre</label>
+        <input type="text" name="nombre" value="{{ item['nombre'] }}" required>
+      </div>
+      <div>
+        <label>Tag / código</label>
+        <input type="text" name="tag_equipo" value="{{ item['tag_equipo'] or '' }}">
+      </div>
+    </div>
+    <label>Descripción del trabajo</label>
+    <textarea name="descripcion" rows="3">{{ item['descripcion'] or '' }}</textarea>
+    <button class="btn btn-outline" type="submit">Guardar cambios</button>
+  </form>
+  {% if is_admin(current_user) %}
+  <form method="post" action="{{ url_for('eliminar_item', item_id=item['id']) }}" onsubmit="return confirm('¿Eliminar el ítem \'{{ item['nombre'] }}\'? Esta acción no se puede deshacer.');">
+    <button class="btn btn-danger" type="submit">Eliminar ítem</button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="grid grid-2">
+  <div class="card">
+    <h2>Avance actual: {{ item['avance_pct'] }}%</h2>
+    <div class="progress-bar-bg" style="height:16px;"><div class="progress-bar-fill" style="width:{{ item['avance_pct'] }}%;"></div></div>
+
+    <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+    <h3 style="margin-bottom:2px;">Balance de horas</h3>
+    <p class="subtitle">Se calcula solo: horas totales = inicio real hasta {{ 'fin real' if item['estado'] == 'finalizado' else 'ahora (sigue sumando mientras la tarea esté en curso)' }}, menos las demoras registradas abajo. Las horas hombre/máquina salen de multiplicar las horas de trabajo netas por el personal y las bombas asignadas (más abajo).</p>
+    <div class="grid grid-3" style="margin-top:10px;">
+      <div class="stat" style="text-align:left;"><span class="lbl">Horas totales</span><div class="num" style="font-size:18px;">{{ horas['horas_totales'] }}</div></div>
+      <div class="stat" style="text-align:left;"><span class="lbl">Horas de demoras</span><div class="num" style="font-size:18px;">{{ horas['horas_demoras'] }}</div></div>
+      <div class="stat" style="text-align:left;"><span class="lbl">Horas de trabajo netas</span><div class="num" style="font-size:18px;">{{ horas['horas_trabajo'] }}</div></div>
+    </div>
+    <div class="grid grid-2" style="margin-top:10px;">
+      <div class="stat" style="text-align:left;"><span class="lbl">Hs. hombre ({{ horas['total_personas'] }} persona{{ 's' if horas['total_personas'] != 1 else '' }})</span><div class="num" style="font-size:20px;">{{ horas['horas_hombre'] }}</div></div>
+      <div class="stat" style="text-align:left;"><span class="lbl">Hs. máquina ({{ horas['total_bombas'] }} bomba{{ 's' if horas['total_bombas'] != 1 else '' }})</span><div class="num" style="font-size:20px;">{{ horas['horas_maquina'] }}</div></div>
+    </div>
+
+    <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+    <h3>Registrar avance de hoy</h3>
+    <form method="post" action="{{ url_for('registrar_avance', item_id=item['id']) }}" enctype="multipart/form-data">
+      <div class="field-inline">
+        <div>
+          <label>Fecha</label>
+          <input type="datetime-local" name="fecha" value="{{ today }}">
+        </div>
+        <div>
+          <label>% de avance acumulado</label>
+          <input type="number" name="avance_pct" min="0" max="100" value="{{ item['avance_pct'] }}" required>
+        </div>
+      </div>
+      <label>Comentario para el cliente</label>
+      <textarea name="comentario" placeholder="Ej: Se completó el desmontaje, pendiente limpieza y prueba hidráulica."></textarea>
+      <label>Foto de avance (opcional)</label>
+      <input type="file" name="foto_progreso" accept="image/*">
+      <button class="btn" type="submit">Guardar avance</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Cronograma planificado</h3>
+    <p class="subtitle">Cargalo antes de iniciar el trabajo para poder comparar el avance real contra lo previsto.</p>
+    <form method="post" action="{{ url_for('actualizar_plan_item', item_id=item['id']) }}">
+      <div class="field-inline">
+        <div>
+          <label>Fecha de inicio planificada</label>
+          <input type="datetime-local" name="fecha_inicio_plan" value="{{ item['fecha_inicio_plan'] or '' }}">
+        </div>
+        <div>
+          <label>Fecha de fin planificada</label>
+          <input type="datetime-local" name="fecha_fin_plan" value="{{ item['fecha_fin_plan'] or '' }}">
+        </div>
+      </div>
+      <button class="btn btn-outline" type="submit">Guardar cronograma</button>
+    </form>
+
+    <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+    <h3>Fechas reales de la tarea</h3>
+    <p class="subtitle">Fecha y hora en que la tarea arrancó y finalizó realmente.</p>
+    <form method="post" action="{{ url_for('actualizar_fechas_reales', item_id=item['id']) }}">
+      <div class="field-inline">
+        <div>
+          <label>Inicio real</label>
+          <input type="datetime-local" name="fecha_inicio" value="{{ item['fecha_inicio'] or '' }}">
+        </div>
+        <div>
+          <label>Finalización real</label>
+          <input type="datetime-local" name="fecha_fin" value="{{ item['fecha_fin'] or '' }}">
+        </div>
+      </div>
+      <button class="btn btn-outline" type="submit">Guardar fechas reales</button>
+    </form>
+
+    <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+    <h3>Observaciones generales del trabajo</h3>
+    <form method="post" action="{{ url_for('actualizar_observaciones', item_id=item['id']) }}">
+      <textarea name="observaciones" rows="4">{{ item['observaciones'] or '' }}</textarea>
+      <button class="btn btn-outline" type="submit">Guardar observaciones</button>
+    </form>
+
+    <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+    <h3>Subir foto de antes / después</h3>
+    <form method="post" action="{{ url_for('subir_foto', item_id=item['id']) }}" enctype="multipart/form-data">
+      <label>Tipo</label>
+      <select name="tipo">
+        <option value="antes">Antes</option>
+        <option value="despues">Después</option>
+        <option value="progreso">Progreso</option>
+      </select>
+      <label>Foto</label>
+      <input type="file" name="foto" accept="image/*" required>
+      <label>Comentario (opcional)</label>
+      <input type="text" name="comentario">
+      <button class="btn btn-dark" type="submit">Subir foto</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Demoras</h2>
+  <p class="subtitle">Registrá los tiempos muertos o demoras durante la tarea (espera de repuestos, condiciones climáticas, permisos, etc.).</p>
+  {% if demoras %}
+  {% for d in demoras %}
+  <div style="border:1px solid var(--cosesa-border);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;">
+    <form method="post" action="{{ url_for('editar_demora', demora_id=d['id']) }}" class="field-inline" style="align-items:flex-end;flex-wrap:wrap;margin-bottom:0;">
+      <div>
+        <label>Inicio</label>
+        <input type="datetime-local" name="fecha_inicio" value="{{ d['fecha_inicio'] or '' }}" required>
+      </div>
+      <div>
+        <label>Fin</label>
+        <input type="datetime-local" name="fecha_fin" value="{{ d['fecha_fin'] or '' }}" required>
+      </div>
+      <div style="flex:2;">
+        <label>Motivo</label>
+        <input type="text" name="motivo" value="{{ d['motivo'] or '' }}" placeholder="Ej: Espera de repuesto, condiciones climáticas, etc.">
+      </div>
+      <div style="margin-bottom:14px;white-space:nowrap;">
+        <button class="btn btn-outline btn-sm" type="submit">Guardar</button>
+      </div>
+    </form>
+    <p class="subtitle" style="margin:6px 0 8px;">Duración: {{ d|fmtdur }}</p>
+    <form method="post" action="{{ url_for('eliminar_demora', demora_id=d['id']) }}" onsubmit="return confirm('¿Eliminar esta demora?');">
+      <button class="btn btn-sm btn-danger" type="submit">Eliminar</button>
+    </form>
+  </div>
+  {% endfor %}
+  <p style="text-align:right;margin-top:10px;"><strong>Total de demoras: {{ total_demoras }}</strong></p>
+  {% else %}
+  <p class="subtitle">Todavía no se registraron demoras en esta tarea.</p>
+  {% endif %}
+  <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+  <h3>Agregar demora</h3>
+  <form method="post" action="{{ url_for('agregar_demora', item_id=item['id']) }}">
+    <div class="field-inline">
+      <div>
+        <label>Inicio de la demora</label>
+        <input type="datetime-local" name="fecha_inicio" required>
+      </div>
+      <div>
+        <label>Fin de la demora</label>
+        <input type="datetime-local" name="fecha_fin" required>
+      </div>
+    </div>
+    <label>Motivo</label>
+    <input type="text" name="motivo" placeholder="Ej: Espera de repuesto, condiciones climáticas, permiso de trabajo, etc.">
+    <button class="btn btn-outline" type="submit">Agregar demora</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Personal asignado</h2>
+  <p class="subtitle">Cantidad de personas por cargo y bombas usadas, separado por turno día y turno noche. Se usa para calcular las horas hombre / horas máquina (no hace falta cargar nombres).</p>
+  <form method="post" action="{{ url_for('actualizar_personal', item_id=item['id']) }}">
+    <div class="grid grid-2">
+      {% for turno, turno_label in turnos %}
+      <div style="border:1px solid var(--cosesa-border);border-radius:var(--radius);padding:14px 16px;">
+        <h4 style="margin-top:0;">{{ turno_label }}</h4>
+        {% for campo, campo_label in cargos_personal %}
+        <label>{{ campo_label }}</label>
+        <input type="number" min="0" step="1" name="{{ turno }}_{{ campo }}" value="{{ personal[turno][campo] }}">
+        {% endfor %}
+        <label>Bombas usadas en este turno</label>
+        <input type="number" min="0" step="1" name="{{ turno }}_bombas" value="{{ personal[turno]['bombas'] }}">
+      </div>
+      {% endfor %}
+    </div>
+    <button class="btn btn-outline" style="margin-top:14px;" type="submit">Guardar personal asignado</button>
+  </form>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <h2 style="margin:0;">Checklist de certificación de lavado</h2>
+    <a class="btn btn-outline btn-sm" target="_blank" href="{{ url_for('checklist_item_html', item_id=item['id']) }}">Ver / imprimir reporte</a>
+  </div>
+  <p class="subtitle">Reporte N° {{ checklist['numero_reporte'] }}. Los puntos de abajo son editables: podés renombrarlos, quitarlos o agregar los que necesites.</p>
+  <form method="post" action="{{ url_for('actualizar_checklist', item_id=item['id']) }}">
+    <label>Tipo de servicio</label>
+    <input type="text" name="tipo_servicio" value="{{ checklist['tipo_servicio'] }}">
+    <button class="btn btn-outline btn-sm" type="submit">Guardar tipo de servicio</button>
+  </form>
+
+  {% for p in checklist_puntos %}
+  <form method="post" action="{{ url_for('editar_punto_checklist', punto_id=p['id']) }}" class="field-inline" style="align-items:center;margin-bottom:8px;">
+    <div style="flex:2;">
+      <input type="text" name="etiqueta" value="{{ p['etiqueta'] }}" required>
+    </div>
+    <div>
+      <label style="display:inline-flex;align-items:center;gap:4px;font-weight:normal;"><input type="radio" name="estado" value="pendiente" {% if p['estado']=='pendiente' %}checked{% endif %}> Pendiente</label>
+      <label style="display:inline-flex;align-items:center;gap:4px;font-weight:normal;margin-left:12px;"><input type="radio" name="estado" value="ok" {% if p['estado']=='ok' %}checked{% endif %}> Cumplido</label>
+      <label style="display:inline-flex;align-items:center;gap:4px;font-weight:normal;margin-left:12px;"><input type="radio" name="estado" value="na" {% if p['estado']=='na' %}checked{% endif %}> No aplica</label>
+    </div>
+    <div style="white-space:nowrap;">
+      <button class="btn btn-outline btn-sm" type="submit">Guardar</button>
+    </div>
+  </form>
+  <form method="post" action="{{ url_for('eliminar_punto_checklist', punto_id=p['id']) }}" onsubmit="return confirm('¿Eliminar el punto \'{{ p['etiqueta'] }}\' del checklist?');" style="margin:-4px 0 12px;">
+    <button class="btn btn-sm btn-danger" type="submit">Eliminar punto</button>
+  </form>
+  {% else %}
+  <p class="subtitle">Este checklist todavía no tiene puntos cargados.</p>
+  {% endfor %}
+  <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:14px 0;">
+  <form method="post" action="{{ url_for('crear_punto_checklist', item_id=item['id']) }}" class="field-inline" style="align-items:flex-end;">
+    <div style="flex:2;">
+      <label>Agregar punto al checklist</label>
+      <input type="text" name="etiqueta" placeholder="Ej: Pasaje de agua, Prueba hidráulica, etc." required>
+    </div>
+    <div style="margin-bottom:14px;">
+      <button class="btn btn-outline btn-sm" type="submit">Agregar punto</button>
+    </div>
+  </form>
+
+  <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+  <div class="grid grid-2">
+    <div>
+      <p class="subtitle" style="margin-bottom:2px;">Responsable de Calidad COSESA</p>
+      <div style="border-bottom:1px solid #333;height:32px;"></div>
+      <p class="subtitle" style="margin-top:2px;">Firma y aclaración</p>
+    </div>
+    <div>
+      <p class="subtitle" style="margin-bottom:2px;">Responsable de Planta ({{ item['cliente_nombre'] }})</p>
+      <div style="border-bottom:1px solid #333;height:32px;"></div>
+      <p class="subtitle" style="margin-top:2px;">Firma y aclaración</p>
+    </div>
+  </div>
+  <p class="subtitle" style="margin-top:6px;">Estas dos firmas certifican el ítem completo. Se completan a mano en el reporte impreso (botón "Ver / imprimir reporte" arriba).</p>
+
+  <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+  <h3>Piezas del equipo (opcional)</h3>
+  <p class="subtitle">Para equipos con tubos, como intercambiadores de calor: tapa, tapa olla, distribuidor, aros de flotante, cabezal flotante, u otra pieza. Cada una con su fecha de recepción, fecha de lavado y número de precinto. Como a veces las piezas se lavan en días distintos, cada una se certifica y firma por separado (Responsable de Calidad COSESA + Responsable de Planta del cliente).</p>
+  {% if piezas %}
+  {% for p in piezas %}
+  <div style="border:1px solid var(--cosesa-border);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;">
+    <form method="post" action="{{ url_for('editar_pieza', pieza_id=p['id']) }}">
+      <div class="field-inline" style="align-items:flex-end;flex-wrap:wrap;margin-bottom:0;">
+        <div style="flex:1.5;">
+          <label>Pieza</label>
+          <input type="text" name="nombre" value="{{ p['nombre'] }}" required>
+        </div>
+        <div>
+          <label>Fecha de recepción</label>
+          <input type="datetime-local" name="fecha_recepcion" value="{{ p['fecha_recepcion'] or '' }}">
+        </div>
+        <div>
+          <label>Fecha de lavado</label>
+          <input type="datetime-local" name="fecha_lavado" value="{{ p['fecha_lavado'] or '' }}">
+        </div>
+        <div>
+          <label>N° de precinto</label>
+          <input type="text" name="precinto" value="{{ p['precinto'] or '' }}">
+        </div>
+        <div style="margin-bottom:14px;white-space:nowrap;">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-weight:normal;text-transform:none;"><input type="checkbox" name="confirmado" style="width:auto;margin:0;" {% if p['confirmado']=='ok' %}checked{% endif %}> Lavado confirmado</label>
+        </div>
+      </div>
+      <div class="field-inline">
+        <div>
+          <label>Certificado por (COSESA)</label>
+          <input type="text" name="firmado_por_cosesa" value="{{ p['firmado_por_cosesa'] or '' }}" placeholder="Nombre — Responsable de Calidad COSESA">
+        </div>
+        <div>
+          <label>Certificado por (Cliente)</label>
+          <input type="text" name="firmado_por_cliente" value="{{ p['firmado_por_cliente'] or '' }}" placeholder="Nombre — Responsable de Planta del cliente">
+        </div>
+        <div style="display:flex;align-items:center;">
+          <button class="btn btn-outline btn-sm" type="submit" style="margin-top:20px;">Guardar</button>
+        </div>
+      </div>
+    </form>
+    <form method="post" action="{{ url_for('eliminar_pieza', pieza_id=p['id']) }}" onsubmit="return confirm('¿Eliminar la pieza \'{{ p['nombre'] }}\'?');" style="margin-top:6px;">
+      <button class="btn btn-sm btn-danger" type="submit">Eliminar</button>
+    </form>
+  </div>
+  {% endfor %}
+  {% else %}
+  <p class="subtitle">Todavía no se cargaron piezas para este ítem.</p>
+  {% endif %}
+  <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+  <h4>Agregar pieza</h4>
+  <form method="post" action="{{ url_for('crear_pieza', item_id=item['id']) }}">
+    <div class="field-inline">
+      <div style="flex:1.5;">
+        <label>Nombre de la pieza</label>
+        <input type="text" name="nombre" list="piezas-sugeridas" placeholder="Ej: Tapa, Distribuidor, o escribí una nueva" required>
+        <datalist id="piezas-sugeridas">
+          {% for s in piezas_sugeridas %}
+          <option value="{{ s }}">
+          {% endfor %}
+        </datalist>
+      </div>
+      <div>
+        <label>Fecha de recepción</label>
+        <input type="datetime-local" name="fecha_recepcion">
+      </div>
+      <div>
+        <label>Fecha de lavado</label>
+        <input type="datetime-local" name="fecha_lavado">
+      </div>
+      <div>
+        <label>N° de precinto</label>
+        <input type="text" name="precinto">
+      </div>
+    </div>
+    <div class="field-inline">
+      <div>
+        <label>Certificado por (COSESA)</label>
+        <input type="text" name="firmado_por_cosesa" placeholder="Nombre — Responsable de Calidad COSESA">
+      </div>
+      <div>
+        <label>Certificado por (Cliente)</label>
+        <input type="text" name="firmado_por_cliente" placeholder="Nombre — Responsable de Planta del cliente">
+      </div>
+      <div style="display:flex;align-items:center;">
+        <label style="display:inline-flex;align-items:center;gap:6px;font-weight:normal;text-transform:none;margin-top:20px;"><input type="checkbox" name="confirmado" style="width:auto;margin:0;"> Lavado confirmado</label>
+      </div>
+    </div>
+    <button class="btn btn-outline" type="submit">Agregar pieza</button>
+  </form>
+
+  <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+  <h3>Documento firmado</h3>
+  {% if fotos_checklist %}
+  <div class="photo-grid">
+    {% for f in fotos_checklist %}
+    <figure>
+      <img src="{{ url_for('uploaded_file', filename=f['filename']) }}" alt="Documento firmado">
+      <figcaption>Subido {{ f['subida_en']|fmtdt }}</figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="subtitle">Todavía no se subió una foto del checklist ya firmado.</p>
+  {% endif %}
+  <form method="post" action="{{ url_for('subir_foto_checklist', item_id=item['id']) }}" enctype="multipart/form-data">
+    <label>Foto del checklist firmado</label>
+    <input type="file" name="foto" accept="image/*" required>
+    <button class="btn btn-dark" type="submit">Subir foto del documento firmado</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Fotos cargadas</h2>
+  {% if fotos %}
+  <div class="photo-grid">
+    {% for f in fotos %}
+    <figure>
+      <img src="{{ url_for('uploaded_file', filename=f['filename']) }}" alt="{{ f['tipo'] }}">
+      <figcaption>{{ f['tipo']|capitalize }}{% if f['comentario'] %} · {{ f['comentario'] }}{% endif %}</figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="subtitle">Todavía no hay fotos para este ítem.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Historial de avance</h2>
+  {% if avances %}
+  <div class="timeline">
+    {% for a in avances %}
+    <div class="timeline-item">
+      <div class="timeline-date">{{ a['fecha']|fmtdt }} · {{ a['avance_pct'] }}% {% if a['usuario_nombre'] %}· {{ a['usuario_nombre'] }}{% endif %}</div>
+      {% if a['comentario'] %}<div>{{ a['comentario'] }}</div>{% endif %}
+      {% if a['horas_hombre_dia'] or a['horas_maquina_dia'] %}
+      <div class="subtitle">Hs. hombre: {{ a['horas_hombre_dia'] }} · Hs. máquina: {{ a['horas_maquina_dia'] }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="subtitle">Todavía no hay avances registrados.</p>
+  {% endif %}
+</div>
+{% endblock %}

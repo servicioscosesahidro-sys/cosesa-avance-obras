@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}{{ item['nombre'] }} · Mis obras{% endblock %}
+{% block content %}
+<div class="breadcrumb">
+  <a href="{{ url_for('cliente_dashboard') }}">Mis obras</a> /
+  {{ item['obra_nombre'] }} / {{ item['nombre'] }}
+</div>
+<h1>{{ item['nombre'] }} <span class="pill pill-{{ item['estado'] }}">{{ item['estado'].replace('_',' ') }}</span></h1>
+<p class="subtitle">{{ item['descripcion'] or '' }}</p>
+
+<div class="card">
+  <h2>Avance: {{ item['avance_pct'] }}%</h2>
+  <div class="progress-bar-bg" style="height:16px;"><div class="progress-bar-fill" style="width:{{ item['avance_pct'] }}%;"></div></div>
+  {% if item['observaciones'] %}
+  <p style="margin-top:14px;"><strong>Observaciones:</strong> {{ item['observaciones'] }}</p>
+  {% endif %}
+</div>
+
+{% if checklist %}
+<div class="card">
+  <h2>Checklist de certificación de lavado</h2>
+  <p class="subtitle">Reporte N° {{ checklist['numero_reporte'] }} · {{ checklist['tipo_servicio'] }}</p>
+  <table>
+    <tr><th>Tarea</th><th>Estado</th></tr>
+    {% for p in checklist_puntos %}
+    <tr>
+      <td>{{ p['etiqueta'] }}</td>
+      <td>
+        {% if p['estado'] == 'ok' %}<span class="pill pill-finalizado">Cumplido</span>
+        {% elif p['estado'] == 'na' %}<span class="pill">No aplica</span>
+        {% else %}<span class="pill pill-pendiente">Pendiente</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if piezas %}
+  <h3 style="margin-top:16px;">Piezas del equipo</h3>
+  <table>
+    <tr><th>Pieza</th><th>Fecha de recepción</th><th>Fecha de lavado</th><th>N° de precinto</th><th>Estado</th><th>Certificado por COSESA</th><th>Certificado por Cliente</th></tr>
+    {% for p in piezas %}
+    <tr>
+      <td>{{ p['nombre'] }}</td>
+      <td>{{ p['fecha_recepcion']|fmtdt if p['fecha_recepcion'] else '—' }}</td>
+      <td>{{ p['fecha_lavado']|fmtdt if p['fecha_lavado'] else '—' }}</td>
+      <td>{{ p['precinto'] or '—' }}</td>
+      <td>{% if p['confirmado'] == 'ok' %}<span class="pill pill-finalizado">Confirmado</span>{% else %}<span class="pill pill-pendiente">Pendiente</span>{% endif %}</td>
+      <td>{{ p['firmado_por_cosesa'] or '—' }}</td>
+      <td>{{ p['firmado_por_cliente'] or '—' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+  {% if fotos_checklist %}
+  <h3 style="margin-top:16px;">Documento firmado</h3>
+  <div class="photo-grid">
+    {% for f in fotos_checklist %}
+    <figure><img src="{{ url_for('uploaded_file', filename=f['filename']) }}" alt="Documento firmado"></figure>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Fotos</h2>
+  {% if fotos %}
+  <div class="photo-grid">
+    {% for f in fotos %}
+    <figure>
+      <img src="{{ url_for('uploaded_file', filename=f['filename']) }}" alt="{{ f['tipo'] }}">
+      <figcaption>{{ f['tipo']|capitalize }}{% if f['comentario'] %} · {{ f['comentario'] }}{% endif %}</figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="subtitle">Todavía no hay fotos cargadas.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Seguimiento día a día</h2>
+  {% if avances %}
+  <div class="timeline">
+    {% for a in avances %}
+    <div class="timeline-item">
+      <div class="timeline-date">{{ a['fecha']|fmtdt }} · {{ a['avance_pct'] }}%</div>
+      {% if a['comentario'] %}<div>{{ a['comentario'] }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="subtitle">Todavía no hay avances registrados.</p>
+  {% endif %}
+</div>
+{% endblock %}

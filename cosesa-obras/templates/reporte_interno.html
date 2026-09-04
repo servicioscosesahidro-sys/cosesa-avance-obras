@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Informe interno - {{ obra['nombre'] }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body style="background:white;">
+<div class="container">
+  <div class="print-btn-bar no-print" style="text-align:right;">
+    <a class="btn" href="{{ url_for('reporte_interno_obra_pdf', obra_id=obra['id']) }}">Descargar PDF</a>
+    <button class="btn btn-outline" onclick="window.print()">Imprimir</button>
+  </div>
+
+  <div class="report-header">
+    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="COSESA">
+    <div style="text-align:right;">
+      <h2 style="margin:0;">Informe interno de horas — USO INTERNO COSESA</h2>
+      <div class="subtitle">Generado el {{ generado_en }}</div>
+    </div>
+  </div>
+
+  <h1 style="margin-bottom:2px;">{{ obra['nombre'] }}</h1>
+  <p class="subtitle">Cliente: {{ obra['cliente_nombre'] }}</p>
+
+  <div class="grid grid-3" style="margin:20px 0;">
+    <div class="card stat">
+      <div class="num">{{ total_hh }}</div>
+      <div class="lbl">Total horas hombre</div>
+    </div>
+    <div class="card stat">
+      <div class="num">{{ total_hm }}</div>
+      <div class="lbl">Total horas máquina</div>
+    </div>
+    <div class="card stat">
+      <div class="num">{{ total_demoras }}</div>
+      <div class="lbl">Total demoras</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Cronograma de la obra</h2>
+    {{ gantt_html|safe }}
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Avance planificado vs. avance real</h2>
+    {{ curve_html|safe }}
+  </div>
+
+  <div class="card">
+    <h2>Detalle por ítem</h2>
+    <table>
+      <tr><th>Ítem / equipo</th><th>Estado</th><th>Inicio</th><th>Fin</th><th>Hs. hombre</th><th>Hs. máquina</th><th>Total demoras</th></tr>
+      {% for i in items %}
+      <tr>
+        <td>{{ i['nombre'] }}</td>
+        <td>{{ i['estado'].replace('_',' ') }}</td>
+        <td>{{ i['fecha_inicio']|fmtdt }}</td>
+        <td>{{ i['fecha_fin']|fmtdt }}</td>
+        <td>{{ i['horas_hombre'] }}</td>
+        <td>{{ i['horas_maquina'] }}</td>
+        <td>{{ total_demoras_por_item[i['id']] }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  {% set any_demoras = demoras_por_item.values()|map('length')|sum %}
+  {% if any_demoras %}
+  <div class="card">
+    <h2>Detalle de demoras</h2>
+    {% for i in items %}
+      {% set d_item = demoras_por_item[i['id']] %}
+      {% if d_item %}
+      <h4>{{ i['nombre'] }}</h4>
+      <table>
+        <tr><th>Inicio</th><th>Fin</th><th>Duración</th><th>Motivo</th></tr>
+        {% for d in d_item %}
+        <tr>
+          <td>{{ d['fecha_inicio']|fmtdt }}</td>
+          <td>{{ d['fecha_fin']|fmtdt }}</td>
+          <td>{{ d|fmtdur }}</td>
+          <td>{{ d['motivo'] or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <p class="subtitle" style="text-align:center;margin-top:30px;">Documento interno de COSESA — no distribuir a clientes.</p>
+</div>
+</body>
+</html>

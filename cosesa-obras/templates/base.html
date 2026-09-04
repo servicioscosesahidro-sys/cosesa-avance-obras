@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}AVANCE DE OBRAS - APP 03{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="icon" href="{{ url_for('static', filename='img/logo.png') }}">
+</head>
+<body>
+  {% block body %}
+  {% if current_user %}
+  <nav class="navbar no-print">
+    <a class="brand" href="{{ url_for('cosesa_dashboard') if current_user['rol'] in ('cosesa','cosesa_admin') else url_for('cliente_dashboard') }}">
+      <img src="{{ url_for('static', filename='img/logo.png') }}" alt="COSESA">
+    </a>
+    <div class="nav-links">
+      {% if is_admin(current_user) %}
+      <a href="{{ url_for('cosesa_usuarios') }}">Usuarios</a>
+      {% endif %}
+      <span>{{ current_user['nombre'] }}</span>
+      <span class="badge-role">
+        {% if current_user['rol'] == 'cosesa_admin' %}ADMINISTRADOR
+        {% elif current_user['rol'] == 'cosesa' %}OPERADOR COSESA
+        {% else %}CLIENTE{% endif %}
+      </span>
+      <a class="logout-link" href="{{ url_for('logout') }}">Cerrar sesión</a>
+    </div>
+  </nav>
+  {% endif %}
+
+  <div class="{% block container_class %}container{% endblock %}">
+    {% if current_user and request.endpoint not in ('cosesa_dashboard', 'cliente_dashboard') %}
+      <a class="btn btn-outline btn-sm btn-back no-print" href="javascript:history.back()">&larr; Volver</a>
+    {% endif %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </div>
+  {% endblock %}
+</body>
+</html>

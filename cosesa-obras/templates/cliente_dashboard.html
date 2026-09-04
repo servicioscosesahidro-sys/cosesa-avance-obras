@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Mis obras · COSESA{% endblock %}
+{% block content %}
+<h1>Mis obras</h1>
+<p class="subtitle">Seguimiento en tiempo real de los trabajos que COSESA está realizando.</p>
+
+{% if obras %}
+<div class="grid grid-2">
+  {% for o in obras %}
+  <div class="card">
+    <h2>{{ o['nombre'] }} <span class="pill pill-{{ o['estado'] }}">{{ o['estado'].replace('_',' ') }}</span></h2>
+    <p class="subtitle">{{ o['descripcion'] or '' }}{% if o['ubicacion'] %} · {{ o['ubicacion'] }}{% endif %}</p>
+    <div class="progress-bar-bg" style="height:12px;"><div class="progress-bar-fill" style="width:{{ o['avance_prom'] }}%;"></div></div>
+    <p class="subtitle">{{ '%.0f' % o['avance_prom'] }}% de avance promedio · {{ o['n_items'] }} ítem(s)</p>
+    <a class="btn" href="{{ url_for('cliente_obra_detail', obra_id=o['id']) }}">Ver detalle</a>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card"><p class="subtitle">Todavía no hay obras cargadas para tu empresa.</p></div>
+{% endif %}
+{% endblock %}
