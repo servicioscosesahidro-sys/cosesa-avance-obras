@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import tempfile
 from datetime import date, datetime
 from functools import wraps
@@ -1730,17 +1731,21 @@ def uploaded_file(filename):
 
 
 # Se ejecuta siempre al importar el módulo (tanto con `python3 app.py` en
-# desarrollo como al arrancar con gunicorn en producción), así la base de
-# datos queda creada la primera vez que corre en un disco nuevo o vacío.
-if not os.path.exists(DB_PATH):
-    init_db()
+# desarrollo como al arrancar con gunicorn en producción, con uno o varios
+# workers), así la base de datos queda creada la primera vez que corre en un
+# disco nuevo o vacío. init_db() ya es segura para llamar siempre: si la base
+# ya existe no hace nada, y si varios workers arrancan a la vez, un lock de
+# archivo evita que choquen entre sí.
+init_db()
 
 
 def _bootstrap_admin():
     """En un despliegue nuevo (base de datos vacía, sin usuarios) crea el primer
     administrador a partir de variables de entorno, para poder entrar por
     primera vez sin acceso a una consola del servidor. No hace nada si ya
-    existe algún usuario, ni si faltan las variables de entorno."""
+    existe algún usuario, ni si faltan las variables de entorno. Como varios
+    workers de gunicorn pueden llegar acá al mismo tiempo, se ignora el error
+    si otro worker ya insertó el mismo usuario un instante antes."""
     admin_user = os.environ.get("ADMIN_USERNAME")
     admin_pass = os.environ.get("ADMIN_PASSWORD")
     if not (admin_user and admin_pass):
@@ -1755,6 +1760,8 @@ def _bootstrap_admin():
             (os.environ.get("ADMIN_NOMBRE", "Administrador"), admin_user, generate_password_hash(admin_pass)),
         )
         db.commit()
+    except sqlite3.IntegrityError:
+        pass
     finally:
         db.close()
 
