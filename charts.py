@@ -65,7 +65,7 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
     chart_x0 = label_w + 10
     chart_w = width - chart_x0 - 20
     row_h = 38
-    top_pad = 44
+    top_pad = 76
     height = top_pad + row_h * len(items) + 20
 
     def x(d):
@@ -90,6 +90,17 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
             svg.append(f'<rect x="{nx0:.1f}" y="{top_pad - 4}" width="{nx1 - nx0:.1f}" height="{height - top_pad - 6:.1f}" fill="#eef1f6"/>')
         banda_cursor += timedelta(days=1)
 
+    # Cabecera del gráfico en 4 filas bien separadas (así no se pisan los
+    # textos al hacer zoom, que agranda todo proporcionalmente):
+    #   fila 1 (arriba de todo): rango general de fechas, en los dos extremos.
+    #   fila 2: marcas de hora cada 6hs (solo el número, sin "h").
+    #   fila 3: línea de "hoy".
+    #   fila 4 (pegada al gráfico): fecha de cada cambio de día.
+    y_rango = 14
+    y_horas = 32
+    y_hoy = 50
+    y_dia = top_pad - 10
+
     # Marcas de hora cada 6hs (00/06/12/18), finitas — dan la resolución
     # horaria; se ven mejor haciendo zoom con los botones de abajo.
     hora_cursor = start.replace(minute=0, second=0, microsecond=0)
@@ -99,7 +110,7 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
             es_cambio_de_dia = hora_cursor.hour == 0
             if not es_cambio_de_dia:
                 svg.append(f'<line x1="{hx:.1f}" y1="{top_pad - 2}" x2="{hx:.1f}" y2="{top_pad + 2}" stroke="#c7d0d6" stroke-width="1"/>')
-                svg.append(f'<text x="{hx:.1f}" y="{top_pad - 30}" font-size="7" fill="#b7c0c6" text-anchor="middle">{hora_cursor.strftime("%H")}h</text>')
+                svg.append(f'<text x="{hx:.1f}" y="{y_horas}" font-size="8" fill="#9aa4ab" text-anchor="middle">{hora_cursor.strftime("%H")}</text>')
         hora_cursor += timedelta(hours=1)
 
     # líneas punteadas verticales para cada cambio de día + etiqueta de fecha
@@ -107,16 +118,16 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
     while day < end:
         dx = x(day)
         svg.append(f'<line x1="{dx:.1f}" y1="{top_pad - 4}" x2="{dx:.1f}" y2="{height - 10}" stroke="#d5dade" stroke-width="1" stroke-dasharray="3,3" />')
-        svg.append(f'<text x="{dx:.1f}" y="{top_pad - 8}" font-size="9" fill="#9aa4ab" text-anchor="middle">{day.strftime("%d/%m")}</text>')
+        svg.append(f'<text x="{dx:.1f}" y="{y_dia}" font-size="10" font-weight="600" fill="#6b7580" text-anchor="middle">{day.strftime("%d/%m")}</text>')
         day += timedelta(days=1)
 
-    # eje de fechas arriba
-    svg.append(f'<text x="{chart_x0}" y="16" font-size="11" fill="#6b7580">{_fmt(start)}</text>')
-    svg.append(f'<text x="{chart_x0 + chart_w}" y="16" font-size="11" fill="#6b7580" text-anchor="end">{_fmt(end)}</text>')
+    # eje de fechas arriba (rango general, en los extremos)
+    svg.append(f'<text x="{chart_x0}" y="{y_rango}" font-size="11" fill="#6b7580">{_fmt(start)}</text>')
+    svg.append(f'<text x="{chart_x0 + chart_w}" y="{y_rango}" font-size="11" fill="#6b7580" text-anchor="end">{_fmt(end)}</text>')
     # línea de "hoy"
     today_x = x(today)
     svg.append(f'<line x1="{today_x:.1f}" y1="{top_pad - 6}" x2="{today_x:.1f}" y2="{height - 10}" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="4,3" />')
-    svg.append(f'<text x="{today_x:.1f}" y="{top_pad - 22}" font-size="10" fill="#c0392b" text-anchor="middle">hoy</text>')
+    svg.append(f'<text x="{today_x:.1f}" y="{y_hoy}" font-size="10" font-weight="600" fill="#c0392b" text-anchor="middle">hoy</text>')
 
     y = top_pad
     for d in items_con_demoras:
