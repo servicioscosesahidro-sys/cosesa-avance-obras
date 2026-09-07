@@ -124,6 +124,18 @@ def get_personal(db, item_id):
     return by_turno
 
 
+def crear_personal_default(db, item_id):
+    """Cuadrilla estándar con la que arranca todo ítem nuevo (turno día):
+    1 supervisor, 1 técnico de higiene y seguridad, 1 puntero y 2 operarios.
+    El turno noche queda en cero (get_personal lo crea así cuando hace
+    falta) hasta que se cargue gente para ese turno a mano."""
+    db.execute(
+        "INSERT INTO personal_lavado (item_id, turno, supervisores, tecnicos_hs, punteros, operarios) "
+        "VALUES (?, 'dia', 1, 1, 1, 2)",
+        (item_id,),
+    )
+
+
 def total_personal(personal_by_turno):
     total_personas = 0
     total_bombas = 0
@@ -862,6 +874,7 @@ def crear_item(obra_id):
         "VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', ?)",
         (obra_id, nombre, descripcion, tag_equipo, fecha_inicio, fecha_inicio_plan, fecha_fin_plan, observaciones),
     )
+    crear_personal_default(db, cur.lastrowid)
     db.commit()
     db.close()
     flash(f"Ítem '{nombre}' agregado.", "success")
@@ -955,6 +968,7 @@ def importar_cronograma_excel(obra_id):
                 "VALUES (?,?,?,?,?,?,'pendiente')",
                 (obra_id, t["nombre"], t["descripcion"], t["tag"], t["fecha_inicio_plan"], t["fecha_fin_plan"]),
             )
+            crear_personal_default(db, cur.lastrowid)
             if t["tag"]:
                 tag_a_id[t["tag"]] = cur.lastrowid
             creados += 1
