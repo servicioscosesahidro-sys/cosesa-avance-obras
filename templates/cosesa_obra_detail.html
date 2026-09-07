@@ -43,6 +43,19 @@
   {{ curve_html|safe }}
 </div>
 
+<div class="grid grid-2">
+  <div class="card">
+    <h2>Carga diaria planificada</h2>
+    <p class="subtitle">Ítems a lavar y bombas en uso cada día, según el cronograma planificado.</p>
+    {{ carga_plan_html|safe }}
+  </div>
+  <div class="card">
+    <h2>Carga diaria real</h2>
+    <p class="subtitle">Ítems a lavar y bombas en uso cada día, según las fechas reales de ejecución.</p>
+    {{ carga_real_html|safe }}
+  </div>
+</div>
+
 <div class="card">
   <h2>Ítems / equipos de esta obra</h2>
   {% if items %}

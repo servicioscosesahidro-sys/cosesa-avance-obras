@@ -14,7 +14,7 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from db import get_db, init_db, DB_PATH
 from backup import restore_latest, backup_now, iniciar_backup_periodico
-from charts import gantt_svg, curve_svg
+from charts import gantt_svg, curve_svg, carga_diaria_planificada_svg, carga_diaria_real_svg
 from excel_io import generar_plantilla_cronograma, generar_plantilla_reales, leer_cronograma, leer_reales
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -372,6 +372,7 @@ def build_obra_charts(db, items, interactive=False):
     reportes/PDFs de solo lectura)."""
     items_con_avances = []
     items_con_demoras = []
+    items_con_bombas = []
     for it in items:
         avances = db.execute(
             "SELECT * FROM avance_log WHERE item_id = ? ORDER BY fecha", (it["id"],)
@@ -381,9 +382,17 @@ def build_obra_charts(db, items, interactive=False):
             "SELECT * FROM demoras WHERE item_id = ? ORDER BY fecha_inicio", (it["id"],)
         ).fetchall()
         items_con_demoras.append({"item": it, "demoras": demoras})
+        personal = get_personal(db, it["id"])
+        _, total_bombas = total_personal(personal)
+        items_con_bombas.append({"item": it, "bombas": total_bombas})
     gantt_html = gantt_svg(items_con_demoras, interactive=interactive) if items else "<p class='subtitle'>Todavía no hay ítems cargados.</p>"
     curve_html = curve_svg(items_con_avances) if items else "<p class='subtitle'>Todavía no hay ítems cargados.</p>"
-    return gantt_html, curve_html
+    if items:
+        carga_plan_html = carga_diaria_planificada_svg(items_con_bombas)
+        carga_real_html = carga_diaria_real_svg(items_con_bombas)
+    else:
+        carga_plan_html = carga_real_html = "<p class='subtitle'>Todavía no hay ítems cargados.</p>"
+    return gantt_html, curve_html, carga_plan_html, carga_real_html
 
 
 def render_pdf(html_url, out_path):
@@ -744,13 +753,14 @@ def cosesa_obra_detail(obra_id):
     for iid in item_ids:
         recompute_item_horas(db, iid)
     items = db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY creado_en", (obra_id,)).fetchall()
-    gantt_html, curve_html = build_obra_charts(db, items, interactive=True)
+    gantt_html, curve_html, carga_plan_html, carga_real_html = build_obra_charts(db, items, interactive=True)
     certificados = db.execute(
         "SELECT * FROM certificados WHERE obra_id = ? ORDER BY subida_en DESC", (obra_id,)
     ).fetchall()
     db.close()
     return render_template(
         "cosesa_obra_detail.html", obra=obra, items=items, gantt_html=gantt_html, curve_html=curve_html,
+        carga_plan_html=carga_plan_html, carga_real_html=carga_real_html,
         certificados=certificados,
     )
 
@@ -1673,13 +1683,14 @@ def cliente_obra_detail(obra_id):
     db = get_db()
     obra = _check_obra_asignada(db, obra_id, user["id"])
     items = db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY creado_en", (obra_id,)).fetchall()
-    gantt_html, curve_html = build_obra_charts(db, items)
+    gantt_html, curve_html, carga_plan_html, carga_real_html = build_obra_charts(db, items)
     certificados = db.execute(
         "SELECT * FROM certificados WHERE obra_id = ? ORDER BY subida_en DESC", (obra_id,)
     ).fetchall()
     db.close()
     return render_template(
         "cliente_obra_detail.html", obra=obra, items=items, gantt_html=gantt_html, curve_html=curve_html,
+        carga_plan_html=carga_plan_html, carga_real_html=carga_real_html,
         certificados=certificados,
     )
 
@@ -1737,7 +1748,7 @@ def reporte_obra(obra_id):
     if obra is None or not _puede_ver_obra(db, user, obra):
         abort(403)
     items = db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY creado_en", (obra_id,)).fetchall()
-    gantt_html, curve_html = build_obra_charts(db, items)
+    gantt_html, curve_html, carga_plan_html, carga_real_html = build_obra_charts(db, items)
     items_data = []
     for item in items:
         fotos = db.execute(
@@ -1821,11 +1832,12 @@ def reporte_interno_obra(obra_id):
         item_min = sum(demora_minutos(d) for d in d_item)
         total_demoras_por_item[i["id"]] = fmt_duracion(item_min)
         total_demoras_min += item_min
-    gantt_html, curve_html = build_obra_charts(db, items)
+    gantt_html, curve_html, carga_plan_html, carga_real_html = build_obra_charts(db, items)
     db.close()
     return render_template(
         "reporte_interno.html", obra=obra, items=items, total_hh=total_hh, total_hm=total_hm,
         gantt_html=gantt_html, curve_html=curve_html,
+        carga_plan_html=carga_plan_html, carga_real_html=carga_real_html,
         demoras_por_item=demoras_por_item, total_demoras_por_item=total_demoras_por_item,
         total_demoras=fmt_duracion(total_demoras_min),
         generado_en=datetime.now().strftime("%d/%m/%Y %H:%M"),

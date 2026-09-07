@@ -2,10 +2,12 @@
    - Diagrama de Gantt por obra (planificado vs. barra de avance real).
    - Curva de avance planificado vs. avance real (día a día).
 """
+import itertools
 from datetime import datetime, date, timedelta
 
 
 _DT_FORMATS = ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%d")
+_gantt_counter = itertools.count()
 
 
 def _parse(d):
@@ -69,7 +71,36 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
     def x(d):
         return chart_x0 + (d - start).total_seconds() / total_span * chart_w
 
-    svg = [f'<svg viewBox="0 0 {width} {height}" width="100%" style="font-family:inherit;">']
+    chart_id = f"gantt-{next(_gantt_counter)}"
+    svg = [f'<svg id="{chart_id}-svg" viewBox="0 0 {width} {height}" width="100%" style="font-family:inherit;">']
+
+    # Franjas de turno de fondo: turno día 07:00-19:00 (blanco) y turno noche
+    # 19:00-07:00 del día siguiente (gris azulado), para todo el rango visible.
+    banda_cursor = start.replace(hour=0, minute=0, second=0, microsecond=0)
+    while banda_cursor <= end:
+        dia_ini = banda_cursor.replace(hour=7, minute=0)
+        dia_fin = banda_cursor.replace(hour=19, minute=0)
+        noche_ini = dia_fin
+        noche_fin = dia_ini + timedelta(days=1)
+        dx0, dx1 = x(max(dia_ini, start)), x(min(dia_fin, end))
+        if dx1 > dx0:
+            svg.append(f'<rect x="{dx0:.1f}" y="{top_pad - 4}" width="{dx1 - dx0:.1f}" height="{height - top_pad - 6:.1f}" fill="#fffdf5"/>')
+        nx0, nx1 = x(max(noche_ini, start)), x(min(noche_fin, end))
+        if nx1 > nx0:
+            svg.append(f'<rect x="{nx0:.1f}" y="{top_pad - 4}" width="{nx1 - nx0:.1f}" height="{height - top_pad - 6:.1f}" fill="#eef1f6"/>')
+        banda_cursor += timedelta(days=1)
+
+    # Marcas de hora cada 6hs (00/06/12/18), finitas — dan la resolución
+    # horaria; se ven mejor haciendo zoom con los botones de abajo.
+    hora_cursor = start.replace(minute=0, second=0, microsecond=0)
+    while hora_cursor <= end:
+        if hora_cursor.hour % 6 == 0:
+            hx = x(hora_cursor)
+            es_cambio_de_dia = hora_cursor.hour == 0
+            if not es_cambio_de_dia:
+                svg.append(f'<line x1="{hx:.1f}" y1="{top_pad - 2}" x2="{hx:.1f}" y2="{top_pad + 2}" stroke="#c7d0d6" stroke-width="1"/>')
+                svg.append(f'<text x="{hx:.1f}" y="{top_pad - 30}" font-size="7" fill="#b7c0c6" text-anchor="middle">{hora_cursor.strftime("%H")}h</text>')
+        hora_cursor += timedelta(hours=1)
 
     # líneas punteadas verticales para cada cambio de día + etiqueta de fecha
     day = start.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
@@ -187,9 +218,36 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
         '<span><span style="display:inline-block;width:12px;height:12px;background:#c0392b;border:1.5px dashed #7a1f14;border-radius:3px;vertical-align:middle;"></span> Pausa en curso</span>'
         '<span><span style="display:inline-block;width:12px;height:12px;border:1px dashed #c0392b;border-radius:3px;vertical-align:middle;"></span> Hoy</span>'
         '<span><span style="display:inline-block;width:12px;height:12px;border:1px dashed #d5dade;border-radius:3px;vertical-align:middle;"></span> Cambio de día</span>'
+        '<span><span style="display:inline-block;width:12px;height:12px;background:#fffdf5;border:1px solid #e5decf;border-radius:3px;vertical-align:middle;"></span> Turno día (07-19h)</span>'
+        '<span><span style="display:inline-block;width:12px;height:12px;background:#eef1f6;border:1px solid #ced6e0;border-radius:3px;vertical-align:middle;"></span> Turno noche (19-07h)</span>'
         '</div>'
     )
-    return "".join(svg) + legend
+    toolbar = (
+        f'<div class="no-print" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">'
+        f'<span class="subtitle" style="margin:0;">Zoom del cronograma:</span>'
+        f'<button type="button" class="btn btn-sm btn-outline" onclick="gnttZoom(\'{chart_id}\', -1)">−</button>'
+        f'<span class="subtitle" id="{chart_id}-zoomlabel" style="margin:0;min-width:40px;text-align:center;display:inline-block;">100%</span>'
+        f'<button type="button" class="btn btn-sm btn-outline" onclick="gnttZoom(\'{chart_id}\', 1)">+</button>'
+        f'<button type="button" class="btn btn-sm btn-outline" onclick="gnttZoom(\'{chart_id}\', 0)">Restablecer</button>'
+        f'<span class="subtitle" style="margin:0;">(o hacé scroll horizontal una vez que hagas zoom)</span>'
+        f'</div>'
+        f'<div style="overflow-x:auto;">{"".join(svg)}</div>'
+        f'<script>'
+        f'(function(){{'
+        f'if (!window.__gnttZoomState) window.__gnttZoomState = {{}};'
+        f'window.__gnttZoomState["{chart_id}"] = {{ factor: 1, base: {width} }};'
+        f'window.gnttZoom = window.gnttZoom || function (id, dir) {{'
+        f'var st = window.__gnttZoomState[id]; if (!st) return;'
+        f'if (dir === 0) {{ st.factor = 1; }} else {{ st.factor = Math.max(1, Math.min(6, st.factor + dir * 0.5)); }}'
+        f'var svgEl = document.getElementById(id + "-svg");'
+        f'if (svgEl) {{ svgEl.style.width = (st.base * st.factor) + "px"; svgEl.style.maxWidth = "none"; }}'
+        f'var label = document.getElementById(id + "-zoomlabel");'
+        f'if (label) label.textContent = Math.round(st.factor * 100) + "%";'
+        f'}};'
+        f'}})();'
+        f'</script>'
+    )
+    return toolbar + legend
 
 
 # ---------------------------------------------------------------------------
@@ -303,3 +361,122 @@ def curve_svg(items_con_avances, width=880):
         '</div>'
     )
     return "".join(svg) + legend
+
+
+# ---------------------------------------------------------------------------
+# Carga diaria: cuántos ítems están "a lavar" cada día, y cuántas bombas
+# asignadas suman esos ítems ese día. Una versión según el cronograma
+# planificado y otra según las fechas reales de ejecución.
+# ---------------------------------------------------------------------------
+
+def _carga_diaria_datos(items_con_bombas, campo_inicio, campo_fin, contar_abiertos_hasta_hoy):
+    """Devuelve (dias, items_serie, bombas_serie) o None si no hay datos
+    suficientes. items_con_bombas: lista de dicts {"item": fila, "bombas": int}."""
+    hoy = datetime.now()
+    rangos = []
+    for d in items_con_bombas:
+        it = d["item"]
+        ini = _parse(it[campo_inicio])
+        if not ini:
+            continue
+        fin = _parse(it[campo_fin])
+        if not fin:
+            if not contar_abiertos_hasta_hoy:
+                continue
+            fin = hoy
+        if fin < ini:
+            continue
+        rangos.append((ini, fin, d["bombas"]))
+
+    if not rangos:
+        return None
+
+    start = min(r[0] for r in rangos).date()
+    end = max(r[1] for r in rangos).date()
+    if start == end:
+        end = start + timedelta(days=1)
+
+    dias = []
+    cur = start
+    while cur <= end:
+        dias.append(cur)
+        cur += timedelta(days=1)
+
+    items_serie, bombas_serie = [], []
+    for day in dias:
+        day_ini = datetime.combine(day, datetime.min.time())
+        day_fin = day_ini + timedelta(days=1)
+        activos = [r for r in rangos if r[0] < day_fin and r[1] >= day_ini]
+        items_serie.append(len(activos))
+        bombas_serie.append(sum(r[2] for r in activos))
+
+    return dias, items_serie, bombas_serie
+
+
+def _carga_diaria_svg(dias, items_serie, bombas_serie, width=880):
+    max_val = max(max(items_serie, default=0), max(bombas_serie, default=0), 1)
+    n = len(dias)
+
+    chart_x0, chart_x1 = 40, width - 20
+    chart_y0, chart_y1 = 16, 190
+    chart_w = chart_x1 - chart_x0
+    chart_h = chart_y1 - chart_y0
+
+    def x(i):
+        return chart_x0 + (i / (n - 1 if n > 1 else 1)) * chart_w
+
+    def y(v):
+        return chart_y1 - (v / max_val) * chart_h
+
+    svg = [f'<svg viewBox="0 0 {width} {chart_y1 + 32}" width="100%" style="font-family:inherit;">']
+
+    pasos_y = sorted(set([0, max(1, max_val // 2), max_val]))
+    for val in pasos_y:
+        gy = y(val)
+        svg.append(f'<line x1="{chart_x0}" y1="{gy:.1f}" x2="{chart_x1}" y2="{gy:.1f}" stroke="#eceff1" stroke-width="1"/>')
+        svg.append(f'<text x="{chart_x0-6}" y="{gy+3:.1f}" font-size="10" fill="#6b7580" text-anchor="end">{val}</text>')
+
+    pts_items = [(x(i), y(v)) for i, v in enumerate(items_serie)]
+    path_items = " ".join(f"{px:.1f},{py:.1f}" for px, py in pts_items)
+    svg.append(f'<polyline points="{path_items}" fill="none" stroke="#33456b" stroke-width="2.5"/>')
+
+    hay_bombas = any(bombas_serie)
+    if hay_bombas:
+        pts_bombas = [(x(i), y(v)) for i, v in enumerate(bombas_serie)]
+        path_bombas = " ".join(f"{px:.1f},{py:.1f}" for px, py in pts_bombas)
+        svg.append(f'<polyline points="{path_bombas}" fill="none" stroke="#c98a2b" stroke-width="2.5" stroke-dasharray="6,3"/>')
+
+    label_step = max(1, n // 10)
+    for i, day in enumerate(dias):
+        if i % label_step == 0 or i == n - 1:
+            svg.append(f'<text x="{x(i):.1f}" y="{chart_y1+16}" font-size="9" fill="#6b7580" text-anchor="middle">{day.strftime("%d/%m")}</text>')
+
+    svg.append('</svg>')
+    legend_items = [
+        '<span><span style="display:inline-block;width:18px;border-top:2.5px solid #33456b;vertical-align:middle;"></span> Ítems a lavar</span>'
+    ]
+    if hay_bombas:
+        legend_items.append(
+            '<span><span style="display:inline-block;width:18px;border-top:2.5px dashed #c98a2b;vertical-align:middle;"></span> Bombas en uso</span>'
+        )
+    legend = '<div style="display:flex;gap:18px;font-size:12px;color:#6b7580;margin-top:6px;flex-wrap:wrap;">' + "".join(legend_items) + '</div>'
+    return "".join(svg) + legend
+
+
+def carga_diaria_planificada_svg(items_con_bombas, width=880):
+    """Ítems y bombas activos por día, según el cronograma planificado
+    (fecha_inicio_plan / fecha_fin_plan)."""
+    datos = _carga_diaria_datos(items_con_bombas, "fecha_inicio_plan", "fecha_fin_plan", contar_abiertos_hasta_hoy=False)
+    if datos is None:
+        return "<p class='subtitle'>Cargá fechas de inicio y fin planificadas en los ítems para ver este gráfico.</p>"
+    return _carga_diaria_svg(*datos, width=width)
+
+
+def carga_diaria_real_svg(items_con_bombas, width=880):
+    """Ítems y bombas activos por día, según las fechas reales de ejecución
+    (fecha_inicio / fecha_fin). Un ítem en curso sin fecha de fin todavía se
+    cuenta como activo hasta hoy."""
+    datos = _carga_diaria_datos(items_con_bombas, "fecha_inicio", "fecha_fin", contar_abiertos_hasta_hoy=True)
+    if datos is None:
+        return "<p class='subtitle'>Todavía no hay fechas reales de inicio cargadas en los ítems.</p>"
+    return _carga_diaria_svg(*datos, width=width)
