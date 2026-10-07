@@ -9,12 +9,15 @@
   .chk-row { display:flex; align-items:center; justify-content:space-between; border:1px solid var(--cosesa-border, #d8dde3); border-radius:8px; padding:10px 16px; margin-bottom:10px; page-break-inside:avoid; }
   .chk-opts { display:flex; gap:18px; white-space:nowrap; }
   .chk-opt { display:flex; align-items:center; font-size:14px; }
-  .firma-box { border-top:1px solid #333; margin-top:32px; padding-top:8px; text-align:center; font-size:13px; }
-  .firma-box.compact { margin-top:26px; }
+  /* Más espacio arriba de cada línea de firma, para poder firmar cómodos */
+  .firma-box { border-top:1px solid #333; margin-top:64px; padding-top:8px; text-align:center; font-size:13px; }
+  .firma-box.compact { margin-top:56px; }
   table.piezas th, table.piezas td { font-size:13px; }
   .pieza-card { border:1px solid var(--cosesa-border, #d8dde3); border-radius:8px; padding:12px 16px; margin-bottom:12px; page-break-inside:avoid; }
   .pieza-meta { display:flex; flex-wrap:wrap; gap:6px 22px; font-size:13px; margin-bottom:4px; }
   .pieza-meta span strong { font-weight:600; }
+  /* Logo de COSESA un 40% más grande que el estándar (55px -> 77px) */
+  .report-header img { height:77px; }
 
   /* Versión compacta para que el checklist entre en una sola hoja al
      imprimir (salvo que tenga muchísimas piezas): se achican sobre todo
@@ -23,7 +26,7 @@
   @media print {
     .container { padding: 8px 12px 14px; max-width: 100%; }
     .report-header { padding-bottom: 6px; margin-bottom: 8px; }
-    .report-header img { height: 30px; }
+    .report-header img { height: 56px; }
     .report-header h2 { font-size: 14px; }
     .report-header .subtitle { font-size: 10px; margin-top: 1px; }
     .grid-3 { margin: 6px 0 !important; gap: 6px; grid-template-columns: repeat(3, 1fr) !important; }
@@ -39,7 +42,7 @@
     .chk-opt { font-size: 11px; }
     .chk-box { width: 12px; height: 12px; line-height: 10px; }
     .grid-2 { grid-template-columns: repeat(2, 1fr) !important; gap: 40px; }
-    .firma-box, .firma-box.compact { margin-top: 22px; padding-top: 6px; font-size: 10px; }
+    .firma-box, .firma-box.compact { margin-top: 46px; padding-top: 6px; font-size: 10px; }
     .card p.subtitle { font-size: 9px; margin-top: 2px; }
     .pieza-card { padding: 5px 10px; margin-bottom: 4px; }
     .pieza-meta { font-size: 10px; gap: 2px 14px; margin-bottom: 2px; }
