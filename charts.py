@@ -202,7 +202,10 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
 
         if plan_ini and plan_fin:
             px0, px1 = x(plan_ini), x(plan_fin)
-            svg.append(f'<rect x="{px0:.1f}" y="{bar_y}" width="{max(px1-px0,2):.1f}" height="{bar_h}" rx="4" fill="#eef2f5" stroke="#c7d0d6" stroke-width="1"/>')
+            # Barra planificada bien visible (dorado COSESA). Más abajo se
+            # vuelve a dibujar su contorno punteado ENCIMA de la barra real,
+            # para ver dónde estaba programado el lavado aunque se superpongan.
+            svg.append(f'<rect x="{px0:.1f}" y="{bar_y}" width="{max(px1-px0,2):.1f}" height="{bar_h}" rx="4" fill="#f7dc8e" stroke="#c99a1f" stroke-width="1.5"/>')
 
         if real_ini:
             rx0, rx1 = x(real_ini), x(real_fin)
@@ -227,6 +230,10 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
                 borde = ' stroke="#7a1f14" stroke-width="1.5" stroke-dasharray="3,2"' if abierta else ''
                 svg.append(f'<rect x="{ddx0:.1f}" y="{bar_y}" width="{(ddx1-ddx0):.1f}" height="{bar_h}" fill="#c0392b"{borde}/>')
 
+            # contorno punteado de lo planificado, por encima de la barra real
+            if plan_ini and plan_fin:
+                svg.append(f'<rect x="{px0:.1f}" y="{bar_y}" width="{max(px1-px0,2):.1f}" height="{bar_h}" rx="4" fill="none" stroke="#8a6508" stroke-width="1.6" stroke-dasharray="5,3"/>')
+
             etiqueta_avance = f'{avance}%' + (' ⏸ pausado' if it["pausado_en"] else '')
             svg.append(f'<text x="{rx1 + 6:.1f}" y="{y + row_h/2 + 4}" font-size="11" fill="#33456b" font-weight="600">{etiqueta_avance}</text>')
         else:
@@ -237,7 +244,8 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
     svg.append('</svg>')
     legend = (
         '<div style="display:flex;gap:18px;font-size:12px;color:#6b7580;margin-top:6px;flex-wrap:wrap;">'
-        '<span><span style="display:inline-block;width:12px;height:12px;background:#eef2f5;border:1px solid #c7d0d6;border-radius:3px;vertical-align:middle;"></span> Planificado</span>'
+        '<span><span style="display:inline-block;width:12px;height:12px;background:#f7dc8e;border:1.5px solid #c99a1f;border-radius:3px;vertical-align:middle;"></span> Planificado</span>'
+        '<span><span style="display:inline-block;width:12px;height:12px;border:1.6px dashed #8a6508;border-radius:3px;vertical-align:middle;"></span> Contorno planificado (sobre el avance real)</span>'
         '<span><span style="display:inline-block;width:12px;height:12px;background:#33456b;border-radius:3px;vertical-align:middle;"></span> Avance real</span>'
         '<span><span style="display:inline-block;width:12px;height:12px;background:#c0392b;border-radius:3px;vertical-align:middle;"></span> Demora</span>'
         '<span><span style="display:inline-block;width:12px;height:12px;background:#c0392b;border:1.5px dashed #7a1f14;border-radius:3px;vertical-align:middle;"></span> Pausa en curso</span>'
