@@ -57,7 +57,17 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
 
     start = min(all_dates)
     end = max(all_dates)
-    if start == end:
+    # La vista arranca 2 días antes del ítem que comienza primero (plan o real),
+    # a las 00:00, así las barras ocupan más ancho y se leen mejor.
+    inicios = []
+    for it in items:
+        for key in ("fecha_inicio_plan", "fecha_inicio"):
+            d = _parse(it[key])
+            if d:
+                inicios.append(d)
+    if inicios:
+        start = min(inicios).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=2)
+    if start >= end:
         end = start + timedelta(days=7)
     total_span = (end - start).total_seconds() or 1
 
@@ -70,6 +80,8 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
 
     def x(d):
         return chart_x0 + (d - start).total_seconds() / total_span * chart_w
+
+    pd = chart_w / (total_span / 86400.0)  # unidades del viewBox por día
 
     chart_id = f"gantt-{next(_gantt_counter)}"
     svg = [f'<svg id="{chart_id}-svg" viewBox="0 0 {width} {height}" width="100%" style="font-family:inherit;">']
@@ -109,17 +121,19 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
             hx = x(hora_cursor)
             es_cambio_de_dia = hora_cursor.hour == 0
             if not es_cambio_de_dia:
-                svg.append(f'<line x1="{hx:.1f}" y1="{top_pad - 2}" x2="{hx:.1f}" y2="{top_pad + 2}" stroke="#c7d0d6" stroke-width="1"/>')
-                svg.append(f'<text x="{hx:.1f}" y="{y_horas}" font-size="8" fill="#9aa4ab" text-anchor="middle">{hora_cursor.strftime("%H")}</text>')
+                svg.append(f'<line class="gt" x1="{hx:.1f}" y1="{top_pad - 2}" x2="{hx:.1f}" y2="{top_pad + 2}" stroke="#c7d0d6" stroke-width="1"/>')
+                svg.append(f'<text class="gh" x="{hx:.1f}" y="{y_horas}" font-size="8" fill="#9aa4ab" text-anchor="middle">{hora_cursor.strftime("%H")}</text>')
         hora_cursor += timedelta(hours=1)
 
     # líneas punteadas verticales para cada cambio de día + etiqueta de fecha
     day = start.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    dia_idx = 1
     while day < end:
         dx = x(day)
         svg.append(f'<line x1="{dx:.1f}" y1="{top_pad - 4}" x2="{dx:.1f}" y2="{height - 10}" stroke="#d5dade" stroke-width="1" stroke-dasharray="3,3" />')
-        svg.append(f'<text x="{dx:.1f}" y="{y_dia}" font-size="10" font-weight="600" fill="#6b7580" text-anchor="middle">{day.strftime("%d/%m")}</text>')
+        svg.append(f'<text class="gd" data-i="{dia_idx}" x="{dx:.1f}" y="{y_dia}" font-size="10" font-weight="600" fill="#6b7580" text-anchor="middle">{day.strftime("%d/%m")}</text>')
         day += timedelta(days=1)
+        dia_idx += 1
 
     # eje de fechas arriba (rango general, en los extremos)
     svg.append(f'<text x="{chart_x0}" y="{y_rango}" font-size="11" fill="#6b7580">{_fmt(start)}</text>')
@@ -246,15 +260,30 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
         f'<script>'
         f'(function(){{'
         f'if (!window.__gnttZoomState) window.__gnttZoomState = {{}};'
-        f'window.__gnttZoomState["{chart_id}"] = {{ factor: 1, base: {width} }};'
+        f'window.__gnttZoomState["{chart_id}"] = {{ factor: 1, vbw: {width}, pd: {pd:.4f} }};'
+        f'window.gnttApply = window.gnttApply || function (id) {{'
+        f'var st = window.__gnttZoomState[id]; if (!st) return;'
+        f'var svgEl = document.getElementById(id + "-svg"); if (!svgEl) return;'
+        f'var cw = svgEl.parentNode.clientWidth || st.vbw;'
+        f'if (st.factor === 1) {{ svgEl.style.width = "100%"; }} else {{ svgEl.style.width = (cw * st.factor) + "px"; svgEl.style.maxWidth = "none"; }}'
+        f'var s = (svgEl.getBoundingClientRect().width || cw) / st.vbw;'
+        f'var pxDay = st.pd * s;'
+        f'var k = 1; while (pxDay * k < 46 && k < 64) k *= 2;'
+        f'var showH = (pxDay / 4) >= 19;'
+        f'var showT = (pxDay / 4) >= 8;'
+        f'svgEl.querySelectorAll(".gd").forEach(function (e) {{ e.setAttribute("font-size", (11 / s).toFixed(2)); e.style.display = (parseInt(e.getAttribute("data-i"), 10) % k === 0) ? "" : "none"; }});'
+        f'svgEl.querySelectorAll(".gh").forEach(function (e) {{ e.setAttribute("font-size", (9 / s).toFixed(2)); e.style.display = showH ? "" : "none"; }});'
+        f'svgEl.querySelectorAll(".gt").forEach(function (e) {{ e.style.display = showT ? "" : "none"; }});'
+        f'}};'
         f'window.gnttZoom = window.gnttZoom || function (id, dir) {{'
         f'var st = window.__gnttZoomState[id]; if (!st) return;'
         f'if (dir === 0) {{ st.factor = 1; }} else {{ st.factor = Math.max(1, Math.min(6, st.factor + dir * 0.5)); }}'
-        f'var svgEl = document.getElementById(id + "-svg");'
-        f'if (svgEl) {{ svgEl.style.width = (st.base * st.factor) + "px"; svgEl.style.maxWidth = "none"; }}'
+        f'window.gnttApply(id);'
         f'var label = document.getElementById(id + "-zoomlabel");'
         f'if (label) label.textContent = Math.round(st.factor * 100) + "%";'
         f'}};'
+        f'window.gnttApply("{chart_id}");'
+        f'window.addEventListener("resize", function () {{ window.gnttApply("{chart_id}"); }});'
         f'}})();'
         f'</script>'
     )
