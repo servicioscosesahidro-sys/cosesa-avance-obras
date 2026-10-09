@@ -308,11 +308,16 @@ def allowed_cert_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_CERT_EXT
 
 
-def save_photo(item_id, file_storage, tipo, comentario, usuario_id):
+def save_photo(item_id, file_storage, tipo, comentario, usuario_id, permitir_pdf=False):
     if not file_storage or file_storage.filename == "":
         return None
-    if not allowed_file(file_storage.filename):
-        flash("Formato de imagen no permitido.", "error")
+    if permitir_pdf:
+        ok = allowed_cert_file(file_storage.filename)
+    else:
+        ok = allowed_file(file_storage.filename)
+    if not ok:
+        flash("Formato no permitido. Subí un PDF o una imagen (jpg, png, webp)." if permitir_pdf
+              else "Formato de imagen no permitido.", "error")
         return None
     item_dir = os.path.join(UPLOAD_DIR, str(item_id))
     os.makedirs(item_dir, exist_ok=True)
@@ -1581,9 +1586,9 @@ def checklist_item_pdf(item_id):
 def subir_foto_checklist(item_id):
     user = get_current_user()
     file_storage = request.files.get("foto")
-    saved = save_photo(item_id, file_storage, "certificado_lavado", "Documento firmado", user["id"])
+    saved = save_photo(item_id, file_storage, "certificado_lavado", "Documento firmado", user["id"], permitir_pdf=True)
     if saved:
-        flash("Foto del documento firmado subida correctamente.", "success")
+        flash("Documento firmado subido correctamente.", "success")
     return redirect(url_for("cosesa_item_detail", item_id=item_id))
 
 
@@ -1817,6 +1822,167 @@ def reporte_obra_pdf(obra_id):
     out_path = os.path.join(tempfile.gettempdir(), f"reporte_obra_{obra_id}.pdf")
     render_pdf(url, out_path)
     return send_file(out_path, as_attachment=True, download_name=f"reporte_obra_{obra_id}.pdf")
+
+
+# ---------------------------------------------------------------------------
+# Certificación de lavados hidrocinéticos (compilado de documentos firmados)
+# ---------------------------------------------------------------------------
+
+def _pdf_de_imagen(browser, img_path):
+    """Convierte una imagen escaneada/foto en una página A4 PDF (bytes)."""
+    import base64, mimetypes
+    mime = mimetypes.guess_type(img_path)[0] or "image/jpeg"
+    with open(img_path, "rb") as fh:
+        b64 = base64.b64encode(fh.read()).decode()
+    html = (
+        "<html><head><style>@page{size:A4;margin:8mm}html,body{margin:0;padding:0}"
+        ".w{width:194mm;height:281mm;display:flex;align-items:center;justify-content:center}"
+        "img{max-width:100%;max-height:100%;object-fit:contain}</style></head>"
+        f"<body><div class='w'><img src='data:{mime};base64,{b64}'></div></body></html>"
+    )
+    page = browser.new_page()
+    page.set_content(html, wait_until="load")
+    data = page.pdf(format="A4", print_background=True, margin={"top": "0", "bottom": "0", "left": "0", "right": "0"})
+    page.close()
+    return data
+
+
+@app.route("/cosesa/obras/<int:obra_id>/certificacion/pdf")
+@cosesa_required
+def certificacion_obra_pdf(obra_id):
+    import io, base64, html as _html
+    from pypdf import PdfReader, PdfWriter
+    from playwright.sync_api import sync_playwright
+
+    db = get_db()
+    obra = db.execute(
+        "SELECT o.*, c.nombre AS cliente_nombre FROM obras o JOIN clientes c ON c.id = o.cliente_id WHERE o.id = ?",
+        (obra_id,),
+    ).fetchone()
+    if obra is None:
+        db.close()
+        abort(404)
+    items = db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY creado_en, id", (obra_id,)).fetchall()
+    secciones = []  # (item, [rutas])
+    for it in items:
+        docs = db.execute(
+            "SELECT filename FROM fotos WHERE item_id = ? AND tipo = 'certificado_lavado' ORDER BY subida_en, id",
+            (it["id"],),
+        ).fetchall()
+        rutas = [os.path.join(UPLOAD_DIR, d["filename"]) for d in docs]
+        rutas = [r for r in rutas if os.path.isfile(r)]
+        if rutas:
+            secciones.append((it, rutas))
+    db.close()
+    if not secciones:
+        flash("Todavía no hay documentos firmados cargados en los ítems de esta obra.", "error")
+        return redirect(url_for("cosesa_obra_detail", obra_id=obra_id))
+
+    with open(os.path.join(BASE_DIR, "static", "img", "logo.png"), "rb") as fh:
+        logo_b64 = base64.b64encode(fh.read()).decode()
+    esc = _html.escape
+
+    def cover_html(indice):
+        filas = "".join(
+            f"<tr><td>{esc(nombre)}</td><td class='p'>{pag}</td></tr>" for nombre, pag in indice
+        )
+        ubic = f" · {esc(obra['ubicacion'])}" if "ubicacion" in obra.keys() and obra["ubicacion"] else ""
+        return f"""<html><head><meta charset="utf-8"><style>
+@page{{size:A4;margin:0}}
+body{{font-family:Arial,Helvetica,sans-serif;color:#0a2540;margin:0}}
+.cv{{height:297mm;box-sizing:border-box;padding:30mm 22mm 20mm;display:flex;flex-direction:column;align-items:center;text-align:center}}
+.cv img{{height:42mm}}
+h1{{font-size:30pt;margin:34mm 0 6mm;line-height:1.2;text-transform:uppercase;letter-spacing:1px}}
+.line{{width:60mm;border-top:3px solid #0a2540;margin:0 auto 14mm}}
+.meta{{font-size:15pt;line-height:1.7}}
+.meta .l{{font-size:10pt;color:#667;text-transform:uppercase;letter-spacing:1px;margin-top:8px}}
+.idx{{margin-top:auto;width:100%;text-align:left}}
+.idx h3{{font-size:11pt;margin:0 0 4px;text-transform:uppercase;letter-spacing:1px}}
+table{{width:100%;border-collapse:collapse;font-size:10pt}}
+td{{padding:3px 4px;border-bottom:1px solid #dde}}
+td.p{{text-align:right;width:20mm}}
+.foot{{font-size:9pt;color:#667;margin-top:10mm}}
+</style></head><body><div class="cv">
+<img src="data:image/png;base64,{logo_b64}">
+<h1>Certificación de lavados<br>hidrocinéticos</h1><div class="line"></div>
+<div class="meta"><div class="l">Cliente</div>{esc(obra['cliente_nombre'])}
+<div class="l">Obra</div>{esc(obra['nombre'])}{ubic}
+<div class="l">Fecha de emisión</div>{datetime.now().strftime('%d/%m/%Y')}</div>
+<div class="idx"><h3>Índice (página)</h3><table>{filas}</table></div>
+<div class="foot">COSESA Servicios Industriales · Especialistas en Hidrocinética</div>
+</div></body></html>"""
+
+    def render_cover(browser, indice):
+        page = browser.new_page()
+        page.set_content(cover_html(indice), wait_until="load")
+        data = page.pdf(format="A4", print_background=True, margin={"top": "0", "bottom": "0", "left": "0", "right": "0"})
+        page.close()
+        return data
+
+    partes = []  # (nombre, [bytes de PDF por documento])
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        for it, rutas in secciones:
+            pdfs = []
+            for r in rutas:
+                try:
+                    if r.lower().endswith(".pdf"):
+                        with open(r, "rb") as fh:
+                            pdfs.append(fh.read())
+                    else:
+                        pdfs.append(_pdf_de_imagen(browser, r))
+                except Exception:
+                    app.logger.exception("No se pudo incorporar %s a la certificación", r)
+            if pdfs:
+                partes.append((it["nombre"] + (f" ({it['tag_equipo']})" if it["tag_equipo"] else ""), pdfs))
+
+        # contar páginas de cada ítem para armar el índice
+        paginas_item = []
+        for nombre, pdfs in partes:
+            n = 0
+            for b in pdfs:
+                try:
+                    n += len(PdfReader(io.BytesIO(b)).pages)
+                except Exception:
+                    pass
+            paginas_item.append(n)
+
+        offset = 1
+        for _ in range(2):
+            pag = offset + 1
+            indice = []
+            for (nombre, _p), n in zip(partes, paginas_item):
+                indice.append((nombre, pag))
+                pag += n
+            cover = render_cover(browser, indice)
+            n_cover = len(PdfReader(io.BytesIO(cover)).pages)
+            if n_cover == offset:
+                break
+            offset = n_cover
+        browser.close()
+
+    writer = PdfWriter()
+    for pg in PdfReader(io.BytesIO(cover)).pages:
+        writer.add_page(pg)
+    for nombre, pdfs in partes:
+        primera = True
+        for b in pdfs:
+            try:
+                rd = PdfReader(io.BytesIO(b))
+                if rd.is_encrypted:
+                    rd.decrypt("")
+                inicio = len(writer.pages)
+                for pg in rd.pages:
+                    writer.add_page(pg)
+                if primera:
+                    writer.add_outline_item(nombre, inicio)
+                    primera = False
+            except Exception:
+                app.logger.exception("PDF inválido omitido en certificación")
+    out_path = os.path.join(tempfile.gettempdir(), f"certificacion_lavados_obra_{obra_id}.pdf")
+    with open(out_path, "wb") as fh:
+        writer.write(fh)
+    return send_file(out_path, as_attachment=True, download_name=f"Certificacion_lavados_hidrocineticos_obra_{obra_id}.pdf")
 
 
 @app.route("/cosesa/reporte-interno/obra/<int:obra_id>")
