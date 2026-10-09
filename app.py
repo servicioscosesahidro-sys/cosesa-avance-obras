@@ -1648,6 +1648,28 @@ def editar_pieza(pieza_id):
     return redirect(url_for("cosesa_item_detail", item_id=item_id))
 
 
+@app.route("/cosesa/fotos/<int:foto_id>/eliminar", methods=["POST"])
+@cosesa_required
+def eliminar_foto(foto_id):
+    db = get_db()
+    foto = db.execute("SELECT * FROM fotos WHERE id = ?", (foto_id,)).fetchone()
+    if foto is None:
+        db.close()
+        abort(404)
+    item_id = foto["item_id"]
+    ruta = os.path.join(UPLOAD_DIR, foto["filename"])
+    db.execute("DELETE FROM fotos WHERE id = ?", (foto_id,))
+    db.commit()
+    db.close()
+    if os.path.isfile(ruta):
+        try:
+            os.remove(ruta)
+        except OSError:
+            pass
+    flash("Archivo eliminado.", "success")
+    return redirect(url_for("cosesa_item_detail", item_id=item_id))
+
+
 @app.route("/cosesa/piezas/<int:pieza_id>/eliminar", methods=["POST"])
 @cosesa_required
 def eliminar_pieza(pieza_id):
