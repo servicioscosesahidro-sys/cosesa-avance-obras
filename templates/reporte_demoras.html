@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Reporte de demoras - {{ obra['nombre'] }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+  .report-header img { height:77px; }
+  table.dem th, table.dem td { font-size:13px; vertical-align:top; }
+  table.dem tr { page-break-inside:avoid; }
+  table.dem tr.total td { border-top:2px solid var(--cosesa-navy, #33456b); font-weight:800; font-size:15px; background:#f6f7f9; }
+  .tag { color:#667077; font-size:12px; }
+  @media print {
+    .container { padding: 8px 12px 14px; max-width:100%; }
+    .report-header img { height:56px; }
+    .grid-3 { grid-template-columns: repeat(3, 1fr) !important; }
+    table.dem th, table.dem td { font-size:11px; padding:5px 7px; }
+  }
+</style>
+</head>
+<body style="background:white;">
+<div class="container">
+  <div class="print-btn-bar no-print" style="text-align:right;">
+    <a class="btn" href="{{ url_for('reporte_demoras_obra_pdf', obra_id=obra['id']) }}">Descargar PDF</a>
+    <button class="btn btn-outline" onclick="window.print()">Imprimir</button>
+  </div>
+
+  <div class="report-header">
+    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="COSESA">
+    <div style="text-align:right;">
+      <h2 style="margin:0;">Reporte de demoras</h2>
+      <div class="subtitle">Generado el {{ generado_en }}</div>
+    </div>
+  </div>
+
+  <h1 style="margin-bottom:2px;">{{ obra['nombre'] }}</h1>
+  <p class="subtitle">Cliente: {{ obra['cliente_nombre'] }}{% if obra['ubicacion'] %} · {{ obra['ubicacion'] }}{% endif %}</p>
+
+  <div class="grid grid-3" style="margin:20px 0;">
+    <div class="card stat"><div class="num">{{ demoras|length }}</div><div class="lbl">Cantidad de demoras</div></div>
+    <div class="card stat"><div class="num">{{ total_horas }} hs</div><div class="lbl">Total horas perdidas</div></div>
+    <div class="card stat"><div class="num">{{ total_dur }}</div><div class="lbl">Equivalente</div></div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Detalle de demoras</h2>
+    {% if demoras %}
+    <table class="dem">
+      <tr><th>N°</th><th>Ítem / equipo</th><th>Inicio</th><th>Fin</th><th>Motivo</th><th style="text-align:right;">Duración</th><th style="text-align:right;">Horas</th></tr>
+      {% for d in demoras %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ d['item'] }}{% if d['tag'] %} <span class="tag">({{ d['tag'] }})</span>{% endif %}</td>
+        <td>{{ d['inicio']|fmtdt }}</td>
+        <td>{% if d['abierta'] %}<em>En curso</em>{% else %}{{ d['fin']|fmtdt }}{% endif %}</td>
+        <td>{{ d['motivo'] or '—' }}</td>
+        <td style="text-align:right;white-space:nowrap;">{{ d['dur'] }}</td>
+        <td style="text-align:right;">{{ d['horas'] }}</td>
+      </tr>
+      {% endfor %}
+      <tr class="total">
+        <td colspan="5" style="text-align:right;">TOTAL HORAS PERDIDAS ({{ demoras|length }} demora{{ '' if demoras|length == 1 else 's' }})</td>
+        <td style="text-align:right;white-space:nowrap;">{{ total_dur }}</td>
+        <td style="text-align:right;">{{ total_horas }} hs</td>
+      </tr>
+    </table>
+    {% else %}
+    <p class="subtitle">No se registraron demoras en esta obra.</p>
+    {% endif %}
+  </div>
+
+  {% if resumen_items|length > 1 %}
+  <div class="card">
+    <h2 style="margin-top:0;">Resumen por ítem</h2>
+    <table class="dem">
+      <tr><th>Ítem / equipo</th><th style="text-align:right;">Demoras</th><th style="text-align:right;">Duración</th><th style="text-align:right;">Horas</th></tr>
+      {% for r in resumen_items %}
+      <tr>
+        <td>{{ r['nombre'] }}{% if r['tag'] %} <span class="tag">({{ r['tag'] }})</span>{% endif %}</td>
+        <td style="text-align:right;">{{ r['cantidad'] }}</td>
+        <td style="text-align:right;white-space:nowrap;">{{ r['dur'] }}</td>
+        <td style="text-align:right;">{{ r['horas'] }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  <p class="subtitle" style="text-align:center;margin-top:24px;">COSESA Servicios Industriales · Especialistas en Hidrocinética</p>
+</div>
+</body>
+</html>
