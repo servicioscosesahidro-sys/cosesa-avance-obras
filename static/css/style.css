@@ -218,3 +218,24 @@ textarea { resize: vertical; min-height: 70px; }
   .no-print { display: none !important; }
   body { background: white; }
 }
+
+/* ---- Celular / pantallas angostas (solo en pantalla, no al imprimir) ---- */
+@media screen and (max-width: 700px) {
+  html, body { overflow-x: hidden; }
+  .container, .container-wide { padding: 16px 12px 48px; }
+  .navbar { flex-wrap: wrap; padding: 8px 12px; gap: 6px; }
+  .navbar .brand img { height: 32px; }
+  .navbar .nav-links { flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+  h1 { font-size: 20px; }
+  .card { padding: 16px 14px 14px; }
+  img { max-width: 100%; }
+  /* filas de botones / cabeceras con display:flex en línea: que se acomoden en varias líneas */
+  div[style*="display:flex"], div[style*="display: flex"] { flex-wrap: wrap; }
+  .field-inline { flex-direction: column; gap: 0; }
+  .btn { padding: 10px 16px; }
+  /* tablas anchas: scroll horizontal dentro de la tarjeta en vez de ensanchar toda la página */
+  table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .card { overflow-x: auto; }
+  .login-box { width: auto; max-width: 92vw; padding: 30px 20px; }
+  .photo-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+}
