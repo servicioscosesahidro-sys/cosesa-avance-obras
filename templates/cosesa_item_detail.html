@@ -396,6 +396,9 @@
       <img src="{{ url_for('uploaded_file', filename=f['filename']) }}" alt="Documento firmado">
       {% endif %}
       <figcaption>Subido {{ f['subida_en']|fmtdt }}</figcaption>
+      <form method="post" action="{{ url_for('eliminar_foto', foto_id=f['id']) }}" onsubmit="return confirm('¿Eliminar este archivo? No se puede deshacer.');" style="margin-top:4px;">
+        <button class="btn btn-sm btn-danger" type="submit">Eliminar</button>
+      </form>
     </figure>
     {% endfor %}
   </div>
@@ -417,6 +420,9 @@
     <figure>
       <img src="{{ url_for('uploaded_file', filename=f['filename']) }}" alt="{{ f['tipo'] }}">
       <figcaption>{{ f['tipo']|capitalize }}{% if f['comentario'] %} · {{ f['comentario'] }}{% endif %}</figcaption>
+      <form method="post" action="{{ url_for('eliminar_foto', foto_id=f['id']) }}" onsubmit="return confirm('¿Eliminar este archivo? No se puede deshacer.');" style="margin-top:4px;">
+        <button class="btn btn-sm btn-danger" type="submit">Eliminar</button>
+      </form>
     </figure>
     {% endfor %}
   </div>
