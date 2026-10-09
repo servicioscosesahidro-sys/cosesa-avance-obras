@@ -2007,6 +2007,61 @@ td.p{{text-align:right;width:20mm}}
     return send_file(out_path, as_attachment=True, download_name=f"Certificacion_lavados_hidrocineticos_obra_{obra_id}.pdf")
 
 
+@app.route("/cosesa/obras/<int:obra_id>/demoras")
+@cosesa_required
+def reporte_demoras_obra(obra_id):
+    db = get_db()
+    obra = db.execute(
+        "SELECT o.*, c.nombre AS cliente_nombre FROM obras o JOIN clientes c ON c.id = o.cliente_id WHERE o.id = ?",
+        (obra_id,),
+    ).fetchone()
+    if obra is None:
+        db.close()
+        abort(404)
+    filas = db.execute(
+        "SELECT d.*, i.nombre AS item_nombre, i.tag_equipo AS item_tag FROM demoras d "
+        "JOIN items i ON i.id = d.item_id WHERE i.obra_id = ? ORDER BY d.fecha_inicio, d.id",
+        (obra_id,),
+    ).fetchall()
+    db.close()
+    demoras = []
+    por_item = {}
+    total_min = 0
+    for d in filas:
+        minutos = demora_minutos(d)
+        total_min += minutos
+        clave = d["item_id"]
+        if clave not in por_item:
+            por_item[clave] = {"nombre": d["item_nombre"], "tag": d["item_tag"], "cantidad": 0, "min": 0}
+        por_item[clave]["cantidad"] += 1
+        por_item[clave]["min"] += minutos
+        demoras.append({
+            "item": d["item_nombre"], "tag": d["item_tag"], "inicio": d["fecha_inicio"],
+            "fin": d["fecha_fin"], "motivo": d["motivo"], "dur": fmt_duracion(minutos),
+            "horas": round(minutos / 60, 2), "abierta": not d["fecha_fin"],
+        })
+    resumen_items = sorted(por_item.values(), key=lambda x: -x["min"])
+    for r in resumen_items:
+        r["dur"] = fmt_duracion(r["min"])
+        r["horas"] = round(r["min"] / 60, 2)
+    return render_template(
+        "reporte_demoras.html", obra=obra, demoras=demoras, resumen_items=resumen_items,
+        total_dur=fmt_duracion(total_min), total_horas=round(total_min / 60, 2),
+        generado_en=datetime.now().strftime("%d/%m/%Y %H:%M"),
+    )
+
+
+@app.route("/cosesa/obras/<int:obra_id>/demoras/pdf")
+@cosesa_required
+def reporte_demoras_obra_pdf(obra_id):
+    user = get_current_user()
+    token = make_pdf_token(user["id"])
+    url = url_for("reporte_demoras_obra", obra_id=obra_id, pdf_token=token, _external=True)
+    out_path = os.path.join(tempfile.gettempdir(), f"reporte_demoras_{obra_id}.pdf")
+    render_pdf(url, out_path)
+    return send_file(out_path, as_attachment=True, download_name=f"reporte_demoras_obra_{obra_id}.pdf")
+
+
 @app.route("/cosesa/reporte-interno/obra/<int:obra_id>")
 @cosesa_required
 def reporte_interno_obra(obra_id):
