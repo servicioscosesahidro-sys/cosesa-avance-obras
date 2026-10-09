@@ -390,18 +390,22 @@
   <div class="photo-grid">
     {% for f in fotos_checklist %}
     <figure>
+      {% if f['filename'].lower().endswith('.pdf') %}
+      <a href="{{ url_for('uploaded_file', filename=f['filename']) }}" target="_blank" style="display:flex;align-items:center;justify-content:center;height:140px;border:1px solid var(--cosesa-border);border-radius:8px;font-weight:600;text-decoration:none;">📄 Ver PDF</a>
+      {% else %}
       <img src="{{ url_for('uploaded_file', filename=f['filename']) }}" alt="Documento firmado">
+      {% endif %}
       <figcaption>Subido {{ f['subida_en']|fmtdt }}</figcaption>
     </figure>
     {% endfor %}
   </div>
   {% else %}
-  <p class="subtitle">Todavía no se subió una foto del checklist ya firmado.</p>
+  <p class="subtitle">Todavía no se subió el checklist ya firmado (PDF o foto).</p>
   {% endif %}
   <form method="post" action="{{ url_for('subir_foto_checklist', item_id=item['id']) }}" enctype="multipart/form-data">
-    <label>Foto del checklist firmado</label>
-    <input type="file" name="foto" accept="image/*" required>
-    <button class="btn btn-dark" type="submit">Subir foto del documento firmado</button>
+    <label>Checklist firmado (PDF escaneado o foto)</label>
+    <input type="file" name="foto" accept="application/pdf,image/*" required>
+    <button class="btn btn-dark" type="submit">Subir documento firmado</button>
   </form>
 </div>
 

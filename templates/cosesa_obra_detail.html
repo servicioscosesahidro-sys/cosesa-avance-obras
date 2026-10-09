@@ -17,6 +17,7 @@
   </div>
   <div style="display:flex;gap:8px;">
     <a class="btn btn-outline" target="_blank" href="{{ url_for('reporte_obra', obra_id=obra['id']) }}">Reporte cliente</a>
+    <a class="btn" href="{{ url_for('certificacion_obra_pdf', obra_id=obra['id']) }}">Certificación completa (PDF)</a>
     <a class="btn btn-outline" target="_blank" href="{{ url_for('reporte_interno_obra', obra_id=obra['id']) }}">Informe interno (hs)</a>
     {% if is_admin(current_user) %}
     {% if obra['estado'] != 'finalizada' %}
