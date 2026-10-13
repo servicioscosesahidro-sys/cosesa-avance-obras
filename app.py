@@ -258,6 +258,20 @@ def recompute_item_horas(db, item_id, persistir=True):
     return horas
 
 
+def items_obra_con_horas(db, obra_id):
+    """Ítems de la obra con horas hombre/máquina calculadas al momento, sin
+    escribir nada en la base (solo lectura)."""
+    out = []
+    for r in db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY creado_en", (obra_id,)).fetchall():
+        h = recompute_item_horas(db, r["id"], persistir=False)
+        d = dict(r)
+        if h:
+            d["horas_hombre"] = h["horas_hombre"]
+            d["horas_maquina"] = h["horas_maquina"]
+        out.append(d)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
