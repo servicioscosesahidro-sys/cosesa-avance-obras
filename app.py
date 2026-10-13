@@ -1,7 +1,7 @@
 import os
 import sqlite3
 import tempfile
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from functools import wraps
 
 from flask import (
@@ -147,9 +147,55 @@ def total_personal(personal_by_turno):
     return total_personas, total_bombas
 
 
+def _horas_por_turno(ini, fin, demoras):
+    """Horas de trabajo netas (descontando demoras) repartidas según el turno en
+    que realmente ocurrieron: día 07:00-19:00, noche 19:00-07:00."""
+    res = {"dia": 0.0, "noche": 0.0}
+    if not ini or not fin or fin <= ini:
+        return res
+    dem = []
+    for d in demoras:
+        di = _parse_dt(d["fecha_inicio"])
+        df = _parse_dt(d["fecha_fin"]) if d["fecha_fin"] else datetime.now()
+        if not di or not df:
+            continue
+        di, df = max(di, ini), min(df, fin)
+        if df > di:
+            dem.append((di, df))
+    dem.sort()
+    merged = []
+    for a, b in dem:
+        if merged and a <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+        else:
+            merged.append((a, b))
+    trabajo, cur = [], ini
+    for a, b in merged:
+        if a > cur:
+            trabajo.append((cur, a))
+        cur = max(cur, b)
+    if cur < fin:
+        trabajo.append((cur, fin))
+    for a, b in trabajo:
+        t = a
+        while t < b:
+            cands = []
+            for h in (7, 19):
+                c = t.replace(hour=h, minute=0, second=0, microsecond=0)
+                if c <= t:
+                    c += timedelta(days=1)
+                cands.append(c)
+            fin_seg = min(min(cands), b)
+            turno = "dia" if 7 <= t.hour < 19 else "noche"
+            res[turno] += (fin_seg - t).total_seconds() / 3600
+            t = fin_seg
+    return res
+
+
 def compute_horas_item(item, demoras):
     """Horas totales transcurridas (inicio real -> fin real, o -> ahora si sigue en
-    curso), horas de demoras, y horas de trabajo netas (totales menos demoras)."""
+    curso), horas de demoras, y horas de trabajo netas (totales menos demoras),
+    con el reparto de las horas de trabajo entre turno día y turno noche."""
     inicio = _parse_dt(item["fecha_inicio"])
     if item["estado"] == "finalizado" and item["fecha_fin"]:
         fin = _parse_dt(item["fecha_fin"]) or datetime.now()
@@ -159,19 +205,22 @@ def compute_horas_item(item, demoras):
         horas_totales = 0.0
     else:
         horas_totales = (fin - inicio).total_seconds() / 3600
-    horas_demoras = sum(demora_minutos(d) for d in demoras) / 60
-    horas_demoras = min(horas_demoras, horas_totales)
-    horas_trabajo = max(0.0, horas_totales - horas_demoras)
+    por_turno = _horas_por_turno(inicio, fin, demoras)
+    horas_trabajo = por_turno["dia"] + por_turno["noche"]
+    horas_demoras = max(0.0, horas_totales - horas_trabajo)
     return {
         "horas_totales": round(horas_totales, 2),
         "horas_demoras": round(horas_demoras, 2),
         "horas_trabajo": round(horas_trabajo, 2),
+        "horas_dia": por_turno["dia"],
+        "horas_noche": por_turno["noche"],
     }
 
 
 def recompute_item_horas(db, item_id, persistir=True):
-    """Recalcula horas de trabajo netas y las horas-hombre / horas-máquina
-    (horas de trabajo x personal / bombas asignados) y las guarda en el ítem."""
+    """Recalcula horas de trabajo netas y las horas-hombre / horas-máquina y las
+    guarda en el ítem. Las horas se cuentan SOLO con el personal y las bombas
+    del turno en que se trabajó (día 07-19 / noche 19-07)."""
     item = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
     if item is None:
         return None
@@ -179,8 +228,19 @@ def recompute_item_horas(db, item_id, persistir=True):
     personal = get_personal(db, item_id)
     horas = compute_horas_item(item, demoras)
     total_personas, total_bombas = total_personal(personal)
-    horas_hombre = round(horas["horas_trabajo"] * total_personas, 2)
-    horas_maquina = round(horas["horas_trabajo"] * total_bombas, 2)
+    horas_hombre = horas_maquina = 0.0
+    detalle = []
+    for turno, nombre in TURNOS:
+        h = horas["horas_dia" if turno == "dia" else "horas_noche"]
+        row = personal.get(turno)
+        personas = (row["supervisores"] + row["tecnicos_hs"] + row["punteros"] + row["operarios"]) if row else 0
+        bombas = row["bombas"] if row else 0
+        horas_hombre += h * personas
+        horas_maquina += h * bombas
+        if h > 0:
+            detalle.append({"nombre": nombre, "horas": round(h, 2), "personas": personas, "bombas": bombas})
+    horas_hombre = round(horas_hombre, 2)
+    horas_maquina = round(horas_maquina, 2)
     if persistir:
         # Solo cuando algo cambió de verdad (alta de avance, personal, demora, etc.).
         # Al solo MIRAR una pantalla no se escribe en la base: si no, cada visita
@@ -194,21 +254,8 @@ def recompute_item_horas(db, item_id, persistir=True):
     horas["horas_maquina"] = horas_maquina
     horas["total_personas"] = total_personas
     horas["total_bombas"] = total_bombas
+    horas["detalle_turnos"] = detalle
     return horas
-
-
-def items_obra_con_horas(db, obra_id):
-    """Ítems de la obra con horas hombre/máquina calculadas al momento, sin
-    escribir nada en la base (solo lectura)."""
-    out = []
-    for r in db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY creado_en", (obra_id,)).fetchall():
-        h = recompute_item_horas(db, r["id"], persistir=False)
-        d = dict(r)
-        if h:
-            d["horas_hombre"] = h["horas_hombre"]
-            d["horas_maquina"] = h["horas_maquina"]
-        out.append(d)
-    return out
 
 
 # ---------------------------------------------------------------------------
