@@ -15,6 +15,7 @@ COPY . .
 ENV PORT=5050
 EXPOSE 5050
 
-# --workers 2: alcanza para un equipo chico. --timeout 120: el armado del PDF
-# con Chromium puede tardar unos segundos, sobre todo la primera vez.
-CMD gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 app:app
+# 1 proceso con 8 hilos: atiende varios pedidos a la vez (página, estilos, fotos)
+# sin que uno lento bloquee a los demás, y hay un solo backup corriendo.
+# --timeout 120: el armado del PDF con Chromium puede tardar unos segundos.
+CMD gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 120 app:app

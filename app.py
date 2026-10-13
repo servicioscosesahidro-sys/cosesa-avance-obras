@@ -169,7 +169,7 @@ def compute_horas_item(item, demoras):
     }
 
 
-def recompute_item_horas(db, item_id):
+def recompute_item_horas(db, item_id, persistir=True):
     """Recalcula horas de trabajo netas y las horas-hombre / horas-máquina
     (horas de trabajo x personal / bombas asignados) y las guarda en el ítem."""
     item = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
@@ -181,16 +181,34 @@ def recompute_item_horas(db, item_id):
     total_personas, total_bombas = total_personal(personal)
     horas_hombre = round(horas["horas_trabajo"] * total_personas, 2)
     horas_maquina = round(horas["horas_trabajo"] * total_bombas, 2)
-    db.execute(
-        "UPDATE items SET horas_hombre = ?, horas_maquina = ? WHERE id = ?",
-        (horas_hombre, horas_maquina, item_id),
-    )
-    db.commit()
+    if persistir:
+        # Solo cuando algo cambió de verdad (alta de avance, personal, demora, etc.).
+        # Al solo MIRAR una pantalla no se escribe en la base: si no, cada visita
+        # modificaba el archivo y disparaba un backup completo a GitHub.
+        db.execute(
+            "UPDATE items SET horas_hombre = ?, horas_maquina = ? WHERE id = ?",
+            (horas_hombre, horas_maquina, item_id),
+        )
+        db.commit()
     horas["horas_hombre"] = horas_hombre
     horas["horas_maquina"] = horas_maquina
     horas["total_personas"] = total_personas
     horas["total_bombas"] = total_bombas
     return horas
+
+
+def items_obra_con_horas(db, obra_id):
+    """Ítems de la obra con horas hombre/máquina calculadas al momento, sin
+    escribir nada en la base (solo lectura)."""
+    out = []
+    for r in db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY creado_en", (obra_id,)).fetchall():
+        h = recompute_item_horas(db, r["id"], persistir=False)
+        d = dict(r)
+        if h:
+            d["horas_hombre"] = h["horas_hombre"]
+            d["horas_maquina"] = h["horas_maquina"]
+        out.append(d)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -766,10 +784,7 @@ def cosesa_obra_detail(obra_id):
     ).fetchone()
     if obra is None:
         abort(404)
-    item_ids = [r["id"] for r in db.execute("SELECT id FROM items WHERE obra_id = ?", (obra_id,)).fetchall()]
-    for iid in item_ids:
-        recompute_item_horas(db, iid)
-    items = db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY creado_en", (obra_id,)).fetchall()
+    items = items_obra_con_horas(db, obra_id)
     gantt_html, curve_html, carga_plan_html, carga_real_html = build_obra_charts(db, items, interactive=True)
     certificados = db.execute(
         "SELECT * FROM certificados WHERE obra_id = ? ORDER BY subida_en DESC", (obra_id,)
@@ -1128,7 +1143,7 @@ def cosesa_item_detail(item_id):
         "SELECT * FROM piezas_lavado WHERE item_id = ? ORDER BY creado_en", (item_id,)
     ).fetchall()
     personal = get_personal(db, item_id)
-    horas = recompute_item_horas(db, item_id)
+    horas = recompute_item_horas(db, item_id, persistir=False)
     item = db.execute(
         "SELECT i.*, o.id AS obra_id, o.nombre AS obra_nombre, o.cliente_id, c.nombre AS cliente_nombre "
         "FROM items i JOIN obras o ON o.id = i.obra_id JOIN clientes c ON c.id = o.cliente_id "
@@ -2072,10 +2087,7 @@ def reporte_interno_obra(obra_id):
     ).fetchone()
     if obra is None:
         abort(404)
-    item_ids = [r["id"] for r in db.execute("SELECT id FROM items WHERE obra_id = ?", (obra_id,)).fetchall()]
-    for iid in item_ids:
-        recompute_item_horas(db, iid)
-    items = db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY creado_en", (obra_id,)).fetchall()
+    items = items_obra_con_horas(db, obra_id)
     total_hh = sum(i["horas_hombre"] for i in items)
     total_hm = sum(i["horas_maquina"] for i in items)
     demoras_por_item = {}
