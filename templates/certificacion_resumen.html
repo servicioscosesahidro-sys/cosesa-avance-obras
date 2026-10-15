@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Resumen de la obra - {{ obra['nombre'] }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+  .report-header img { height:56px; }
+  table.t { table-layout:auto; } table.t th, table.t td { font-size:10.5px; padding:4px 5px; vertical-align:top; } table.t th { letter-spacing:0; }
+  table.t tr { page-break-inside:avoid; }
+  table.t td.n, table.t th.n { text-align:right; white-space:nowrap; }
+  table.t tr.total td { border-top:2px solid #33456b; font-weight:800; background:#f6f7f9; font-size:12.5px; }
+  .tag { color:#667077; font-size:11px; }
+  .sec { page-break-inside:avoid; }
+  .salto { page-break-before:always; }
+  .container { max-width:100%; padding:8px 12px 14px; }
+  .grid-3 { grid-template-columns: repeat(3, 1fr) !important; gap:8px; }
+  .card { padding:12px 14px 10px; margin-bottom:12px; }
+  h2 { font-size:13px; }
+  .stat .num { font-size:20px; }
+</style>
+</head>
+<body style="background:white;">
+<div class="container">
+  <div class="report-header">
+    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="COSESA">
+    <div style="text-align:right;">
+      <h2 style="margin:0;">Resumen de la obra</h2>
+      <div class="subtitle">{{ obra['nombre'] }} · {{ obra['cliente_nombre'] }} · {{ generado_en }}</div>
+    </div>
+  </div>
+
+  <div class="grid grid-3" style="margin:10px 0;">
+    <div class="card stat"><div class="num">{{ tot['hh'] }}</div><div class="lbl">Total horas hombre</div></div>
+    <div class="card stat"><div class="num">{{ tot['hm'] }}</div><div class="lbl">Total horas bomba</div></div>
+    <div class="card stat"><div class="num">{{ total_dem_horas }} hs</div><div class="lbl">Total horas perdidas por demoras</div></div>
+  </div>
+
+  <div class="card sec">
+    <h2 style="margin-top:0;">Cronograma: planificado vs. real (inicio y fin de cada tarea)</h2>
+    {{ gantt_html|safe }}
+  </div>
+
+  <div class="card sec">
+    <h2 style="margin-top:0;">Curva de avance: planificado vs. real</h2>
+    {{ curve_html|safe }}
+  </div>
+
+  <div class="card salto">
+    <h2 style="margin-top:0;">Horas hombre y horas bomba por tarea</h2>
+    <table class="t">
+      <tr><th>Tarea / equipo</th><th>Estado</th><th>Inicio real</th><th>Fin real</th>
+          <th class="n">Hs. trab.</th><th class="n">Día</th><th class="n">Noche</th>
+          <th class="n">Hs. hombre</th><th class="n">Hs. bomba</th></tr>
+      {% for t in tareas %}
+      <tr>
+        <td>{{ t['nombre'] }}{% if t['tag'] %} <span class="tag">({{ t['tag'] }})</span>{% endif %}</td>
+        <td>{{ t['estado'] }}</td>
+        <td>{{ t['inicio']|fmtdt }}</td>
+        <td>{{ t['fin']|fmtdt }}</td>
+        <td class="n">{{ t['trabajo'] }}</td>
+        <td class="n">{{ t['dia'] }}</td>
+        <td class="n">{{ t['noche'] }}</td>
+        <td class="n">{{ t['hh'] }}</td>
+        <td class="n">{{ t['hm'] }}</td>
+      </tr>
+      {% endfor %}
+      <tr class="total">
+        <td colspan="4" style="text-align:right;">TOTAL</td>
+        <td class="n">{{ tot['trabajo'] }}</td><td class="n">{{ tot['dia'] }}</td><td class="n">{{ tot['noche'] }}</td>
+        <td class="n">{{ tot['hh'] }}</td><td class="n">{{ tot['hm'] }}</td>
+      </tr>
+    </table>
+    <p class="subtitle" style="font-size:10px;">Las horas de trabajo son netas (descontadas las demoras). Las horas hombre y bomba se calculan con el personal y las bombas asignados al turno (día 07-19 h / noche 19-07 h) en que se trabajó.</p>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0;">Demoras</h2>
+    {% if demoras %}
+    <table class="t">
+      <tr><th>N°</th><th>Tarea / equipo</th><th>Inicio</th><th>Fin</th><th>Motivo</th><th class="n">Duración</th><th class="n">Horas</th></tr>
+      {% for d in demoras %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ d['item'] }}{% if d['tag'] %} <span class="tag">({{ d['tag'] }})</span>{% endif %}</td>
+        <td>{{ d['inicio']|fmtdt }}</td>
+        <td>{% if d['abierta'] %}<em>En curso</em>{% else %}{{ d['fin']|fmtdt }}{% endif %}</td>
+        <td>{{ d['motivo'] or '—' }}</td>
+        <td class="n">{{ d['dur'] }}</td>
+        <td class="n">{{ d['horas'] }}</td>
+      </tr>
+      {% endfor %}
+      <tr class="total">
+        <td colspan="5" style="text-align:right;">TOTAL HORAS PERDIDAS ({{ demoras|length }} demora{{ '' if demoras|length == 1 else 's' }})</td>
+        <td class="n">{{ total_dem_dur }}</td><td class="n">{{ total_dem_horas }} hs</td>
+      </tr>
+    </table>
+    {% else %}
+    <p class="subtitle">No se registraron demoras en esta obra.</p>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>
