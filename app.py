@@ -1945,6 +1945,60 @@ def _pdf_de_imagen(browser, img_path):
     return data
 
 
+@app.route("/cosesa/obras/<int:obra_id>/certificacion/resumen")
+@cosesa_required
+def certificacion_resumen_html(obra_id):
+    """Páginas de resumen que van dentro de la certificación completa:
+    cronograma (barras), curva planificado vs real, demoras y horas por tarea."""
+    db = get_db()
+    obra = db.execute(
+        "SELECT o.*, c.nombre AS cliente_nombre FROM obras o JOIN clientes c ON c.id = o.cliente_id WHERE o.id = ?",
+        (obra_id,),
+    ).fetchone()
+    if obra is None:
+        db.close()
+        abort(404)
+    items = items_obra_con_horas(db, obra_id)
+    gantt_html, curve_html, _cp, _cr = build_obra_charts(db, items)
+    tareas = []
+    tot = {"hh": 0.0, "hm": 0.0, "trabajo": 0.0, "dia": 0.0, "noche": 0.0}
+    for it in items:
+        h = recompute_item_horas(db, it["id"], persistir=False) or {}
+        tareas.append({
+            "nombre": it["nombre"], "tag": it["tag_equipo"], "estado": it["estado"].replace("_", " "),
+            "inicio": it["fecha_inicio"], "fin": it["fecha_fin"],
+            "trabajo": h.get("horas_trabajo", 0), "dia": round(h.get("horas_dia", 0), 2),
+            "noche": round(h.get("horas_noche", 0), 2),
+            "hh": h.get("horas_hombre", 0), "hm": h.get("horas_maquina", 0),
+        })
+        tot["hh"] += h.get("horas_hombre", 0)
+        tot["hm"] += h.get("horas_maquina", 0)
+        tot["trabajo"] += h.get("horas_trabajo", 0)
+        tot["dia"] += h.get("horas_dia", 0)
+        tot["noche"] += h.get("horas_noche", 0)
+    filas = db.execute(
+        "SELECT d.*, i.nombre AS item_nombre, i.tag_equipo AS item_tag FROM demoras d "
+        "JOIN items i ON i.id = d.item_id WHERE i.obra_id = ? ORDER BY d.fecha_inicio, d.id",
+        (obra_id,),
+    ).fetchall()
+    db.close()
+    demoras, dem_min = [], 0
+    for d in filas:
+        minutos = demora_minutos(d)
+        dem_min += minutos
+        demoras.append({
+            "item": d["item_nombre"], "tag": d["item_tag"], "inicio": d["fecha_inicio"],
+            "fin": d["fecha_fin"], "motivo": d["motivo"], "dur": fmt_duracion(minutos),
+            "horas": round(minutos / 60, 2), "abierta": not d["fecha_fin"],
+        })
+    return render_template(
+        "certificacion_resumen.html", obra=obra, gantt_html=gantt_html, curve_html=curve_html,
+        tareas=tareas, tot={k: round(v, 2) for k, v in tot.items()},
+        demoras=demoras, total_dem_horas=round(dem_min / 60, 2), total_dem_dur=fmt_duracion(dem_min),
+        generado_en=datetime.now().strftime("%d/%m/%Y %H:%M"),
+    )
+
+
 @app.route("/cosesa/obras/<int:obra_id>/certificacion/pdf")
 @cosesa_required
 def certificacion_obra_pdf(obra_id):
@@ -1972,9 +2026,16 @@ def certificacion_obra_pdf(obra_id):
         if rutas:
             secciones.append((it, rutas))
     db.close()
-    if not secciones:
-        flash("Todavía no hay documentos firmados cargados en los ítems de esta obra.", "error")
-        return redirect(url_for("cosesa_obra_detail", obra_id=obra_id))
+    # Resumen de la obra (cronograma, curva, demoras, horas): se genera antes de
+    # abrir el Chromium del armado, porque render_pdf abre el suyo.
+    user = get_current_user()
+    token = make_pdf_token(user["id"])
+    url_res = url_for("certificacion_resumen_html", obra_id=obra_id, pdf_token=token, _external=True)
+    res_path = os.path.join(tempfile.gettempdir(), f"certificacion_resumen_{obra_id}.pdf")
+    render_pdf(url_res, res_path)
+    with open(res_path, "rb") as fh:
+        resumen_bytes = fh.read()
+    n_resumen = len(PdfReader(io.BytesIO(resumen_bytes)).pages)
 
     with open(os.path.join(BASE_DIR, "static", "img", "logo.png"), "rb") as fh:
         logo_b64 = base64.b64encode(fh.read()).decode()
@@ -2048,7 +2109,8 @@ td.p{{text-align:right;width:20mm}}
         offset = 1
         for _ in range(2):
             pag = offset + 1
-            indice = []
+            indice = [("Resumen de la obra: cronograma, curva, demoras y horas", pag)]
+            pag += n_resumen
             for (nombre, _p), n in zip(partes, paginas_item):
                 indice.append((nombre, pag))
                 pag += n
@@ -2062,6 +2124,10 @@ td.p{{text-align:right;width:20mm}}
     writer = PdfWriter()
     for pg in PdfReader(io.BytesIO(cover)).pages:
         writer.add_page(pg)
+    inicio_res = len(writer.pages)
+    for pg in PdfReader(io.BytesIO(resumen_bytes)).pages:
+        writer.add_page(pg)
+    writer.add_outline_item("Resumen de la obra", inicio_res)
     for nombre, pdfs in partes:
         primera = True
         for b in pdfs:
