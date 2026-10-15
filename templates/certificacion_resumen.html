@@ -12,6 +12,8 @@
   table.t tr.total td { border-top:2px solid #33456b; font-weight:800; background:#f6f7f9; font-size:12.5px; }
   .tag { color:#667077; font-size:11px; }
   .sec { page-break-inside:avoid; }
+  .gantt-fit { text-align:center; }
+  .gantt-fit svg { display:block; margin:0 auto; width:100%; height:auto; max-height:190mm; }
   .salto { page-break-before:always; }
   .container { max-width:100%; padding:8px 12px 14px; }
   .grid-3 { grid-template-columns: repeat(3, 1fr) !important; gap:8px; }
@@ -30,6 +32,12 @@
     </div>
   </div>
 
+  <div class="card sec">
+    <h2 style="margin-top:0;">Cronograma: planificado vs. real (inicio y fin de cada tarea)</h2>
+    <div class="gantt-fit">{{ gantt_html|safe }}</div>
+  </div>
+
+<div class="salto"></div>
   <div class="grid grid-3" style="margin:10px 0;">
     <div class="card stat"><div class="num">{{ tot['hh'] }}</div><div class="lbl">Total horas hombre</div></div>
     <div class="card stat"><div class="num">{{ tot['hm'] }}</div><div class="lbl">Total horas bomba</div></div>
@@ -37,16 +45,11 @@
   </div>
 
   <div class="card sec">
-    <h2 style="margin-top:0;">Cronograma: planificado vs. real (inicio y fin de cada tarea)</h2>
-    {{ gantt_html|safe }}
-  </div>
-
-  <div class="card sec">
     <h2 style="margin-top:0;">Curva de avance: planificado vs. real</h2>
     {{ curve_html|safe }}
   </div>
 
-  <div class="card salto">
+  <div class="card">
     <h2 style="margin-top:0;">Horas hombre y horas bomba por tarea</h2>
     <table class="t">
       <tr><th>Tarea / equipo</th><th>Estado</th><th>Inicio real</th><th>Fin real</th>
