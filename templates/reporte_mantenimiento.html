@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Reporte de mantenimiento - {{ obra['nombre'] }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+  .report-header img { height:56px; }
+  .item { border:1px solid #dde; border-radius:6px; padding:8px 10px; margin-bottom:8px; page-break-inside:avoid; }
+  .item .t { font-weight:700; font-size:12px; color:#33456b; }
+  .item .m { font-size:10px; color:#667; margin-bottom:3px; }
+  .item p { white-space:pre-wrap; margin:4px 0; font-size:11.5px; }
+  .fotos { display:flex; gap:6px; flex-wrap:wrap; margin-top:4px; }
+  .fotos img { height:50mm; max-width:100%; object-fit:contain; border:1px solid #dde; }
+  .container { max-width:100%; padding:8px 12px 14px; }
+  .grid-3 { grid-template-columns: repeat(3, 1fr) !important; gap:8px; }
+  .stat .num { font-size:20px; }
+  h2 { break-after:avoid; page-break-after:avoid; }
+  .card { page-break-inside:auto !important; break-inside:auto !important; }
+</style>
+</head>
+<body style="background:white;">
+<div class="container">
+  <div class="print-btn-bar no-print" style="text-align:right;">
+    <a class="btn" href="{{ url_for('reporte_mantenimiento_pdf', obra_id=obra['id']) }}">Descargar PDF</a>
+    <button class="btn btn-outline" onclick="window.print()">Imprimir</button>
+  </div>
+  <div class="report-header">
+    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="COSESA">
+    <div style="text-align:right;">
+      <h2 style="margin:0;">Reporte de mantenimiento</h2>
+      <div class="subtitle">Generado el {{ generado_en }}</div>
+    </div>
+  </div>
+  <h1 style="margin-bottom:2px;">{{ obra['nombre'] }}</h1>
+  <p class="subtitle">Cliente: {{ obra['cliente_nombre'] }}{% if obra['ubicacion'] %} · {{ obra['ubicacion'] }}{% endif %}</p>
+
+  <div class="grid grid-3" style="margin:12px 0;">
+    <div class="card stat"><div class="num">{{ realizados|length + pendientes|length }}</div><div class="lbl">Total de trabajos</div></div>
+    <div class="card stat"><div class="num">{{ realizados|length }}</div><div class="lbl">Realizados</div></div>
+    <div class="card stat"><div class="num">{{ pendientes|length }}</div><div class="lbl">Pendientes de reparar</div></div>
+  </div>
+
+  {% for titulo, lista in (('Mantenimientos realizados', realizados), ('Pendientes de reparar', pendientes)) %}
+  <div class="card">
+    <h2 style="margin-top:0;">{{ titulo }} ({{ lista|length }})</h2>
+    {% for x in lista %}
+    {% set m = x['m'] %}
+    <div class="item">
+      <div class="t">{{ loop.index }}. {{ m['equipo'] or 'Sin equipo indicado' }}</div>
+      <div class="m">{{ m['fecha']|fmtdt if m['fecha'] else '' }}{% if m['responsable'] %} · Responsable: {{ m['responsable'] }}{% endif %}{% if m['prioridad'] %} · Prioridad: {{ m['prioridad'] }}{% endif %}</div>
+      <p>{{ m['descripcion'] }}</p>
+      {% if x['fotos'] %}<div class="fotos">{% for f in x['fotos'] %}<img src="{{ url_for('uploaded_file', filename=f['archivo']) }}">{% endfor %}</div>{% endif %}
+    </div>
+    {% else %}
+    <p class="subtitle">{{ 'No hay trabajos pendientes.' if titulo.startswith('Pend') else 'No se registraron mantenimientos realizados.' }}</p>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+</body>
+</html>

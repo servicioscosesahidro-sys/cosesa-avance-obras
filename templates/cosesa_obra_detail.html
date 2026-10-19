@@ -17,8 +17,9 @@
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
     <a class="btn btn-outline" target="_blank" href="{{ url_for('reporte_obra', obra_id=obra['id']) }}">Reporte cliente</a>
-    <a class="btn" href="{{ url_for('certificacion_obra_pdf', obra_id=obra['id']) }}">Certificación completa (PDF)</a>
+    <a class="btn" href="{{ url_for('certificacion_obra_pdf', obra_id=obra['id']) }}">Reporte de obra</a>
     <a class="btn btn-outline" href="{{ url_for('obra_bitacora', obra_id=obra['id']) }}">Bitácora</a>
+    <a class="btn btn-outline" href="{{ url_for('obra_mantenimiento', obra_id=obra['id']) }}">Mantenimiento</a>
     <a class="btn btn-outline" href="{{ url_for('obra_aprendizajes', obra_id=obra['id']) }}">Aprendizajes</a>
     <a class="btn btn-outline" target="_blank" href="{{ url_for('reporte_demoras_obra', obra_id=obra['id']) }}">Reporte de demoras</a>
     <a class="btn btn-outline" target="_blank" href="{{ url_for('reporte_interno_obra', obra_id=obra['id']) }}">Informe interno (hs)</a>

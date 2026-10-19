@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Mantenimiento · {{ obra['nombre'] }}{% endblock %}
+{% block back_link %}
+<a class="btn btn-outline btn-sm btn-back no-print" href="{{ url_for('cosesa_obra_detail', obra_id=obra['id']) }}">&larr; Volver</a>
+{% endblock %}
+{% block content %}
+{% macro opciones(sel) %}
+  <option value="">—</option>
+  {% for k, n in prioridades %}<option value="{{ k }}" {{ 'selected' if sel == k }}>{{ n }}</option>{% endfor %}
+{% endmacro %}
+<div class="breadcrumb">
+  <a href="{{ url_for('cosesa_dashboard') }}">Panel COSESA</a> /
+  <a href="{{ url_for('cosesa_obra_detail', obra_id=obra['id']) }}">{{ obra['nombre'] }}</a> / Mantenimiento
+</div>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+  <div>
+    <h1>Mantenimientos de planta</h1>
+    <p class="subtitle">{{ obra['nombre'] }} · {{ obra['cliente_nombre'] }}. Anotá los mantenimientos realizados y los que quedaron pendientes de reparar.</p>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <a class="btn" href="{{ url_for('reporte_mantenimiento_pdf', obra_id=obra['id']) }}">Descargar reporte (PDF)</a>
+    <a class="btn btn-outline" target="_blank" href="{{ url_for('reporte_mantenimiento', obra_id=obra['id']) }}">Ver reporte</a>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Nuevo mantenimiento</h2>
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('nuevo_mantenimiento', obra_id=obra['id']) }}">
+    <div class="field-inline">
+      <div><label>Equipo / zona de la planta</label><input type="text" name="equipo" placeholder="Ej: Bomba P-101, línea de vapor sector 2"></div>
+      <div><label>Fecha</label><input type="date" name="fecha" value="{{ hoy }}"></div>
+    </div>
+    <label>Trabajo / arreglo</label>
+    <textarea name="descripcion" required placeholder="Describí qué se hizo o qué falta reparar"></textarea>
+    <div class="field-inline">
+      <div><label>Estado</label>
+        <select name="estado"><option value="realizado">Realizado</option><option value="pendiente">Pendiente de reparar</option></select></div>
+      <div><label>Prioridad (si queda pendiente)</label><select name="prioridad">{{ opciones('') }}</select></div>
+      <div><label>Responsable</label><input type="text" name="responsable"></div>
+    </div>
+    <label>Fotos (podés elegir varias)</label>
+    <input type="file" name="fotos" accept="image/*" multiple>
+    <button class="btn" type="submit" style="margin-top:10px;">Guardar mantenimiento</button>
+  </form>
+</div>
+
+{% for titulo, estado in (('Pendientes de reparar', 'pendiente'), ('Realizados', 'realizado')) %}
+<div class="card">
+  <h2>{{ titulo }} ({{ lista|selectattr('m.estado', 'equalto', estado)|list|length }})</h2>
+  {% for x in lista if x['m']['estado'] == estado %}
+  {% set m = x['m'] %}
+  <div style="border:1px solid var(--cosesa-border);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;">
+    <div id="ver-{{ m['id'] }}">
+      <div><strong>{{ m['equipo'] or 'Sin equipo indicado' }}</strong>
+        <span class="subtitle"> · {{ m['fecha']|fmtdt if m['fecha'] else '' }}{% if m['responsable'] %} · {{ m['responsable'] }}{% endif %}{% if m['prioridad'] %} · Prioridad {{ m['prioridad'] }}{% endif %}</span></div>
+      <p style="white-space:pre-wrap;margin:8px 0;">{{ m['descripcion'] }}</p>
+      {% if x['fotos'] %}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+        {% for f in x['fotos'] %}<a href="{{ url_for('uploaded_file', filename=f['archivo']) }}" target="_blank"><img src="{{ url_for('uploaded_file', filename=f['archivo']) }}" style="height:90px;border-radius:6px;"></a>{% endfor %}
+      </div>
+      {% endif %}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        {% if estado == 'pendiente' %}
+        <form method="post" action="{{ url_for('mantenimiento_realizado', mid=m['id']) }}"><button class="btn btn-success btn-sm" type="submit">Marcar como realizado</button></form>
+        {% endif %}
+        <button type="button" class="btn btn-outline btn-sm" onclick="editarM({{ m['id'] }}, true)">Editar</button>
+        <form method="post" action="{{ url_for('eliminar_mantenimiento', mid=m['id']) }}" onsubmit="return confirm('¿Eliminar este mantenimiento con sus fotos?');"><button class="btn btn-danger btn-sm" type="submit">Eliminar</button></form>
+      </div>
+    </div>
+    <form id="edit-{{ m['id'] }}" method="post" enctype="multipart/form-data" action="{{ url_for('editar_mantenimiento', mid=m['id']) }}" style="display:none;">
+      <div class="field-inline">
+        <div><label>Equipo / zona</label><input type="text" name="equipo" value="{{ m['equipo'] or '' }}"></div>
+        <div><label>Fecha</label><input type="date" name="fecha" value="{{ m['fecha'] or '' }}"></div>
+      </div>
+      <label>Trabajo / arreglo</label>
+      <textarea name="descripcion" rows="4" required>{{ m['descripcion'] }}</textarea>
+      <div class="field-inline">
+        <div><label>Estado</label><select name="estado"><option value="realizado" {{ 'selected' if estado == 'realizado' }}>Realizado</option><option value="pendiente" {{ 'selected' if estado == 'pendiente' }}>Pendiente de reparar</option></select></div>
+        <div><label>Prioridad</label><select name="prioridad">{{ opciones(m['prioridad']) }}</select></div>
+        <div><label>Responsable</label><input type="text" name="responsable" value="{{ m['responsable'] or '' }}"></div>
+      </div>
+      {% if x['fotos'] %}
+      <label>Fotos actuales (tildá las que quieras quitar)</label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+        {% for f in x['fotos'] %}<label style="width:auto;"><img src="{{ url_for('uploaded_file', filename=f['archivo']) }}" style="height:80px;border-radius:6px;display:block;"><input type="checkbox" name="delfoto_{{ f['id'] }}" value="1" style="width:auto;"> Quitar</label>{% endfor %}
+      </div>
+      {% endif %}
+      <label>Agregar fotos</label>
+      <input type="file" name="fotos" accept="image/*" multiple>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn btn-sm" type="submit">Guardar</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="editarM({{ m['id'] }}, false)">Cancelar</button>
+      </div>
+    </form>
+  </div>
+  {% else %}
+  <p class="subtitle">Nada cargado todavía.</p>
+  {% endfor %}
+</div>
+{% endfor %}
+<script>
+  function editarM(id, on) {
+    document.getElementById('ver-' + id).style.display = on ? 'none' : '';
+    document.getElementById('edit-' + id).style.display = on ? '' : 'none';
+  }
+</script>
+{% endblock %}
