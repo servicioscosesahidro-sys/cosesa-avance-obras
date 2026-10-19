@@ -35,20 +35,41 @@
   {% if aprendizajes %}
   {% for a in aprendizajes %}
   <div style="border:1px solid var(--cosesa-border);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;">
-    <form method="post" action="{{ url_for('editar_aprendizaje', ap_id=a['id']) }}">
+    <div id="ver-{{ a['id'] }}">
+      <div style="display:flex;gap:10px;">
+        <strong style="min-width:28px;">{{ loop.index }}.</strong>
+        <div style="flex:1;">
+          <div style="white-space:pre-wrap;">{{ a['texto'] }}</div>
+          <p class="subtitle" style="margin:6px 0 0;">Lo mencionó: <strong>{{ a['autor'] or '—' }}</strong> · {{ a['fecha']|fmtdt if a['fecha'] else '' }}</p>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="editarAp({{ a['id'] }}, true)">Editar</button>
+        <form method="post" action="{{ url_for('eliminar_aprendizaje', ap_id=a['id']) }}" onsubmit="return confirm('¿Eliminar este aprendizaje?');">
+          <button class="btn btn-sm btn-danger" type="submit">Eliminar</button>
+        </form>
+      </div>
+    </div>
+    <form id="edit-{{ a['id'] }}" method="post" action="{{ url_for('editar_aprendizaje', ap_id=a['id']) }}" style="display:none;">
       <label>Aprendizaje #{{ loop.index }}</label>
-      <textarea name="texto" required>{{ a['texto'] }}</textarea>
+      <textarea name="texto" rows="5" required>{{ a['texto'] }}</textarea>
       <div class="field-inline" style="align-items:flex-end;">
         <div><label>Lo mencionó</label><input type="text" name="autor" value="{{ a['autor'] or '' }}"></div>
         <div><label>Fecha</label><input type="date" name="fecha" value="{{ a['fecha'] or '' }}"></div>
-        <div style="margin-bottom:14px;"><button class="btn btn-outline btn-sm" type="submit">Guardar</button></div>
       </div>
-    </form>
-    <form method="post" action="{{ url_for('eliminar_aprendizaje', ap_id=a['id']) }}" onsubmit="return confirm('¿Eliminar este aprendizaje?');">
-      <button class="btn btn-sm btn-danger" type="submit">Eliminar</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-sm" type="submit">Guardar</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="editarAp({{ a['id'] }}, false)">Cancelar</button>
+      </div>
     </form>
   </div>
   {% endfor %}
+  <script>
+    function editarAp(id, on) {
+      document.getElementById('ver-' + id).style.display = on ? 'none' : '';
+      document.getElementById('edit-' + id).style.display = on ? '' : 'none';
+    }
+  </script>
   {% else %}
   <p class="subtitle">Todavía no hay aprendizajes cargados.</p>
   {% endif %}
