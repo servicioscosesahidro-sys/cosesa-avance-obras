@@ -163,7 +163,7 @@
 
 <div class="card">
   <h2>Demoras</h2>
-  <p class="subtitle">Registrá los tiempos muertos o demoras durante la tarea (espera de repuestos, condiciones climáticas, permisos, etc.).</p>
+  <p class="subtitle">Registrá los tiempos muertos o demoras durante la tarea (espera de repuestos, condiciones climáticas, permisos, etc.). Si no cargás el fin, la demora queda abierta y sigue corriendo hasta la actualidad; podés cerrarla o editar fechas y horas cuando quieras.</p>
   {% if demoras %}
   {% for d in demoras %}
   <div style="border:1px solid var(--cosesa-border);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;">
@@ -174,7 +174,7 @@
       </div>
       <div>
         <label>Fin</label>
-        <input type="datetime-local" name="fecha_fin" value="{{ d['fecha_fin'] or '' }}" required>
+        <input type="datetime-local" name="fecha_fin" value="{{ d['fecha_fin'] or '' }}">
       </div>
       <div style="flex:2;">
         <label>Motivo</label>
@@ -184,10 +184,17 @@
         <button class="btn btn-outline btn-sm" type="submit">Guardar</button>
       </div>
     </form>
-    <p class="subtitle" style="margin:6px 0 8px;">Duración: {{ d|fmtdur }}</p>
+    <p class="subtitle" style="margin:6px 0 8px;">{% if not d['fecha_fin'] %}<span class="pill pill-pausado">Abierta</span> corriendo hasta ahora · {% endif %}Duración: {{ d|fmtdur }}</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    {% if not d['fecha_fin'] %}
+    <form method="post" action="{{ url_for('cerrar_demora', demora_id=d['id']) }}">
+      <button class="btn btn-sm btn-success" type="submit">Cerrar demora ahora</button>
+    </form>
+    {% endif %}
     <form method="post" action="{{ url_for('eliminar_demora', demora_id=d['id']) }}" onsubmit="return confirm('¿Eliminar esta demora?');">
       <button class="btn btn-sm btn-danger" type="submit">Eliminar</button>
     </form>
+    </div>
   </div>
   {% endfor %}
   <p style="text-align:right;margin-top:10px;"><strong>Total de demoras: {{ total_demoras }}</strong></p>
@@ -199,12 +206,12 @@
   <form method="post" action="{{ url_for('agregar_demora', item_id=item['id']) }}">
     <div class="field-inline">
       <div>
-        <label>Inicio de la demora</label>
-        <input type="datetime-local" name="fecha_inicio" required>
+        <label>Inicio de la demora <span class="subtitle">(opcional: si lo dejás vacío empieza ahora)</span></label>
+        <input type="datetime-local" name="fecha_inicio">
       </div>
       <div>
-        <label>Fin de la demora</label>
-        <input type="datetime-local" name="fecha_fin" required>
+        <label>Fin de la demora <span class="subtitle">(opcional: vacío = sigue abierta)</span></label>
+        <input type="datetime-local" name="fecha_fin">
       </div>
     </div>
     <label>Motivo</label>

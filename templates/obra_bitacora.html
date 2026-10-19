@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Bitácora · {{ obra['nombre'] }}{% endblock %}
+{% block back_link %}
+<a class="btn btn-outline btn-sm btn-back no-print" href="{{ url_for('cosesa_obra_detail', obra_id=obra['id']) }}">&larr; Volver</a>
+{% endblock %}
+{% block content %}
+<div class="breadcrumb">
+  <a href="{{ url_for('cosesa_dashboard') }}">Panel COSESA</a> /
+  <a href="{{ url_for('cosesa_obra_detail', obra_id=obra['id']) }}">{{ obra['nombre'] }}</a> / Bitácora
+</div>
+<h1>Bitácora de la obra</h1>
+<p class="subtitle">{{ obra['nombre'] }} · {{ obra['cliente_nombre'] }}. La bitácora sale en el reporte de la obra (certificación completa).</p>
+
+<div class="card">
+  <h2>Nuevo registro</h2>
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('nueva_bitacora', obra_id=obra['id']) }}">
+    <div class="field-inline">
+      <div>
+        <label>Fecha y hora</label>
+        <input type="datetime-local" name="fecha_hora" value="{{ ahora }}" required>
+      </div>
+      <div>
+        <label>Turno</label>
+        <select name="turno">
+          <option value="">Automático según la hora</option>
+          {% for k, n in turnos %}<option value="{{ k }}">{{ n }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    {% include "_bloques_js.html" %}
+    <script>addBloque('texto', false);</script>
+    <p class="subtitle">Armá el relato con bloques de texto e imágenes, en el orden que quieras: tocá "+ Texto" o "+ Imagen" para intercalarlos.</p>
+    <button class="btn" type="submit">Guardar registro</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Registros ({{ entradas|length }})</h2>
+  {% if entradas %}
+  {% for x in entradas %}
+  {% set e = x['e'] %}
+  <div style="border:1px solid var(--cosesa-border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;">
+    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <strong>{{ e['fecha_hora']|fmtdt }} · {{ 'Turno noche' if e['turno'] == 'noche' else 'Turno día' }}</strong>
+      <span class="subtitle">{{ e['usuario_nombre'] or '' }}</span>
+    </div>
+    {% for b in x['bloques'] %}
+      {% if b['tipo'] == 'texto' %}
+      <p style="white-space:pre-wrap;margin:10px 0;">{{ b['texto'] }}</p>
+      {% else %}
+      <figure style="margin:10px 0;">
+        <img src="{{ url_for('uploaded_file', filename=b['archivo']) }}" style="max-width:100%;max-height:420px;border-radius:6px;">
+        {% if b['texto'] %}<figcaption class="subtitle">{{ b['texto'] }}</figcaption>{% endif %}
+      </figure>
+      {% endif %}
+    {% endfor %}
+    <div style="display:flex;gap:8px;margin-top:8px;">
+      <a class="btn btn-outline btn-sm" href="{{ url_for('editar_bitacora', entrada_id=e['id']) }}">Editar</a>
+      <form method="post" action="{{ url_for('eliminar_bitacora', entrada_id=e['id']) }}" onsubmit="return confirm('¿Eliminar este registro con sus imágenes?');">
+        <button class="btn btn-sm btn-danger" type="submit">Eliminar</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <p class="subtitle">Todavía no hay registros en la bitácora.</p>
+  {% endif %}
+</div>
+{% endblock %}

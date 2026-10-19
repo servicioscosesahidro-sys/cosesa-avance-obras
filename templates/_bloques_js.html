@@ -1,0 +1,34 @@
+<div id="bloques-nuevos"></div>
+<input type="hidden" name="orden" id="orden-bloques" value="">
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px;">
+  <button type="button" class="btn btn-outline btn-sm" onclick="addBloque('texto')">+ Texto</button>
+  <button type="button" class="btn btn-outline btn-sm" onclick="addBloque('imagen')">+ Imagen</button>
+</div>
+<script>
+  var _nb = 0, _orden = [];
+  function addBloque(tipo, foco) {
+    var i = _nb++;
+    _orden.push(i);
+    document.getElementById('orden-bloques').value = _orden.join(',');
+    var d = document.createElement('div');
+    d.className = 'bloque-nuevo'; d.dataset.i = i;
+    d.style.cssText = 'border:1px dashed var(--cosesa-border);border-radius:8px;padding:10px;margin-bottom:10px;';
+    var h = '<input type="hidden" name="tipo_' + i + '" value="' + tipo + '">';
+    if (tipo === 'texto') {
+      h += '<label>Texto</label><textarea name="texto_' + i + '" rows="4" placeholder="Escribí el relato..."></textarea>';
+    } else {
+      h += '<label>Imagen</label><input type="file" name="img_' + i + '" accept="image/*">' +
+           '<label>Pie de foto (opcional)</label><input type="text" name="pie_' + i + '">';
+    }
+    h += '<button type="button" class="btn btn-sm btn-danger" style="margin-top:6px;" onclick="quitarBloque(' + i + ')">Quitar bloque</button>';
+    d.innerHTML = h;
+    document.getElementById('bloques-nuevos').appendChild(d);
+    if (tipo === 'texto' && foco !== false) { var t = d.querySelector('textarea'); if (t) t.focus(); }
+  }
+  function quitarBloque(i) {
+    _orden = _orden.filter(function (x) { return x !== i; });
+    document.getElementById('orden-bloques').value = _orden.join(',');
+    var el = document.querySelector('.bloque-nuevo[data-i="' + i + '"]');
+    if (el) el.remove();
+  }
+</script>

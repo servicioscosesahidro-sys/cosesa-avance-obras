@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Editar registro · {{ obra['nombre'] }}{% endblock %}
+{% block back_link %}
+<a class="btn btn-outline btn-sm btn-back no-print" href="{{ url_for('obra_bitacora', obra_id=obra['id']) }}">&larr; Volver</a>
+{% endblock %}
+{% block content %}
+<div class="breadcrumb">
+  <a href="{{ url_for('cosesa_obra_detail', obra_id=obra['id']) }}">{{ obra['nombre'] }}</a> /
+  <a href="{{ url_for('obra_bitacora', obra_id=obra['id']) }}">Bitácora</a> / Editar
+</div>
+<h1>Editar registro de bitácora</h1>
+<div class="card">
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('editar_bitacora', entrada_id=e['id']) }}">
+    <div class="field-inline">
+      <div>
+        <label>Fecha y hora</label>
+        <input type="datetime-local" name="fecha_hora" value="{{ e['fecha_hora'] }}" required>
+      </div>
+      <div>
+        <label>Turno</label>
+        <select name="turno">
+          {% for k, n in turnos %}<option value="{{ k }}" {{ 'selected' if e['turno'] == k }}>{{ n }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    {% for b in bloques %}
+    <div style="border:1px solid var(--cosesa-border);border-radius:8px;padding:10px;margin-bottom:10px;">
+      {% if b['tipo'] == 'texto' %}
+      <label>Texto</label>
+      <textarea name="b_{{ b['id'] }}" rows="4">{{ b['texto'] }}</textarea>
+      {% else %}
+      <img src="{{ url_for('uploaded_file', filename=b['archivo']) }}" style="max-width:100%;max-height:260px;border-radius:6px;">
+      <label>Pie de foto</label>
+      <input type="text" name="b_{{ b['id'] }}" value="{{ b['texto'] or '' }}">
+      {% endif %}
+      <label style="display:flex;gap:6px;align-items:center;margin-top:6px;"><input type="checkbox" name="del_{{ b['id'] }}" value="1" style="width:auto;"> Quitar este bloque</label>
+    </div>
+    {% endfor %}
+    <h3>Agregar más al final</h3>
+    {% include "_bloques_js.html" %}
+    <button class="btn" type="submit">Guardar cambios</button>
+  </form>
+</div>
+{% endblock %}
