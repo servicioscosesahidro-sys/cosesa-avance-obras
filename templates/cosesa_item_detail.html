@@ -4,12 +4,8 @@
 <a class="btn btn-outline btn-sm btn-back no-print" href="{{ url_for('cosesa_obra_detail', obra_id=item['obra_id']) }}">&larr; Volver</a>
 {% endblock %}
 {% block content %}
-<div class="breadcrumb">
-  <a href="{{ url_for('cosesa_dashboard') }}">Panel COSESA</a> /
-  <a href="{{ url_for('cosesa_cliente_detail', cliente_id=item['cliente_id']) }}">{{ item['cliente_nombre'] }}</a> /
-  <a href="{{ url_for('cosesa_obra_detail', obra_id=item['obra_id']) }}">{{ item['obra_nombre'] }}</a> /
-  {{ item['nombre'] }}
-</div>
+{% set nav_id = item['obra_id'] %}{% set nav_nombre = item['obra_nombre'] %}{% set nav_activo = '' %}
+{% include "_obra_nav.html" %}
 <h1>{{ item['nombre'] }} <span class="pill pill-{{ item['estado'] }}">{{ item['estado'].replace('_',' ') }}</span>{% if item['pausado_en'] %} <span class="pill pill-pausado">Pausado</span>{% endif %}</h1>
 <p class="subtitle">{{ item['descripcion'] or '' }}</p>
 

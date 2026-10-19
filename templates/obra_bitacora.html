@@ -4,12 +4,9 @@
 <a class="btn btn-outline btn-sm btn-back no-print" href="{{ url_for('cosesa_obra_detail', obra_id=obra['id']) }}">&larr; Volver</a>
 {% endblock %}
 {% block content %}
-<div class="breadcrumb">
-  <a href="{{ url_for('cosesa_dashboard') }}">Panel COSESA</a> /
-  <a href="{{ url_for('cosesa_obra_detail', obra_id=obra['id']) }}">{{ obra['nombre'] }}</a> / Bitácora
-</div>
+{% set nav_id = obra['id'] %}{% set nav_nombre = obra['nombre'] %}{% set nav_activo = 'bitacora' %}
+{% include "_obra_nav.html" %}
 <h1>Bitácora de la obra</h1>
-<p class="subtitle">{{ obra['nombre'] }} · {{ obra['cliente_nombre'] }}. La bitácora sale en el reporte de la obra (certificación completa).</p>
 
 <div class="card">
   <h2>Nuevo registro</h2>

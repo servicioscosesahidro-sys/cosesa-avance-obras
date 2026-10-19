@@ -4,10 +4,8 @@
 <a class="btn btn-outline btn-sm btn-back no-print" href="{{ url_for('obra_bitacora', obra_id=obra['id']) }}">&larr; Volver</a>
 {% endblock %}
 {% block content %}
-<div class="breadcrumb">
-  <a href="{{ url_for('cosesa_obra_detail', obra_id=obra['id']) }}">{{ obra['nombre'] }}</a> /
-  <a href="{{ url_for('obra_bitacora', obra_id=obra['id']) }}">Bitácora</a> / Editar
-</div>
+{% set nav_id = obra['id'] %}{% set nav_nombre = obra['nombre'] %}{% set nav_activo = 'bitacora' %}
+{% include "_obra_nav.html" %}
 <h1>Editar registro de bitácora</h1>
 <div class="card">
   <form method="post" enctype="multipart/form-data" action="{{ url_for('editar_bitacora', entrada_id=e['id']) }}">

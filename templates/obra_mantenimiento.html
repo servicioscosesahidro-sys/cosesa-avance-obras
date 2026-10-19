@@ -8,14 +8,11 @@
   <option value="">—</option>
   {% for k, n in prioridades %}<option value="{{ k }}" {{ 'selected' if sel == k }}>{{ n }}</option>{% endfor %}
 {% endmacro %}
-<div class="breadcrumb">
-  <a href="{{ url_for('cosesa_dashboard') }}">Panel COSESA</a> /
-  <a href="{{ url_for('cosesa_obra_detail', obra_id=obra['id']) }}">{{ obra['nombre'] }}</a> / Mantenimiento
-</div>
+{% set nav_id = obra['id'] %}{% set nav_nombre = obra['nombre'] %}{% set nav_activo = 'mantenimiento' %}
+{% include "_obra_nav.html" %}
 <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
   <div>
     <h1>Mantenimientos de planta</h1>
-    <p class="subtitle">{{ obra['nombre'] }} · {{ obra['cliente_nombre'] }}. Anotá los mantenimientos realizados y los que quedaron pendientes de reparar.</p>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
     <a class="btn" href="{{ url_for('reporte_mantenimiento_pdf', obra_id=obra['id']) }}">Descargar reporte (PDF)</a>
