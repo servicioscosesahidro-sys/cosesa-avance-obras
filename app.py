@@ -2029,6 +2029,17 @@ def certificacion_resumen_html(obra_id):
     ).fetchall()
     aprendizajes = get_aprendizajes(db, obra_id)
     bitacora = get_bitacora(db, obra_id)
+    fotos_equipos = []
+    for it in items:
+        fs = db.execute(
+            "SELECT * FROM fotos WHERE item_id = ? AND tipo IN ('antes','despues') ORDER BY subida_en, id", (it["id"],)
+        ).fetchall()
+        if fs:
+            fotos_equipos.append({
+                "item": it,
+                "antes": [f for f in fs if f["tipo"] == "antes"],
+                "despues": [f for f in fs if f["tipo"] == "despues"],
+            })
     db.close()
     demoras, dem_min = [], 0
     for d in filas:
@@ -2044,7 +2055,7 @@ def certificacion_resumen_html(obra_id):
         tareas=tareas, tot={k: round(v, 2) for k, v in tot.items()},
         demoras=demoras, total_dem_horas=round(dem_min / 60, 2), total_dem_dur=fmt_duracion(dem_min),
         generado_en=datetime.now().strftime("%d/%m/%Y %H:%M"),
-        aprendizajes=aprendizajes, bitacora=bitacora,
+        aprendizajes=aprendizajes, bitacora=bitacora, fotos_equipos=fotos_equipos,
     )
 
 
@@ -2158,7 +2169,7 @@ td.p{{text-align:right;width:20mm}}
         offset = 1
         for _ in range(2):
             pag = offset + 1
-            indice = [("Resumen de la obra: cronograma, curva, horas, demoras, aprendizajes y bitácora", pag)]
+            indice = [("Resumen de la obra: cronograma, curva, horas, demoras, fotos antes/después, aprendizajes y bitácora", pag)]
             pag += n_resumen
             for (nombre, _p), n in zip(partes, paginas_item):
                 indice.append((nombre, pag))
@@ -2552,6 +2563,174 @@ def eliminar_bitacora(entrada_id):
     db.close()
     flash("Registro eliminado.", "success")
     return redirect(url_for("obra_bitacora", obra_id=e["obra_id"]))
+
+
+# ---------------------------------------------------------------------------
+# Mantenimientos de planta (registro aparte, con reporte propio)
+# ---------------------------------------------------------------------------
+
+PRIORIDADES = (("alta", "Alta"), ("media", "Media"), ("baja", "Baja"))
+
+
+def get_mantenimientos(db, obra_id):
+    filas = db.execute(
+        "SELECT * FROM mantenimientos WHERE obra_id = ? ORDER BY COALESCE(fecha, creado_en), id", (obra_id,)
+    ).fetchall()
+    res = []
+    for m in filas:
+        fotos = db.execute(
+            "SELECT * FROM mantenimiento_fotos WHERE mantenimiento_id = ? ORDER BY id", (m["id"],)
+        ).fetchall()
+        res.append({"m": m, "fotos": fotos})
+    return res
+
+
+def _guardar_fotos_mant(db, mant_id, obra_id):
+    n = 0
+    for f in request.files.getlist("fotos"):
+        if not f or not f.filename:
+            continue
+        if not allowed_file(f.filename):
+            flash(f"'{f.filename}': formato de imagen no permitido (usá jpg, png, webp).", "error")
+            continue
+        carpeta = os.path.join(UPLOAD_DIR, "mantenimiento", str(obra_id))
+        os.makedirs(carpeta, exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
+        nombre = secure_filename(f"{ts}_{f.filename}")
+        f.save(os.path.join(carpeta, nombre))
+        db.execute(
+            "INSERT INTO mantenimiento_fotos (mantenimiento_id, archivo) VALUES (?, ?)",
+            (mant_id, f"mantenimiento/{obra_id}/{nombre}"),
+        )
+        n += 1
+    return n
+
+
+@app.route("/cosesa/obras/<int:obra_id>/mantenimiento")
+@cosesa_required
+def obra_mantenimiento(obra_id):
+    db = get_db()
+    obra = _obra_o_404(db, obra_id)
+    lista = get_mantenimientos(db, obra_id)
+    db.close()
+    return render_template(
+        "obra_mantenimiento.html", obra=obra, lista=lista, hoy=date.today().isoformat(),
+        prioridades=PRIORIDADES,
+    )
+
+
+@app.route("/cosesa/obras/<int:obra_id>/mantenimiento/nuevo", methods=["POST"])
+@cosesa_required
+def nuevo_mantenimiento(obra_id):
+    db = get_db()
+    _obra_o_404(db, obra_id)
+    desc = request.form.get("descripcion", "").strip()
+    if not desc:
+        flash("Describí el trabajo de mantenimiento.", "error")
+        db.close()
+        return redirect(url_for("obra_mantenimiento", obra_id=obra_id))
+    estado = request.form.get("estado") if request.form.get("estado") in ("realizado", "pendiente") else "realizado"
+    cur = db.execute(
+        "INSERT INTO mantenimientos (obra_id, fecha, equipo, descripcion, estado, prioridad, responsable, usuario_id) "
+        "VALUES (?,?,?,?,?,?,?,?)",
+        (obra_id, request.form.get("fecha", "").strip() or date.today().isoformat(),
+         request.form.get("equipo", "").strip(), desc, estado,
+         request.form.get("prioridad", "").strip(), request.form.get("responsable", "").strip(),
+         get_current_user()["id"]),
+    )
+    _guardar_fotos_mant(db, cur.lastrowid, obra_id)
+    db.commit()
+    db.close()
+    flash("Mantenimiento registrado.", "success")
+    return redirect(url_for("obra_mantenimiento", obra_id=obra_id))
+
+
+@app.route("/cosesa/mantenimientos/<int:mid>/editar", methods=["POST"])
+@cosesa_required
+def editar_mantenimiento(mid):
+    db = get_db()
+    m = db.execute("SELECT * FROM mantenimientos WHERE id = ?", (mid,)).fetchone()
+    if m is None:
+        db.close()
+        abort(404)
+    desc = request.form.get("descripcion", "").strip()
+    if not desc:
+        flash("La descripción no puede quedar vacía.", "error")
+    else:
+        estado = request.form.get("estado") if request.form.get("estado") in ("realizado", "pendiente") else m["estado"]
+        db.execute(
+            "UPDATE mantenimientos SET fecha = ?, equipo = ?, descripcion = ?, estado = ?, prioridad = ?, responsable = ? WHERE id = ?",
+            (request.form.get("fecha", "").strip() or m["fecha"], request.form.get("equipo", "").strip(), desc, estado,
+             request.form.get("prioridad", "").strip(), request.form.get("responsable", "").strip(), mid),
+        )
+        for f in db.execute("SELECT * FROM mantenimiento_fotos WHERE mantenimiento_id = ?", (mid,)).fetchall():
+            if request.form.get(f"delfoto_{f['id']}"):
+                _borrar_archivo(f["archivo"])
+                db.execute("DELETE FROM mantenimiento_fotos WHERE id = ?", (f["id"],))
+        _guardar_fotos_mant(db, mid, m["obra_id"])
+        db.commit()
+        flash("Mantenimiento actualizado.", "success")
+    db.close()
+    return redirect(url_for("obra_mantenimiento", obra_id=m["obra_id"]))
+
+
+@app.route("/cosesa/mantenimientos/<int:mid>/realizado", methods=["POST"])
+@cosesa_required
+def mantenimiento_realizado(mid):
+    db = get_db()
+    m = db.execute("SELECT * FROM mantenimientos WHERE id = ?", (mid,)).fetchone()
+    if m is None:
+        db.close()
+        abort(404)
+    db.execute("UPDATE mantenimientos SET estado = 'realizado', fecha = ? WHERE id = ?", (date.today().isoformat(), mid))
+    db.commit()
+    db.close()
+    flash("Marcado como realizado.", "success")
+    return redirect(url_for("obra_mantenimiento", obra_id=m["obra_id"]))
+
+
+@app.route("/cosesa/mantenimientos/<int:mid>/eliminar", methods=["POST"])
+@cosesa_required
+def eliminar_mantenimiento(mid):
+    db = get_db()
+    m = db.execute("SELECT * FROM mantenimientos WHERE id = ?", (mid,)).fetchone()
+    if m is None:
+        db.close()
+        abort(404)
+    for f in db.execute("SELECT archivo FROM mantenimiento_fotos WHERE mantenimiento_id = ?", (mid,)).fetchall():
+        _borrar_archivo(f["archivo"])
+    db.execute("DELETE FROM mantenimiento_fotos WHERE mantenimiento_id = ?", (mid,))
+    db.execute("DELETE FROM mantenimientos WHERE id = ?", (mid,))
+    db.commit()
+    db.close()
+    flash("Mantenimiento eliminado.", "success")
+    return redirect(url_for("obra_mantenimiento", obra_id=m["obra_id"]))
+
+
+@app.route("/cosesa/obras/<int:obra_id>/mantenimiento/reporte")
+@cosesa_required
+def reporte_mantenimiento(obra_id):
+    db = get_db()
+    obra = _obra_o_404(db, obra_id)
+    lista = get_mantenimientos(db, obra_id)
+    db.close()
+    return render_template(
+        "reporte_mantenimiento.html", obra=obra,
+        realizados=[x for x in lista if x["m"]["estado"] == "realizado"],
+        pendientes=[x for x in lista if x["m"]["estado"] == "pendiente"],
+        generado_en=datetime.now().strftime("%d/%m/%Y %H:%M"),
+    )
+
+
+@app.route("/cosesa/obras/<int:obra_id>/mantenimiento/reporte/pdf")
+@cosesa_required
+def reporte_mantenimiento_pdf(obra_id):
+    user = get_current_user()
+    token = make_pdf_token(user["id"])
+    url = url_for("reporte_mantenimiento", obra_id=obra_id, pdf_token=token, _external=True)
+    out_path = os.path.join(tempfile.gettempdir(), f"reporte_mantenimiento_{obra_id}.pdf")
+    render_pdf(url, out_path)
+    return send_file(out_path, as_attachment=True, download_name=f"reporte_mantenimiento_obra_{obra_id}.pdf")
 
 
 # ---------------------------------------------------------------------------

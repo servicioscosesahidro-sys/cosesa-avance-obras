@@ -81,6 +81,24 @@ def _migrate_schema(conn):
             usuario_id INTEGER REFERENCES usuarios(id),
             creado_en TEXT DEFAULT (datetime('now'))
         );
+        CREATE TABLE IF NOT EXISTS mantenimientos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            obra_id INTEGER NOT NULL REFERENCES obras(id) ON DELETE CASCADE,
+            fecha TEXT,
+            equipo TEXT,
+            descripcion TEXT NOT NULL,
+            estado TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('realizado','pendiente')),
+            prioridad TEXT,
+            responsable TEXT,
+            usuario_id INTEGER REFERENCES usuarios(id),
+            creado_en TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS mantenimiento_fotos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mantenimiento_id INTEGER NOT NULL REFERENCES mantenimientos(id) ON DELETE CASCADE,
+            archivo TEXT NOT NULL,
+            pie TEXT
+        );
         CREATE TABLE IF NOT EXISTS bitacora_bloques (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             entrada_id INTEGER NOT NULL REFERENCES bitacora(id) ON DELETE CASCADE,
