@@ -1,4 +1,11 @@
 import os
+import time
+
+# Hora de Argentina (UTC-3, sin horario de verano). El servidor de Render corre
+# en UTC; sin esto todas las horas "ahora" salían 3 horas adelantadas.
+os.environ["TZ"] = "ART3"
+time.tzset()
+
 import sqlite3
 import tempfile
 from datetime import date, datetime, timedelta
