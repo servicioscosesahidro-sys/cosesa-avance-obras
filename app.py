@@ -1197,7 +1197,7 @@ def cosesa_item_detail(item_id):
     ).fetchone()
     # La demora todavía abierta (pausa en curso) se maneja con los botones de
     # pausar/reanudar, no desde la lista genérica de demoras editables.
-    demoras = [d for d in todas_las_demoras if d["fecha_fin"]]
+    demoras = list(todas_las_demoras)
     checklist = get_or_create_checklist(db, item_id)
     checklist_puntos = get_checklist_puntos(db, item_id)
     piezas = db.execute(
@@ -1325,8 +1325,7 @@ def reanudar_item(item_id):
         flash("Esta tarea no está pausada.", "error")
     else:
         ahora = now_local_str()
-        if demora_abierta:
-            db.execute("UPDATE demoras SET fecha_fin = ? WHERE id = ?", (ahora, demora_abierta["id"]))
+        db.execute("UPDATE demoras SET fecha_fin = ? WHERE item_id = ? AND fecha_fin IS NULL", (ahora, item_id))
         db.execute("UPDATE items SET pausado_en = NULL WHERE id = ?", (item_id,))
         db.commit()
         recompute_item_horas(db, item_id)
@@ -1355,7 +1354,7 @@ def finalizar_item(item_id):
         (item_id,),
     ).fetchone()
     if demora_abierta:
-        db.execute("UPDATE demoras SET fecha_fin = ? WHERE id = ?", (ahora, demora_abierta["id"]))
+        db.execute("UPDATE demoras SET fecha_fin = ? WHERE item_id = ? AND fecha_fin IS NULL", (ahora, item_id))
     fecha_inicio = item["fecha_inicio"] or ahora
     db.execute(
         "UPDATE items SET estado = 'finalizado', fecha_inicio = ?, fecha_fin = ?, pausado_en = NULL WHERE id = ?",
@@ -1411,16 +1410,32 @@ def actualizar_fechas_reales(item_id):
     return redirect(url_for("cosesa_item_detail", item_id=item_id))
 
 
+def _sync_pausa(db, item_id):
+    """Mantiene items.pausado_en alineado con las demoras abiertas: si hay una
+    demora sin fin y el ítem está en curso, el ítem figura pausado desde el
+    inicio de esa demora; si no hay ninguna abierta, deja de estar pausado."""
+    item = db.execute("SELECT estado FROM items WHERE id = ?", (item_id,)).fetchone()
+    if item is None:
+        return
+    abierta = db.execute(
+        "SELECT fecha_inicio FROM demoras WHERE item_id = ? AND fecha_fin IS NULL "
+        "ORDER BY fecha_inicio DESC, id DESC LIMIT 1", (item_id,)
+    ).fetchone()
+    if item["estado"] == "en_curso" and abierta:
+        db.execute("UPDATE items SET pausado_en = ? WHERE id = ?", (abierta["fecha_inicio"], item_id))
+    else:
+        db.execute("UPDATE items SET pausado_en = NULL WHERE id = ?", (item_id,))
+
+
 @app.route("/cosesa/items/<int:item_id>/demoras/nueva", methods=["POST"])
 @cosesa_required
 def agregar_demora(item_id):
-    fecha_inicio = request.form.get("fecha_inicio")
-    fecha_fin = request.form.get("fecha_fin")
+    # Inicio y fin son opcionales: sin inicio arranca ahora mismo; sin fin queda
+    # abierta (corre hasta la actualidad) hasta que se cierre o se edite.
+    fecha_inicio = (request.form.get("fecha_inicio") or "").strip() or now_local_str()
+    fecha_fin = (request.form.get("fecha_fin") or "").strip() or None
     motivo = request.form.get("motivo", "").strip()
-    if not fecha_inicio or not fecha_fin:
-        flash("Completá la fecha y hora de inicio y de fin de la demora.", "error")
-        return redirect(url_for("cosesa_item_detail", item_id=item_id))
-    if fecha_fin < fecha_inicio:
+    if fecha_fin and fecha_fin < fecha_inicio:
         flash("La fecha de fin de la demora no puede ser anterior a la de inicio.", "error")
         return redirect(url_for("cosesa_item_detail", item_id=item_id))
     db = get_db()
@@ -1432,10 +1447,32 @@ def agregar_demora(item_id):
         "INSERT INTO demoras (item_id, fecha_inicio, fecha_fin, motivo, usuario_id) VALUES (?, ?, ?, ?, ?)",
         (item_id, fecha_inicio, fecha_fin, motivo, user["id"]),
     )
+    _sync_pausa(db, item_id)
     db.commit()
     recompute_item_horas(db, item_id)
     db.close()
-    flash("Demora registrada.", "success")
+    flash("Demora registrada." if fecha_fin else "Demora registrada: sigue abierta hasta que la cierres.", "success")
+    return redirect(url_for("cosesa_item_detail", item_id=item_id))
+
+
+@app.route("/cosesa/demoras/<int:demora_id>/cerrar", methods=["POST"])
+@cosesa_required
+def cerrar_demora(demora_id):
+    db = get_db()
+    demora = db.execute("SELECT * FROM demoras WHERE id = ?", (demora_id,)).fetchone()
+    if demora is None:
+        abort(404)
+    item_id = demora["item_id"]
+    if not demora["fecha_fin"]:
+        ahora = now_local_str()
+        if ahora < demora["fecha_inicio"]:
+            ahora = demora["fecha_inicio"]
+        db.execute("UPDATE demoras SET fecha_fin = ? WHERE id = ?", (ahora, demora_id))
+        _sync_pausa(db, item_id)
+        db.commit()
+        recompute_item_horas(db, item_id)
+        flash("Demora cerrada.", "success")
+    db.close()
     return redirect(url_for("cosesa_item_detail", item_id=item_id))
 
 
@@ -1448,6 +1485,7 @@ def eliminar_demora(demora_id):
         abort(404)
     item_id = demora["item_id"]
     db.execute("DELETE FROM demoras WHERE id = ?", (demora_id,))
+    _sync_pausa(db, item_id)
     db.commit()
     recompute_item_horas(db, item_id)
     db.close()
@@ -1458,19 +1496,19 @@ def eliminar_demora(demora_id):
 @app.route("/cosesa/demoras/<int:demora_id>/editar", methods=["POST"])
 @cosesa_required
 def editar_demora(demora_id):
-    fecha_inicio = request.form.get("fecha_inicio")
-    fecha_fin = request.form.get("fecha_fin")
+    fecha_inicio = (request.form.get("fecha_inicio") or "").strip()
+    fecha_fin = (request.form.get("fecha_fin") or "").strip() or None
     motivo = request.form.get("motivo", "").strip()
     db = get_db()
     demora = db.execute("SELECT * FROM demoras WHERE id = ?", (demora_id,)).fetchone()
     if demora is None:
         abort(404)
     item_id = demora["item_id"]
-    if not fecha_inicio or not fecha_fin:
-        flash("Completá la fecha y hora de inicio y de fin de la demora.", "error")
+    if not fecha_inicio:
+        flash("La demora necesita una fecha y hora de inicio.", "error")
         db.close()
         return redirect(url_for("cosesa_item_detail", item_id=item_id))
-    if fecha_fin < fecha_inicio:
+    if fecha_fin and fecha_fin < fecha_inicio:
         flash("La fecha de fin de la demora no puede ser anterior a la de inicio.", "error")
         db.close()
         return redirect(url_for("cosesa_item_detail", item_id=item_id))
@@ -1478,6 +1516,7 @@ def editar_demora(demora_id):
         "UPDATE demoras SET fecha_inicio = ?, fecha_fin = ?, motivo = ? WHERE id = ?",
         (fecha_inicio, fecha_fin, motivo, demora_id),
     )
+    _sync_pausa(db, item_id)
     db.commit()
     recompute_item_horas(db, item_id)
     db.close()
@@ -1981,6 +2020,8 @@ def certificacion_resumen_html(obra_id):
         "JOIN items i ON i.id = d.item_id WHERE i.obra_id = ? ORDER BY d.fecha_inicio, d.id",
         (obra_id,),
     ).fetchall()
+    aprendizajes = get_aprendizajes(db, obra_id)
+    bitacora = get_bitacora(db, obra_id)
     db.close()
     demoras, dem_min = [], 0
     for d in filas:
@@ -1996,6 +2037,7 @@ def certificacion_resumen_html(obra_id):
         tareas=tareas, tot={k: round(v, 2) for k, v in tot.items()},
         demoras=demoras, total_dem_horas=round(dem_min / 60, 2), total_dem_dur=fmt_duracion(dem_min),
         generado_en=datetime.now().strftime("%d/%m/%Y %H:%M"),
+        aprendizajes=aprendizajes, bitacora=bitacora,
     )
 
 
@@ -2109,7 +2151,7 @@ td.p{{text-align:right;width:20mm}}
         offset = 1
         for _ in range(2):
             pag = offset + 1
-            indice = [("Resumen de la obra: cronograma, curva, demoras y horas", pag)]
+            indice = [("Resumen de la obra: cronograma, curva, horas, demoras, aprendizajes y bitácora", pag)]
             pag += n_resumen
             for (nombre, _p), n in zip(partes, paginas_item):
                 indice.append((nombre, pag))
@@ -2249,6 +2291,260 @@ def reporte_interno_obra_pdf(obra_id):
     out_path = os.path.join(tempfile.gettempdir(), f"reporte_interno_{obra_id}.pdf")
     render_pdf(url, out_path)
     return send_file(out_path, as_attachment=True, download_name=f"reporte_interno_obra_{obra_id}.pdf")
+
+
+# ---------------------------------------------------------------------------
+# Aprendizajes y bitácora de la obra
+# ---------------------------------------------------------------------------
+
+def _obra_o_404(db, obra_id):
+    obra = db.execute(
+        "SELECT o.*, c.nombre AS cliente_nombre FROM obras o JOIN clientes c ON c.id = o.cliente_id WHERE o.id = ?",
+        (obra_id,),
+    ).fetchone()
+    if obra is None:
+        db.close()
+        abort(404)
+    return obra
+
+
+def turno_de(fecha_hora):
+    """Turno según la hora: día 07:00-19:00, noche el resto."""
+    d = _parse_dt(fecha_hora)
+    if d is None:
+        return "dia"
+    return "dia" if 7 <= d.hour < 19 else "noche"
+
+
+def get_aprendizajes(db, obra_id):
+    return db.execute(
+        "SELECT * FROM aprendizajes WHERE obra_id = ? ORDER BY COALESCE(fecha, creado_en), id", (obra_id,)
+    ).fetchall()
+
+
+def get_bitacora(db, obra_id, descendente=False):
+    """Entradas de la bitácora con sus bloques (texto / imagen) en orden."""
+    orden = "DESC" if descendente else "ASC"
+    entradas = db.execute(
+        f"SELECT b.*, u.nombre AS usuario_nombre FROM bitacora b LEFT JOIN usuarios u ON u.id = b.usuario_id "
+        f"WHERE b.obra_id = ? ORDER BY b.fecha_hora {orden}, b.id {orden}", (obra_id,)
+    ).fetchall()
+    res = []
+    for e in entradas:
+        bloques = db.execute(
+            "SELECT * FROM bitacora_bloques WHERE entrada_id = ? ORDER BY orden, id", (e["id"],)
+        ).fetchall()
+        res.append({"e": e, "bloques": bloques})
+    return res
+
+
+def _guardar_img_bitacora(obra_id, file_storage):
+    if not file_storage or not file_storage.filename:
+        return None
+    if not allowed_file(file_storage.filename):
+        flash("Formato de imagen no permitido (usá jpg, png, webp).", "error")
+        return None
+    carpeta = os.path.join(UPLOAD_DIR, "bitacora", str(obra_id))
+    os.makedirs(carpeta, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d%H%M%S%f")
+    nombre = secure_filename(f"{ts}_{file_storage.filename}")
+    file_storage.save(os.path.join(carpeta, nombre))
+    return f"bitacora/{obra_id}/{nombre}"
+
+
+def _borrar_archivo(rel):
+    if not rel:
+        return
+    ruta = os.path.join(UPLOAD_DIR, rel)
+    try:
+        if os.path.isfile(ruta):
+            os.remove(ruta)
+    except OSError:
+        pass
+
+
+def _agregar_bloques_nuevos(db, entrada_id, obra_id, orden_inicial):
+    """Lee los bloques nuevos del formulario (en el orden en que se agregaron)."""
+    indices = [x for x in (request.form.get("orden", "") or "").split(",") if x.strip().isdigit()]
+    orden = orden_inicial
+    for i in indices:
+        tipo = request.form.get(f"tipo_{i}")
+        if tipo == "imagen":
+            rel = _guardar_img_bitacora(obra_id, request.files.get(f"img_{i}"))
+            if rel:
+                db.execute(
+                    "INSERT INTO bitacora_bloques (entrada_id, orden, tipo, texto, archivo) VALUES (?,?,?,?,?)",
+                    (entrada_id, orden, "imagen", (request.form.get(f"pie_{i}") or "").strip(), rel),
+                )
+                orden += 1
+        else:
+            texto = (request.form.get(f"texto_{i}") or "").strip()
+            if texto:
+                db.execute(
+                    "INSERT INTO bitacora_bloques (entrada_id, orden, tipo, texto) VALUES (?,?,?,?)",
+                    (entrada_id, orden, "texto", texto),
+                )
+                orden += 1
+    return orden
+
+
+@app.route("/cosesa/obras/<int:obra_id>/aprendizajes")
+@cosesa_required
+def obra_aprendizajes(obra_id):
+    db = get_db()
+    obra = _obra_o_404(db, obra_id)
+    lista = get_aprendizajes(db, obra_id)
+    db.close()
+    return render_template("obra_aprendizajes.html", obra=obra, aprendizajes=lista, hoy=date.today().isoformat())
+
+
+@app.route("/cosesa/obras/<int:obra_id>/aprendizajes/nuevo", methods=["POST"])
+@cosesa_required
+def nuevo_aprendizaje(obra_id):
+    texto = request.form.get("texto", "").strip()
+    autor = request.form.get("autor", "").strip()
+    fecha = request.form.get("fecha", "").strip() or date.today().isoformat()
+    db = get_db()
+    _obra_o_404(db, obra_id)
+    if not texto:
+        flash("Escribí el aprendizaje.", "error")
+    else:
+        db.execute(
+            "INSERT INTO aprendizajes (obra_id, texto, autor, fecha, usuario_id) VALUES (?,?,?,?,?)",
+            (obra_id, texto, autor, fecha, get_current_user()["id"]),
+        )
+        db.commit()
+        flash("Aprendizaje agregado.", "success")
+    db.close()
+    return redirect(url_for("obra_aprendizajes", obra_id=obra_id))
+
+
+@app.route("/cosesa/aprendizajes/<int:ap_id>/editar", methods=["POST"])
+@cosesa_required
+def editar_aprendizaje(ap_id):
+    db = get_db()
+    ap = db.execute("SELECT * FROM aprendizajes WHERE id = ?", (ap_id,)).fetchone()
+    if ap is None:
+        db.close()
+        abort(404)
+    texto = request.form.get("texto", "").strip()
+    if not texto:
+        flash("El aprendizaje no puede quedar vacío.", "error")
+    else:
+        db.execute(
+            "UPDATE aprendizajes SET texto = ?, autor = ?, fecha = ? WHERE id = ?",
+            (texto, request.form.get("autor", "").strip(), request.form.get("fecha", "").strip() or ap["fecha"], ap_id),
+        )
+        db.commit()
+        flash("Aprendizaje actualizado.", "success")
+    db.close()
+    return redirect(url_for("obra_aprendizajes", obra_id=ap["obra_id"]))
+
+
+@app.route("/cosesa/aprendizajes/<int:ap_id>/eliminar", methods=["POST"])
+@cosesa_required
+def eliminar_aprendizaje(ap_id):
+    db = get_db()
+    ap = db.execute("SELECT * FROM aprendizajes WHERE id = ?", (ap_id,)).fetchone()
+    if ap is None:
+        db.close()
+        abort(404)
+    db.execute("DELETE FROM aprendizajes WHERE id = ?", (ap_id,))
+    db.commit()
+    db.close()
+    flash("Aprendizaje eliminado.", "success")
+    return redirect(url_for("obra_aprendizajes", obra_id=ap["obra_id"]))
+
+
+@app.route("/cosesa/obras/<int:obra_id>/bitacora")
+@cosesa_required
+def obra_bitacora(obra_id):
+    db = get_db()
+    obra = _obra_o_404(db, obra_id)
+    entradas = get_bitacora(db, obra_id, descendente=True)
+    db.close()
+    return render_template("obra_bitacora.html", obra=obra, entradas=entradas, ahora=now_local_str(), turnos=TURNOS)
+
+
+@app.route("/cosesa/obras/<int:obra_id>/bitacora/nueva", methods=["POST"])
+@cosesa_required
+def nueva_bitacora(obra_id):
+    db = get_db()
+    _obra_o_404(db, obra_id)
+    fecha_hora = (request.form.get("fecha_hora") or "").strip() or now_local_str()
+    turno = request.form.get("turno") if request.form.get("turno") in ("dia", "noche") else turno_de(fecha_hora)
+    cur = db.execute(
+        "INSERT INTO bitacora (obra_id, fecha_hora, turno, usuario_id) VALUES (?,?,?,?)",
+        (obra_id, fecha_hora, turno, get_current_user()["id"]),
+    )
+    entrada_id = cur.lastrowid
+    n = _agregar_bloques_nuevos(db, entrada_id, obra_id, 0)
+    if n == 0:
+        db.execute("DELETE FROM bitacora WHERE id = ?", (entrada_id,))
+        db.commit()
+        flash("El registro estaba vacío: escribí un texto o agregá una imagen.", "error")
+    else:
+        db.commit()
+        flash("Registro agregado a la bitácora.", "success")
+    db.close()
+    return redirect(url_for("obra_bitacora", obra_id=obra_id))
+
+
+@app.route("/cosesa/bitacora/<int:entrada_id>/editar", methods=["GET", "POST"])
+@cosesa_required
+def editar_bitacora(entrada_id):
+    db = get_db()
+    e = db.execute("SELECT * FROM bitacora WHERE id = ?", (entrada_id,)).fetchone()
+    if e is None:
+        db.close()
+        abort(404)
+    obra_id = e["obra_id"]
+    if request.method == "POST":
+        fecha_hora = (request.form.get("fecha_hora") or "").strip() or e["fecha_hora"]
+        turno = request.form.get("turno") if request.form.get("turno") in ("dia", "noche") else turno_de(fecha_hora)
+        db.execute("UPDATE bitacora SET fecha_hora = ?, turno = ? WHERE id = ?", (fecha_hora, turno, entrada_id))
+        bloques = db.execute("SELECT * FROM bitacora_bloques WHERE entrada_id = ?", (entrada_id,)).fetchall()
+        for b in bloques:
+            if request.form.get(f"del_{b['id']}"):
+                _borrar_archivo(b["archivo"])
+                db.execute("DELETE FROM bitacora_bloques WHERE id = ?", (b["id"],))
+            elif b["tipo"] == "texto":
+                t = (request.form.get(f"b_{b['id']}") or "").strip()
+                if t:
+                    db.execute("UPDATE bitacora_bloques SET texto = ? WHERE id = ?", (t, b["id"]))
+                else:
+                    db.execute("DELETE FROM bitacora_bloques WHERE id = ?", (b["id"],))
+            else:
+                db.execute("UPDATE bitacora_bloques SET texto = ? WHERE id = ?",
+                           ((request.form.get(f"b_{b['id']}") or "").strip(), b["id"]))
+        maxo = db.execute("SELECT COALESCE(MAX(orden), -1) FROM bitacora_bloques WHERE entrada_id = ?", (entrada_id,)).fetchone()[0]
+        _agregar_bloques_nuevos(db, entrada_id, obra_id, maxo + 1)
+        db.commit()
+        db.close()
+        flash("Registro actualizado.", "success")
+        return redirect(url_for("obra_bitacora", obra_id=obra_id))
+    obra = _obra_o_404(db, obra_id)
+    bloques = db.execute("SELECT * FROM bitacora_bloques WHERE entrada_id = ? ORDER BY orden, id", (entrada_id,)).fetchall()
+    db.close()
+    return render_template("bitacora_editar.html", obra=obra, e=e, bloques=bloques, turnos=TURNOS)
+
+
+@app.route("/cosesa/bitacora/<int:entrada_id>/eliminar", methods=["POST"])
+@cosesa_required
+def eliminar_bitacora(entrada_id):
+    db = get_db()
+    e = db.execute("SELECT * FROM bitacora WHERE id = ?", (entrada_id,)).fetchone()
+    if e is None:
+        db.close()
+        abort(404)
+    for b in db.execute("SELECT archivo FROM bitacora_bloques WHERE entrada_id = ?", (entrada_id,)).fetchall():
+        _borrar_archivo(b["archivo"])
+    db.execute("DELETE FROM bitacora_bloques WHERE entrada_id = ?", (entrada_id,))
+    db.execute("DELETE FROM bitacora WHERE id = ?", (entrada_id,))
+    db.commit()
+    db.close()
+    flash("Registro eliminado.", "success")
+    return redirect(url_for("obra_bitacora", obra_id=e["obra_id"]))
 
 
 # ---------------------------------------------------------------------------

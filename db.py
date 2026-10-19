@@ -61,6 +61,38 @@ def _migrate_schema(conn):
         )
         changed = True
 
+    # Aprendizajes de la obra y bitácora (con bloques de texto/imagen).
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS aprendizajes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            obra_id INTEGER NOT NULL REFERENCES obras(id) ON DELETE CASCADE,
+            texto TEXT NOT NULL,
+            autor TEXT,
+            fecha TEXT,
+            usuario_id INTEGER REFERENCES usuarios(id),
+            creado_en TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS bitacora (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            obra_id INTEGER NOT NULL REFERENCES obras(id) ON DELETE CASCADE,
+            fecha_hora TEXT NOT NULL,
+            turno TEXT,
+            usuario_id INTEGER REFERENCES usuarios(id),
+            creado_en TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS bitacora_bloques (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            entrada_id INTEGER NOT NULL REFERENCES bitacora(id) ON DELETE CASCADE,
+            orden INTEGER NOT NULL DEFAULT 0,
+            tipo TEXT NOT NULL CHECK (tipo IN ('texto','imagen')),
+            texto TEXT,
+            archivo TEXT
+        );
+        """
+    )
+    changed = True
+
     if changed:
         conn.commit()
 
