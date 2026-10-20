@@ -2734,6 +2734,63 @@ def reporte_mantenimiento_pdf(obra_id):
 
 
 # ---------------------------------------------------------------------------
+# Restaurar una copia de seguridad (.zip) subiéndola a mano — solo administrador
+# ---------------------------------------------------------------------------
+
+@app.route("/cosesa/restaurar", methods=["GET", "POST"])
+@admin_required
+def restaurar_backup():
+    import zipfile, io, shutil
+    from db import DATA_DIR
+    import backup as _bk
+
+    if request.method == "POST":
+        f = request.files.get("archivo")
+        if not f or not f.filename.lower().endswith(".zip"):
+            flash("Subí el archivo latest.zip de la copia de seguridad.", "error")
+            return redirect(url_for("restaurar_backup"))
+        try:
+            data = f.read()
+            zf = zipfile.ZipFile(io.BytesIO(data))
+            if "cosesa.db" not in zf.namelist():
+                flash("Ese zip no tiene la base de datos (cosesa.db).", "error")
+                return redirect(url_for("restaurar_backup"))
+            tmp_dir = tempfile.mkdtemp()
+            zf.extractall(tmp_dir)
+            nueva_db = os.path.join(tmp_dir, "cosesa.db")
+            c = sqlite3.connect(nueva_db)
+            try:
+                n = c.execute("SELECT COUNT(*) FROM obras").fetchone()[0]
+            finally:
+                c.close()
+            if n == 0:
+                flash("La copia no tiene ninguna obra: no se restauró para no pisar nada.", "error")
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+                return redirect(url_for("restaurar_backup"))
+            # fotos y archivos subidos
+            for root, _d, files in os.walk(tmp_dir):
+                for name in files:
+                    full = os.path.join(root, name)
+                    rel = os.path.relpath(full, tmp_dir)
+                    if rel == "cosesa.db":
+                        continue
+                    dest = os.path.join(DATA_DIR, rel)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    shutil.copy2(full, dest)
+            # base de datos (reemplazo atómico)
+            os.replace(nueva_db, DB_PATH) if os.path.dirname(nueva_db) == os.path.dirname(DB_PATH) else shutil.copy2(nueva_db, DB_PATH)
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _bk._restore_fallo = False
+            init_db()
+            flash(f"Copia restaurada: {n} obra(s). Volvé a iniciar sesión si te lo pide.", "success")
+            return redirect(url_for("index"))
+        except Exception as e:
+            flash(f"No se pudo restaurar: {e}", "error")
+            return redirect(url_for("restaurar_backup"))
+    return render_template("restaurar.html")
+
+
+# ---------------------------------------------------------------------------
 # Archivos subidos
 # ---------------------------------------------------------------------------
 
