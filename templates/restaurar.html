@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Restaurar copia · COSESA{% endblock %}
+{% block content %}
+<h1>Restaurar copia de seguridad</h1>
+<div class="card">
+  <p class="subtitle">Subí el archivo <strong>latest.zip</strong> de la copia de seguridad. Reemplaza la base de datos actual y recupera las fotos. Solo para administradores.</p>
+  <form method="post" enctype="multipart/form-data" onsubmit="return confirm('¿Reemplazar los datos actuales por los de esta copia?');">
+    <input type="file" name="archivo" accept=".zip" required>
+    <button class="btn" type="submit" style="margin-top:12px;">Restaurar</button>
+  </form>
+</div>
+{% endblock %}
