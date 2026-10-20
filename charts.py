@@ -155,8 +155,8 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
         max_chars = 34 if not interactive else 26
         nombre_corto = nombre[:max_chars]
         tag_corto = tag[:max_chars]
-        # Con TAG: línea de arriba en negrita con el TAG (lo más importante para
-        # identificar el equipo en planta), línea de abajo con el nombre en gris.
+        # Con TAG: línea de arriba en negrita con el nombre de la tarea, línea de
+        # abajo más chica con el TAG en gris.
         # Sin TAG: una sola línea centrada con el nombre, como antes.
         tag_y = y + row_h / 2 - 5
         nombre_y = y + row_h / 2 + 9
@@ -166,9 +166,9 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
                 svg.append(
                     f'<a href="/cosesa/items/{it["id"]}">'
                     f'<text x="0" y="{tag_y:.1f}" font-size="12" font-weight="700" fill="#33456b" '
-                    f'text-decoration="underline" style="cursor:pointer;">{tag_corto}</text>'
+                    f'text-decoration="underline" style="cursor:pointer;">{nombre_corto}</text>'
                     f'<text x="0" y="{nombre_y:.1f}" font-size="10" fill="#7a848c" '
-                    f'style="cursor:pointer;">{nombre_corto}</text>'
+                    f'style="cursor:pointer;">{tag_corto}</text>'
                     f'</a>'
                 )
             else:
@@ -192,8 +192,8 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
             )
         else:
             if tag_corto:
-                svg.append(f'<text x="0" y="{tag_y:.1f}" font-size="12" font-weight="700" fill="#33456b">{tag_corto}</text>')
-                svg.append(f'<text x="0" y="{nombre_y:.1f}" font-size="10" fill="#7a848c">{nombre_corto}</text>')
+                svg.append(f'<text x="0" y="{tag_y:.1f}" font-size="12" font-weight="700" fill="#33456b">{nombre_corto}</text>')
+                svg.append(f'<text x="0" y="{nombre_y:.1f}" font-size="10" fill="#7a848c">{tag_corto}</text>')
             else:
                 svg.append(f'<text x="0" y="{sola_y:.1f}" font-size="12" fill="#23272b">{nombre_corto}</text>')
 
