@@ -45,6 +45,9 @@ QUIETO_SEGUNDOS = 8                   # se espera a que los cambios "se calmen"
 ESPERA_MAXIMA_SEGUNDOS = 60           # tope si hay cambios continuos
 
 _backup_lock = threading.Lock()
+# Si el último intento de restaurar falló (y había un backup), NO se sube ningún
+# backup nuevo: una base vacía no debe pisar el backup bueno.
+_restore_fallo = False
 
 
 def _config():
@@ -112,6 +115,18 @@ def backup_now():
         return False, "El backup automático no está configurado (faltan variables de entorno)."
     if not os.path.exists(DB_PATH):
         return False, "Todavía no hay base de datos para respaldar."
+    if _restore_fallo:
+        return False, "No se sube backup: falló la restauración y no se quiere pisar el backup bueno con una base vacía."
+    try:
+        _c = sqlite3.connect(DB_PATH, timeout=30)
+        try:
+            n_obras = _c.execute("SELECT COUNT(*) FROM obras").fetchone()[0]
+        finally:
+            _c.close()
+    except Exception:
+        n_obras = 0
+    if n_obras == 0:
+        return False, "La base no tiene ninguna obra: no se sube backup (para no pisar uno bueno con una base vacía)."
 
     with _backup_lock:
         try:
@@ -153,15 +168,25 @@ def restore_latest():
         return False, "El backup automático no está configurado."
 
     try:
+        global _restore_fallo
         url = f"{GITHUB_API}/repos/{cfg['repo']}/contents/{BACKUP_PATH_IN_REPO}"
         headers = _headers(cfg["token"])
-        r = requests.get(url, headers=headers, params={"ref": cfg["branch"]}, timeout=30)
+        # Accept "raw": devuelve el archivo tal cual (hasta 100 MB). Con el
+        # formato normal, GitHub devuelve el contenido VACÍO si pesa más de 1 MB,
+        # y la restauración fallaba en silencio dejando la base vacía.
+        headers_raw = dict(headers)
+        headers_raw["Accept"] = "application/vnd.github.raw+json"
+        r = requests.get(url, headers=headers_raw, params={"ref": cfg["branch"]}, timeout=120)
         if r.status_code == 404:
             return False, "Todavía no hay ningún backup guardado (primera vez)."
         if r.status_code != 200:
+            _restore_fallo = True
             return False, f"GitHub respondió {r.status_code} al buscar el backup."
 
-        zip_bytes = base64.b64decode(r.json()["content"])
+        zip_bytes = r.content
+        if not zip_bytes:
+            _restore_fallo = True
+            return False, "El backup bajó vacío."
         os.makedirs(DATA_DIR, exist_ok=True)
         with tempfile.TemporaryDirectory() as tmp:
             zip_path = os.path.join(tmp, "backup.zip")
@@ -171,6 +196,7 @@ def restore_latest():
                 zf.extractall(DATA_DIR)
         return True, "Backup restaurado correctamente."
     except Exception as e:
+        _restore_fallo = True
         return False, f"Error al restaurar el backup: {e}"
 
 
