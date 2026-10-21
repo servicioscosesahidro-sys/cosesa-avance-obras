@@ -132,15 +132,15 @@ def get_personal(db, item_id):
 
 
 def crear_personal_default(db, item_id):
-    """Cuadrilla estándar con la que arranca todo ítem nuevo (turno día):
-    1 supervisor, 1 técnico de higiene y seguridad, 1 puntero y 2 operarios.
-    El turno noche queda en cero (get_personal lo crea así cuando hace
-    falta) hasta que se cargue gente para ese turno a mano."""
-    db.execute(
-        "INSERT INTO personal_lavado (item_id, turno, supervisores, tecnicos_hs, punteros, operarios) "
-        "VALUES (?, 'dia', 1, 1, 1, 2)",
-        (item_id,),
-    )
+    """Cuadrilla estándar con la que arranca todo ítem nuevo, en AMBOS turnos
+    (día y noche): 1 supervisor, 1 técnico de higiene y seguridad, 1 puntero,
+    2 operarios y 1 bomba. Se puede modificar a mano después en la ficha."""
+    for turno, _ in TURNOS:
+        db.execute(
+            "INSERT INTO personal_lavado (item_id, turno, supervisores, tecnicos_hs, punteros, operarios, bombas) "
+            "VALUES (?, ?, 1, 1, 1, 2, 1)",
+            (item_id, turno),
+        )
 
 
 def total_personal(personal_by_turno):
@@ -269,7 +269,7 @@ def items_obra_con_horas(db, obra_id):
     """Ítems de la obra con horas hombre/máquina calculadas al momento, sin
     escribir nada en la base (solo lectura)."""
     out = []
-    for r in db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY creado_en", (obra_id,)).fetchall():
+    for r in db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY orden, creado_en, id", (obra_id,)).fetchall():
         h = recompute_item_horas(db, r["id"], persistir=False)
         d = dict(r)
         if h:
@@ -958,15 +958,48 @@ def crear_item(obra_id):
         return redirect(url_for("cosesa_obra_detail", obra_id=obra_id))
     db = get_db()
     cur = db.execute(
-        "INSERT INTO items (obra_id, nombre, descripcion, tag_equipo, fecha_inicio, fecha_inicio_plan, fecha_fin_plan, estado, observaciones) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', ?)",
-        (obra_id, nombre, descripcion, tag_equipo, fecha_inicio, fecha_inicio_plan, fecha_fin_plan, observaciones),
+        "INSERT INTO items (obra_id, nombre, descripcion, tag_equipo, fecha_inicio, fecha_inicio_plan, fecha_fin_plan, estado, observaciones, orden) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, (SELECT COALESCE(MAX(orden), 0) + 1 FROM items WHERE obra_id = ?))",
+        (obra_id, nombre, descripcion, tag_equipo, fecha_inicio, fecha_inicio_plan, fecha_fin_plan, observaciones, obra_id),
     )
     crear_personal_default(db, cur.lastrowid)
     db.commit()
     db.close()
     flash(f"Ítem '{nombre}' agregado.", "success")
     return redirect(url_for("cosesa_obra_detail", obra_id=obra_id))
+
+
+@app.route("/cosesa/obras/<int:obra_id>/orden-items", methods=["POST"])
+@cosesa_required
+def guardar_orden_items(obra_id):
+    """Guarda el orden manual de las filas del cronograma (arrastrar y soltar).
+    Recibe {"orden": [id_item, id_item, ...]} con los ítems en el orden deseado."""
+    data = request.get_json(silent=True) or {}
+    orden = data.get("orden")
+    if not isinstance(orden, list):
+        return jsonify({"ok": False, "error": "Formato inválido"}), 400
+    try:
+        orden = [int(x) for x in orden]
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Formato inválido"}), 400
+    db = get_db()
+    ids_obra = {r["id"] for r in db.execute("SELECT id FROM items WHERE obra_id = ?", (obra_id,)).fetchall()}
+    if not ids_obra:
+        db.close()
+        abort(404)
+    if len(set(orden)) != len(orden) or not set(orden) <= ids_obra:
+        db.close()
+        return jsonify({"ok": False, "error": "Los ítems no pertenecen a la obra"}), 400
+    # Los ítems que no vinieron en la lista (por si se cargó uno nuevo mientras
+    # se arrastraba) quedan al final, en su orden actual.
+    resto = [r["id"] for r in db.execute(
+        "SELECT id FROM items WHERE obra_id = ? ORDER BY orden, creado_en, id", (obra_id,)).fetchall()
+        if r["id"] not in set(orden)]
+    for pos, item_id in enumerate(orden + resto, start=1):
+        db.execute("UPDATE items SET orden = ? WHERE id = ? AND obra_id = ?", (pos, item_id, obra_id))
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
 
 
 @app.route("/cosesa/obras/<int:obra_id>/plantilla-cronograma.xlsx")
@@ -977,7 +1010,7 @@ def descargar_plantilla_cronograma(obra_id):
     if obra is None:
         abort(404)
     items_existentes = db.execute(
-        "SELECT * FROM items WHERE obra_id = ? ORDER BY creado_en", (obra_id,)
+        "SELECT * FROM items WHERE obra_id = ? ORDER BY orden, creado_en, id", (obra_id,)
     ).fetchall()
     db.close()
     buf = generar_plantilla_cronograma(items_existentes)
@@ -996,7 +1029,7 @@ def descargar_plantilla_reales(obra_id):
     if obra is None:
         abort(404)
     items_existentes = db.execute(
-        "SELECT * FROM items WHERE obra_id = ? ORDER BY creado_en", (obra_id,)
+        "SELECT * FROM items WHERE obra_id = ? ORDER BY orden, creado_en, id", (obra_id,)
     ).fetchall()
     demoras_por_item = {}
     for it in items_existentes:
@@ -1052,9 +1085,9 @@ def importar_cronograma_excel(obra_id):
             actualizados += 1
         else:
             cur = db.execute(
-                "INSERT INTO items (obra_id, nombre, descripcion, tag_equipo, fecha_inicio_plan, fecha_fin_plan, estado) "
-                "VALUES (?,?,?,?,?,?,'pendiente')",
-                (obra_id, t["nombre"], t["descripcion"], t["tag"], t["fecha_inicio_plan"], t["fecha_fin_plan"]),
+                "INSERT INTO items (obra_id, nombre, descripcion, tag_equipo, fecha_inicio_plan, fecha_fin_plan, estado, orden) "
+                "VALUES (?,?,?,?,?,?,'pendiente', (SELECT COALESCE(MAX(orden), 0) + 1 FROM items WHERE obra_id = ?))",
+                (obra_id, t["nombre"], t["descripcion"], t["tag"], t["fecha_inicio_plan"], t["fecha_fin_plan"], obra_id),
             )
             crear_personal_default(db, cur.lastrowid)
             if t["tag"]:
@@ -1845,7 +1878,7 @@ def cliente_obra_detail(obra_id):
     user = get_current_user()
     db = get_db()
     obra = _check_obra_asignada(db, obra_id, user["id"])
-    items = db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY creado_en", (obra_id,)).fetchall()
+    items = db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY orden, creado_en, id", (obra_id,)).fetchall()
     gantt_html, curve_html, carga_plan_html, carga_real_html = build_obra_charts(db, items)
     certificados = db.execute(
         "SELECT * FROM certificados WHERE obra_id = ? ORDER BY subida_en DESC", (obra_id,)
@@ -1910,7 +1943,7 @@ def reporte_obra(obra_id):
     ).fetchone()
     if obra is None or not _puede_ver_obra(db, user, obra):
         abort(403)
-    items = db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY creado_en", (obra_id,)).fetchall()
+    items = db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY orden, creado_en, id", (obra_id,)).fetchall()
     gantt_html, curve_html, carga_plan_html, carga_real_html = build_obra_charts(db, items)
     items_data = []
     for item in items:
@@ -2074,7 +2107,7 @@ def certificacion_obra_pdf(obra_id):
     if obra is None:
         db.close()
         abort(404)
-    items = db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY creado_en, id", (obra_id,)).fetchall()
+    items = db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY orden, creado_en, id", (obra_id,)).fetchall()
     secciones = []  # (item, [rutas])
     for it in items:
         docs = db.execute(

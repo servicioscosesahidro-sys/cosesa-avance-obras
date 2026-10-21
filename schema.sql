@@ -62,6 +62,7 @@ CREATE TABLE items (
     horas_maquina REAL NOT NULL DEFAULT 0,
     observaciones TEXT,
     pausado_en TEXT,               -- si no es NULL, el ítem está pausado desde esa fecha/hora
+    orden INTEGER NOT NULL DEFAULT 0, -- posición manual del ítem en la obra (arrastrando filas del cronograma)
     creado_en TEXT DEFAULT (datetime('now'))
 );
 

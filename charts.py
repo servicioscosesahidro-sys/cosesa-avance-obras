@@ -30,6 +30,80 @@ def _fmt(d):
 # Diagrama de Gantt
 # ---------------------------------------------------------------------------
 
+# Reordenar filas del cronograma arrastrando (solo en la ficha de la obra para COSESA).
+_GANTT_DRAG_JS = '''<script>
+(function () {
+  var id = "__ID__", obraId = __OBRA__, rowH = __ROWH__;
+  var svgEl = document.getElementById(id + "-svg"); if (!svgEl) return;
+  var msg = document.getElementById(id + "-ordenmsg");
+  var rows = Array.prototype.slice.call(svgEl.querySelectorAll(".gantt-row"));
+  var order = rows.slice();
+  var drag = null, msgTimer = null;
+  rows.forEach(function (r) { r.style.transition = "transform .15s ease"; });
+  function setMsg(t, keep) {
+    if (!msg) return; msg.textContent = t; clearTimeout(msgTimer);
+    if (!keep) msgTimer = setTimeout(function () { msg.textContent = ""; }, 2500);
+  }
+  function svgY(ev) {
+    var pt = svgEl.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+    return pt.matrixTransform(svgEl.getScreenCTM().inverse()).y;
+  }
+  function home(r) { return parseInt(r.getAttribute("data-i"), 10); }
+  function place(r, pos) { r.style.transform = "translateY(" + ((pos - home(r)) * rowH) + "px)"; }
+  function save() {
+    var ids = order.map(function (r) { return parseInt(r.getAttribute("data-id"), 10); });
+    setMsg("Guardando orden…", true);
+    fetch("/cosesa/obras/" + obraId + "/orden-items", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orden: ids })
+    }).then(function (r) { return r.json().then(function (j) { return r.ok && j.ok; }); })
+      .then(function (ok) { setMsg(ok ? "Orden guardado ✓" : "No se pudo guardar el orden", !ok); })
+      .catch(function () { setMsg("No se pudo guardar el orden", true); });
+  }
+  rows.forEach(function (row) {
+    var grip = row.querySelector(".gantt-grip"); if (!grip) return;
+    grip.addEventListener("pointerdown", function (ev) {
+      if (ev.button !== undefined && ev.button !== 0) return;
+      ev.preventDefault();
+      try { grip.setPointerCapture(ev.pointerId); } catch (e) {}
+      var i = order.indexOf(row);
+      drag = { row: row, i: i, startY: svgY(ev), target: i };
+      row.style.transition = "none"; row.style.opacity = ".85";
+      grip.style.cursor = "grabbing";
+    });
+    grip.addEventListener("pointermove", function (ev) {
+      if (!drag || drag.row !== row) return;
+      var dy = svgY(ev) - drag.startY;
+      dy = Math.max(-drag.i * rowH, Math.min((order.length - 1 - drag.i) * rowH, dy));
+      var t = Math.max(0, Math.min(order.length - 1, Math.round(drag.i + dy / rowH)));
+      drag.target = t;
+      row.style.transform = "translateY(" + (((drag.i - home(row)) * rowH) + dy) + "px)";
+      order.forEach(function (r, p) {
+        if (r === row) return;
+        var np = p;
+        if (drag.i < t && p > drag.i && p <= t) np = p - 1;
+        else if (drag.i > t && p >= t && p < drag.i) np = p + 1;
+        place(r, np);
+      });
+    });
+    function end(ev) {
+      if (!drag || drag.row !== row) return;
+      var d = drag; drag = null;
+      try { grip.releasePointerCapture(ev.pointerId); } catch (e) {}
+      grip.style.cursor = "grab";
+      row.style.opacity = ""; row.style.transition = "transform .15s ease";
+      order.splice(d.i, 1); order.splice(d.target, 0, row);
+      order.forEach(function (r, p) { place(r, p); });
+      if (d.target !== d.i) save();
+    }
+    grip.addEventListener("pointerup", end);
+    grip.addEventListener("pointercancel", end);
+  });
+})();
+</script>'''
+
+
 def gantt_svg(items_con_demoras, width=880, interactive=False):
     """Una fila por ítem. Barra clara = cronograma planificado.
     Barra azul = avance real (ancho proporcional al % de avance dentro del
@@ -144,8 +218,11 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
     svg.append(f'<text x="{today_x:.1f}" y="{y_hoy}" font-size="10" font-weight="600" fill="#c0392b" text-anchor="middle">hoy</text>')
 
     y = top_pad
-    for d in items_con_demoras:
+    for fila_idx, d in enumerate(items_con_demoras):
         it = d["item"]
+        # Cada fila (nombre, botones, barras, % de avance) va dentro de su propio
+        # grupo <g>, así se puede arrastrar completa para reordenarla.
+        svg.append(f'<g class="gantt-row" data-id="{it["id"]}" data-i="{fila_idx}">')
         nombre = it["nombre"]
         tag = (it["tag_equipo"] or "").strip() if "tag_equipo" in it.keys() else ""
         plan_ini, plan_fin = _parse(it["fecha_inicio_plan"]), _parse(it["fecha_fin_plan"])
@@ -178,6 +255,17 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
                     f'{nombre_corto}</text></a>'
                 )
             btn_y = y + row_h / 2
+            # Manija para arrastrar la fila (6 puntitos) + zona de agarre.
+            svg.append(
+                f'<g class="gantt-grip" style="cursor:grab;touch-action:none;">'
+                f'<title>Arrastrá para reordenar esta fila</title>'
+                f'<rect x="243" y="{y + 3:.1f}" width="24" height="{row_h - 6}" rx="4" fill="transparent"/>'
+                + ''.join(
+                    f'<circle cx="{gx}" cy="{btn_y + gy:.1f}" r="1.6" fill="#8a949c"/>'
+                    for gx in (251, 259) for gy in (-6, 0, 6)
+                )
+                + '</g>'
+            )
             svg.append(
                 f'<g style="cursor:pointer;" onclick="ajustarAvanceObra({it["id"]}, -10)">'
                 f'<circle cx="205" cy="{btn_y:.1f}" r="10" fill="#eef2f5" stroke="#c7d0d6"/>'
@@ -239,6 +327,7 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
         else:
             svg.append(f'<text x="{chart_x0}" y="{y + row_h/2 + 4}" font-size="11" fill="#9aa4ab">Pendiente de inicio</text>')
 
+        svg.append('</g>')
         y += row_h
 
     svg.append('</svg>')
@@ -263,7 +352,12 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
         f'<button type="button" class="btn btn-sm btn-outline" onclick="gnttZoom(\'{chart_id}\', 1)">+</button>'
         f'<button type="button" class="btn btn-sm btn-outline" onclick="gnttZoom(\'{chart_id}\', 0)">Restablecer</button>'
         f'<span class="subtitle" style="margin:0;">(o hacé scroll horizontal una vez que hagas zoom)</span>'
-        f'</div>'
+        + (
+            f'<span class="subtitle" style="margin:0 0 0 auto;">Arrastrá la manija ⋮⋮ de cada fila para reordenarla '
+            f'<b id="{chart_id}-ordenmsg" style="margin-left:6px;"></b></span>'
+            if interactive else ''
+        )
+        + f'</div>'
         f'<div style="overflow-x:auto;">{"".join(svg)}</div>'
         f'<script>'
         f'(function(){{'
@@ -295,6 +389,8 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
         f'}})();'
         f'</script>'
     )
+    if interactive and items:
+        toolbar += _GANTT_DRAG_JS.replace("__ID__", chart_id).replace("__OBRA__", str(int(items[0]["obra_id"]))).replace("__ROWH__", str(row_h))
     return toolbar + legend
 
 

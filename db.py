@@ -39,6 +39,16 @@ def _migrate_schema(conn):
         conn.execute("ALTER TABLE items ADD COLUMN pausado_en TEXT")
         changed = True
 
+    if not _column_exists(conn, "items", "orden"):
+        conn.execute("ALTER TABLE items ADD COLUMN orden INTEGER NOT NULL DEFAULT 0")
+        # Conserva el orden actual (por fecha de carga) dentro de cada obra.
+        for (obra_id,) in conn.execute("SELECT DISTINCT obra_id FROM items").fetchall():
+            ids = [r[0] for r in conn.execute(
+                "SELECT id FROM items WHERE obra_id = ? ORDER BY creado_en, id", (obra_id,)).fetchall()]
+            for pos, item_id in enumerate(ids, start=1):
+                conn.execute("UPDATE items SET orden = ? WHERE id = ?", (pos, item_id))
+        changed = True
+
     if _column_is_not_null(conn, "demoras", "fecha_fin"):
         # SQLite no permite quitar un NOT NULL con ALTER TABLE: se recrea la
         # tabla con el nuevo esquema y se copian los datos existentes.
