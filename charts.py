@@ -465,12 +465,16 @@ def curve_svg(items_con_avances, width=880):
         return "<p class='subtitle'>Todavía no cargaste fechas de inicio/fin planificadas para los ítems: no se puede trazar el cronograma comparativo.</p>"
 
     chart_x0, chart_x1 = 50, width - 20
-    chart_y0, chart_y1 = 20, 220
+    chart_y0, chart_y1 = 44, 244
     chart_w = chart_x1 - chart_x0
     chart_h = chart_y1 - chart_y0
+    span = (end - start).total_seconds() or 1
+
+    def xt(dt):
+        return chart_x0 + ((dt - start).total_seconds() / span) * chart_w
 
     def x(i):
-        return chart_x0 + (i / (len(days) - 1 if len(days) > 1 else 1)) * chart_w
+        return xt(days[i])
 
     def y(v):
         return chart_y1 - (v / 100) * chart_h
@@ -489,9 +493,44 @@ def curve_svg(items_con_avances, width=880):
         svg.append(f'<polyline points="{path}" fill="none" stroke="#9aa4ab" stroke-width="2" stroke-dasharray="6,4"/>')
 
     # línea real (sólida, azul)
-    pts2 = [(x(i), y(v)) for i, v in enumerate(actual_points)]
+    pts2 = [(x(i), y(v)) for i, v in enumerate(actual_points) if days[i] <= today]
+    if not pts2 or pts2[-1][0] < xt(today) - 0.5:
+        pts2.append((xt(today), y(sum(_actual_pct_series(d["avances"], today) for d in items_con_avances) / max(1, len(items_con_avances)))))
     path2 = " ".join(f"{px:.1f},{py:.1f}" for px, py in pts2)
     svg.append(f'<polyline points="{path2}" fill="none" stroke="#33456b" stroke-width="2.5"/>')
+
+    # líneas verticales: inicio de obra, fin de obra y día en curso
+    plan_ini_all = [_parse(d["item"]["fecha_inicio_plan"]) for d in items_con_avances]
+    plan_fin_all = [_parse(d["item"]["fecha_fin_plan"]) for d in items_con_avances]
+    plan_ini_all = [v for v in plan_ini_all if v]
+    plan_fin_all = [v for v in plan_fin_all if v]
+    if not plan_ini_all:
+        plan_ini_all = [v for v in (_parse(d["item"]["fecha_inicio"]) for d in items_con_avances) if v]
+    obra_ini = min(plan_ini_all) if plan_ini_all else None
+    obra_fin = max(plan_fin_all) if plan_fin_all else None
+    pct_hoy = (sum(_actual_pct_series(d["avances"], today) for d in items_con_avances)
+               / len(items_con_avances)) if items_con_avances else 0
+
+    def anchor(px):
+        if px < chart_x0 + 70:
+            return "start"
+        if px > chart_x1 - 70:
+            return "end"
+        return "middle"
+
+    marcas = []
+    if obra_ini:
+        marcas.append((obra_ini, "#2e7d4f", f"Inicio {obra_ini.strftime('%d/%m')}", 14, "5,4"))
+    if obra_fin:
+        marcas.append((obra_fin, "#c0392b", f"Fin {obra_fin.strftime('%d/%m')}", 14, "5,4"))
+    marcas.append((today, "#e0a100", f"Hoy {today.strftime('%d/%m')} · {pct_hoy:.0f}%", 32, ""))
+    for dt, color, texto, ty, dash in marcas:
+        px = xt(dt)
+        dash_attr = f' stroke-dasharray="{dash}"' if dash else ""
+        svg.append(f'<line x1="{px:.1f}" y1="{ty+4}" x2="{px:.1f}" y2="{chart_y1}" stroke="{color}" stroke-width="2"{dash_attr}/>')
+        svg.append(f'<text x="{px:.1f}" y="{ty}" font-size="11" font-weight="700" fill="{color}" text-anchor="{anchor(px)}">{texto}</text>')
+    px_hoy = xt(today)
+    svg.append(f'<circle cx="{px_hoy:.1f}" cy="{y(pct_hoy):.1f}" r="5" fill="#e0a100" stroke="white" stroke-width="1.5"/>')
 
     # eje de fechas
     svg.append(f'<text x="{chart_x0}" y="{chart_y1+18}" font-size="11" fill="#6b7580">{_fmt(start)}</text>')
