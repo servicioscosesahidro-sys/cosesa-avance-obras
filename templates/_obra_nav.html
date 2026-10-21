@@ -1,7 +1,7 @@
 {# Barra compacta de la obra: se muestra en todas las subsecciones. Variables: nav_id, nav_nombre, nav_activo #}
 <div class="obra-nav no-print" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:4px 0 14px;padding:8px 10px;background:white;border:1px solid var(--cosesa-border);border-radius:var(--radius);">
   <a class="btn btn-sm {{ 'btn-dark' if nav_activo == 'obra' else 'btn-outline' }}" href="{{ url_for('cosesa_obra_detail', obra_id=nav_id) }}" title="Volver a la obra">&larr; {{ nav_nombre }}</a>
-  <a class="btn btn-sm btn-outline" target="_blank" href="{{ url_for('reporte_obra', obra_id=nav_id) }}">Reporte cliente</a>
+  <a class="btn btn-sm btn-outline" href="{{ url_for('reporte_cliente_opciones', obra_id=nav_id) }}">Reporte cliente</a>
   <a class="btn btn-sm btn-outline" href="{{ url_for('certificacion_obra_pdf', obra_id=nav_id) }}">Reporte de obra</a>
   <a class="btn btn-sm {{ 'btn-dark' if nav_activo == 'bitacora' else 'btn-outline' }}" href="{{ url_for('obra_bitacora', obra_id=nav_id) }}">Bitácora</a>
   <a class="btn btn-sm {{ 'btn-dark' if nav_activo == 'mantenimiento' else 'btn-outline' }}" href="{{ url_for('obra_mantenimiento', obra_id=nav_id) }}">Mantenimiento</a>

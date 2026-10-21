@@ -14,7 +14,7 @@
 <div class="card">
   <h2>Avance: {{ item['avance_pct'] }}%</h2>
   <div class="progress-bar-bg" style="height:16px;"><div class="progress-bar-fill" style="width:{{ item['avance_pct'] }}%;"></div></div>
-  {% if item['observaciones'] %}
+  {% if item['observaciones'] and 'item_observaciones' in p %}
   <p style="margin-top:14px;"><strong>Observaciones:</strong> {{ item['observaciones'] }}</p>
   {% endif %}
 </div>
@@ -64,6 +64,7 @@
 </div>
 {% endif %}
 
+{% if 'item_antes_despues' in p or 'item_progreso' in p %}
 <div class="card">
   <h2>Fotos</h2>
   {% if fotos %}
@@ -80,6 +81,9 @@
   {% endif %}
 </div>
 
+{% endif %}
+
+{% if 'item_avances' in p %}
 <div class="card">
   <h2>Seguimiento día a día</h2>
   {% if avances %}
@@ -95,4 +99,5 @@
   <p class="subtitle">Todavía no hay avances registrados.</p>
   {% endif %}
 </div>
+{% endif %}
 {% endblock %}

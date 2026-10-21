@@ -1,0 +1,86 @@
+{# Secciones adicionales de solo lectura. Usa: p, tareas, tot, demoras, total_dem_*, aprendizajes, bitacora, mantenimientos #}
+{% if 'horas' in p and tareas is defined %}
+<div class="card">
+  <h2 style="margin-top:0;">Horas hombre y horas bomba por tarea</h2>
+  <table>
+    <tr><th>Tarea / equipo</th><th>Estado</th><th>Hs. trabajo</th><th>Día</th><th>Noche</th><th>Hs. hombre</th><th>Hs. bomba</th></tr>
+    {% for t in tareas %}
+    <tr><td>{{ t['nombre'] }}{% if t['tag'] %} ({{ t['tag'] }}){% endif %}</td><td>{{ t['estado'] }}</td>
+      <td>{{ t['trabajo'] }}</td><td>{{ t['dia'] }}</td><td>{{ t['noche'] }}</td><td>{{ t['hh'] }}</td><td>{{ t['hm'] }}</td></tr>
+    {% endfor %}
+    <tr><td colspan="2"><strong>TOTAL</strong></td><td><strong>{{ tot['trabajo'] }}</strong></td><td><strong>{{ tot['dia'] }}</strong></td><td><strong>{{ tot['noche'] }}</strong></td><td><strong>{{ tot['hh'] }}</strong></td><td><strong>{{ tot['hm'] }}</strong></td></tr>
+  </table>
+  <p class="subtitle">Las horas de trabajo son netas (descontadas las demoras).</p>
+</div>
+{% endif %}
+
+{% if 'demoras' in p and demoras is defined %}
+<div class="card">
+  <h2 style="margin-top:0;">Demoras</h2>
+  {% if demoras %}
+  <table>
+    <tr><th>N°</th><th>Tarea / equipo</th><th>Inicio</th><th>Fin</th><th>Motivo</th><th>Duración</th><th>Horas</th></tr>
+    {% for d in demoras %}
+    <tr><td>{{ loop.index }}</td><td>{{ d['item'] }}{% if d['tag'] %} ({{ d['tag'] }}){% endif %}</td>
+      <td>{{ d['inicio']|fmtdt }}</td><td>{% if d['abierta'] %}<em>En curso</em>{% else %}{{ d['fin']|fmtdt }}{% endif %}</td>
+      <td>{{ d['motivo'] or '—' }}</td><td>{{ d['dur'] }}</td><td>{{ d['horas'] }}</td></tr>
+    {% endfor %}
+    <tr><td colspan="5" style="text-align:right;"><strong>TOTAL HORAS PERDIDAS</strong></td><td><strong>{{ total_dem_dur }}</strong></td><td><strong>{{ total_dem_horas }} hs</strong></td></tr>
+  </table>
+  {% else %}<p class="subtitle">No se registraron demoras en esta obra.</p>{% endif %}
+</div>
+{% endif %}
+
+{% if 'aprendizajes' in p and aprendizajes is defined %}
+<div class="card">
+  <h2 style="margin-top:0;">Aprendizajes de la obra</h2>
+  {% if aprendizajes %}
+  <table>
+    <tr><th>N°</th><th>Aprendizaje</th><th>Lo mencionó</th><th>Fecha</th></tr>
+    {% for a in aprendizajes %}
+    <tr><td>{{ loop.index }}</td><td style="white-space:pre-wrap;">{{ a['texto'] }}</td><td>{{ a['autor'] or '—' }}</td><td>{{ a['fecha'] or '' }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="subtitle">No se registraron aprendizajes.</p>{% endif %}
+</div>
+{% endif %}
+
+{% if 'bitacora' in p and bitacora is defined %}
+<div class="card">
+  <h2 style="margin-top:0;">Bitácora de la obra</h2>
+  {% if bitacora %}
+  {% for x in bitacora %}
+  <div style="border-top:1px solid #dde;padding:8px 0;">
+    <div style="font-weight:700;color:#33456b;">{{ x['e']['fecha_hora']|fmtdt }} · {{ 'Turno noche' if x['e']['turno'] == 'noche' else 'Turno día' }}{% if x['e']['usuario_nombre'] %} · {{ x['e']['usuario_nombre'] }}{% endif %}</div>
+    {% for b in x['bloques'] %}
+      {% if b['tipo'] == 'texto' %}
+      <p style="white-space:pre-wrap;margin:5px 0;">{{ b['texto'] }}</p>
+      {% else %}
+      <figure style="margin:6px 0;text-align:center;"><img src="{{ url_for('uploaded_file', filename=b['archivo']) }}" style="max-width:100%;max-height:95mm;">{% if b['texto'] %}<figcaption class="subtitle">{{ b['texto'] }}</figcaption>{% endif %}</figure>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% endfor %}
+  {% else %}<p class="subtitle">No hay registros en la bitácora.</p>{% endif %}
+</div>
+{% endif %}
+
+{% if 'mantenimiento' in p and mantenimientos is defined %}
+<div class="card">
+  <h2 style="margin-top:0;">Mantenimiento de planta</h2>
+  {% for estado, titulo in (('realizado','Realizados'),('pendiente','Pendientes de reparar')) %}
+  <h3>{{ titulo }}</h3>
+  {% set lista = mantenimientos|selectattr('m.estado','equalto',estado)|list %}
+  {% for x in lista %}
+  {% set m = x['m'] %}
+  <div style="border-top:1px solid #dde;padding:8px 0;">
+    <div style="font-weight:700;color:#33456b;">{{ loop.index }}. {{ m['equipo'] or 'Sin equipo indicado' }}</div>
+    <div class="subtitle">{{ m['fecha']|fmtdt if m['fecha'] else '' }}{% if m['responsable'] %} · Responsable: {{ m['responsable'] }}{% endif %}{% if m['prioridad'] %} · Prioridad: {{ m['prioridad'] }}{% endif %}</div>
+    <p style="white-space:pre-wrap;">{{ m['descripcion'] }}</p>
+    {% if x['fotos'] %}<div class="photo-grid">{% for f in x['fotos'] %}<figure><img src="{{ url_for('uploaded_file', filename=f['archivo']) }}"></figure>{% endfor %}</div>{% endif %}
+  </div>
+  {% else %}<p class="subtitle">Sin registros.</p>
+  {% endfor %}
+  {% endfor %}
+</div>
+{% endif %}

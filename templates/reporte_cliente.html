@@ -8,7 +8,7 @@
 <body style="background:white;">
 <div class="container">
   <div class="print-btn-bar no-print" style="text-align:right;">
-    <a class="btn" href="{{ url_for('reporte_obra_pdf', obra_id=obra['id']) }}">Descargar PDF</a>
+    <a class="btn" href="{{ url_for('reporte_obra_pdf', obra_id=obra['id'], elegido=1, inc=inc_list) }}">Descargar PDF</a>
     <button class="btn btn-outline" onclick="window.print()">Imprimir</button>
   </div>
 
@@ -39,18 +39,29 @@
     </div>
   </div>
 
+  {% if 'cronograma' in p %}
   <div class="card">
     <h2 style="margin-top:0;">Cronograma de la obra</h2>
     <p class="subtitle">Barra clara: cronograma planificado. Barra azul: avance real, con el % alcanzado.</p>
     {{ gantt_html|safe }}
   </div>
+  {% endif %}
 
+  {% if 'curva' in p %}
   <div class="card">
     <h2 style="margin-top:0;">Avance planificado vs. avance real</h2>
     {{ curve_html|safe }}
   </div>
+  {% endif %}
 
-  {% if certificados %}
+  {% if 'carga' in p %}
+  <div class="grid grid-2">
+    <div class="card"><h2 style="margin-top:0;">Carga diaria planificada</h2>{{ carga_plan_html|safe }}</div>
+    <div class="card"><h2 style="margin-top:0;">Carga diaria real</h2>{{ carga_real_html|safe }}</div>
+  </div>
+  {% endif %}
+
+  {% if certificados and 'certificados' in p %}
   <div class="card">
     <h2 style="margin-top:0;">Certificados de obra</h2>
     <p class="subtitle">Tablas de certificación firmadas por el cliente. Podés descargar una copia.</p>
@@ -67,6 +78,9 @@
   </div>
   {% endif %}
 
+  {% include "_secciones_extra.html" %}
+
+  {% if 'items' in p %}
   <h2>Detalle por ítem / equipo</h2>
   {% for d in items_data %}
   {% set item = d['item'] %}
@@ -82,11 +96,11 @@
       Fin: {{ item['fecha_fin']|fmtdt }}
     </p>
 
-    {% if item['observaciones'] %}
+    {% if item['observaciones'] and 'item_observaciones' in p %}
     <p><strong>Observaciones:</strong> {{ item['observaciones'] }}</p>
     {% endif %}
 
-    {% if d['checklist'] %}
+    {% if d['checklist'] and 'item_checklist' in p %}
     <h4 style="margin-bottom:6px;">Checklist de certificación de lavado</h4>
     <p class="subtitle">Reporte N° {{ d['checklist']['numero_reporte'] }} · {{ d['checklist']['tipo_servicio'] }}</p>
     <table>
@@ -127,7 +141,7 @@
     {% endif %}
     {% endif %}
 
-    {% if d['fotos_antes'] or d['fotos_despues'] %}
+    {% if (d['fotos_antes'] or d['fotos_despues']) and 'item_antes_despues' in p %}
     <div class="grid grid-2">
       {% if d['fotos_antes'] %}
       <div>
@@ -152,7 +166,7 @@
     </div>
     {% endif %}
 
-    {% if d['fotos_progreso'] %}
+    {% if d['fotos_progreso'] and 'item_progreso' in p %}
     <h4 style="margin-bottom:6px;">Fotos de avance durante el trabajo</h4>
     <div class="photo-grid">
       {% for f in d['fotos_progreso'] %}
@@ -161,7 +175,7 @@
     </div>
     {% endif %}
 
-    {% if d['avances'] %}
+    {% if d['avances'] and 'item_avances' in p %}
     <h4>Cronograma de avance</h4>
     <table>
       <tr><th>Fecha</th><th>Avance</th><th>Comentario</th></tr>
@@ -172,6 +186,7 @@
     {% endif %}
   </div>
   {% endfor %}
+  {% endif %}
 
   <p class="subtitle" style="text-align:center;margin-top:30px;">COSESA Servicios Industriales · Especialistas en Hidrocinética</p>
 </div>

@@ -40,6 +40,10 @@
     </div>
     <p class="subtitle">Si cambiás de cliente, revisá qué obras quedan marcadas: solo se guardan las que pertenecen al cliente seleccionado.</p>
 
+    <label style="margin-top:14px;">Información que puede ver en la app</label>
+    {% set chk_id = 'chk-permisos-editar' %}
+    {% include "_permisos_checklist.html" %}
+
     <div style="display:flex;gap:10px;margin-top:10px;">
       <button class="btn btn-dark" type="submit">Guardar cambios</button>
       <a class="btn btn-outline" href="{{ url_for('cosesa_usuarios') }}">Cancelar</a>

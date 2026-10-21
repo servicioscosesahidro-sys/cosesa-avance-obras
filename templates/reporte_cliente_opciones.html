@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Reporte cliente · {{ obra['nombre'] }}{% endblock %}
+{% block back_link %}
+<a class="btn btn-outline btn-sm btn-back no-print" href="{{ url_for('cosesa_obra_detail', obra_id=obra['id']) }}">&larr; Volver</a>
+{% endblock %}
+{% block content %}
+<div class="breadcrumb"><a href="{{ url_for('cosesa_dashboard') }}">Panel COSESA</a> / <a href="{{ url_for('cosesa_obra_detail', obra_id=obra['id']) }}">{{ obra['nombre'] }}</a> / Reporte cliente</div>
+<h1>Reporte cliente</h1>
+<p class="subtitle">Tildá la información que querés incluir en el reporte de <strong>{{ obra['nombre'] }}</strong>.</p>
+<div class="card" style="max-width:700px;">
+  <form method="get" action="{{ url_for('reporte_obra', obra_id=obra['id']) }}" target="_blank">
+    <input type="hidden" name="elegido" value="1">
+    {% set chk_id = 'chk-reporte' %}{% set chk_name = 'inc' %}
+    {% include "_permisos_checklist.html" %}
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn btn-dark" type="submit">Ver reporte</button>
+      <button class="btn" type="submit" formaction="{{ url_for('reporte_obra_pdf', obra_id=obra['id']) }}" formtarget="_self">Descargar PDF</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

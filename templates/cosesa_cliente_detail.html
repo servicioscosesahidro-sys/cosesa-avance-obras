@@ -97,6 +97,9 @@
       {% else %}
         <p class="subtitle">Este cliente todavía no tiene obras cargadas: creá una obra primero.</p>
       {% endif %}
+      <label style="margin-top:14px;">Información que puede ver en la app</label>
+      {% set permisos = SECCIONES_DEFAULT %}{% set chk_id = 'chk-permisos-acceso' %}
+      {% include "_permisos_checklist.html" %}
       <button class="btn btn-dark" type="submit" style="margin-top:10px;">Crear acceso</button>
     </form>
     {% endif %}

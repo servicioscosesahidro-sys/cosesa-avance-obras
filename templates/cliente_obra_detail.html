@@ -13,17 +13,23 @@
   <a class="btn btn-outline" target="_blank" href="{{ url_for('reporte_obra', obra_id=obra['id']) }}">Ver reporte completo</a>
 </div>
 
+{% if 'cronograma' in p %}
 <div class="card">
   <h2>Cronograma de la obra</h2>
   <p class="subtitle">Barra clara: cronograma planificado. Barra azul: avance real, con el % alcanzado.</p>
   {{ gantt_html|safe }}
 </div>
 
+{% endif %}
+
+{% if 'curva' in p %}
 <div class="card">
   <h2>Avance planificado vs. avance real</h2>
   {{ curve_html|safe }}
 </div>
+{% endif %}
 
+{% if 'carga' in p %}
 <div class="grid grid-2">
   <div class="card">
     <h2>Carga diaria planificada</h2>
@@ -36,6 +42,7 @@
     {{ carga_real_html|safe }}
   </div>
 </div>
+{% endif %}
 
 {% if certificados %}
 <div class="card">
@@ -54,6 +61,9 @@
 </div>
 {% endif %}
 
+{% include "_secciones_extra.html" %}
+
+{% if 'items' in p %}
 <div class="card">
   <h2>Ítems / equipos</h2>
   {% if items %}
@@ -75,4 +85,5 @@
   <p class="subtitle">Todavía no hay ítems cargados para esta obra.</p>
   {% endif %}
 </div>
+{% endif %}
 {% endblock %}

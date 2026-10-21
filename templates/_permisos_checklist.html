@@ -1,0 +1,13 @@
+{# Checklist de secciones. Variables: permisos (set de claves tildadas), chk_id (id único) #}
+<div class="checkbox-list" id="{{ chk_id }}" style="max-height:none;">
+  <div style="margin-bottom:6px;">
+    <button type="button" class="btn btn-outline btn-sm" onclick="document.querySelectorAll('#{{ chk_id }} input[type=checkbox]').forEach(c=>c.checked=true)">Marcar todo</button>
+    <button type="button" class="btn btn-outline btn-sm" onclick="document.querySelectorAll('#{{ chk_id }} input[type=checkbox]').forEach(c=>c.checked=false)">Desmarcar todo</button>
+  </div>
+  {% for grupo, lista in SECCIONES_GRUPOS.items() %}
+  <div style="font-weight:700;margin:10px 0 4px;">{{ grupo }}</div>
+  {% for clave, etiqueta in lista %}
+  <label class="check-inline" style="display:block;"><input type="checkbox" name="{{ chk_name|default('secciones') }}" value="{{ clave }}" {{ 'checked' if clave in permisos else '' }}> {{ etiqueta }}</label>
+  {% endfor %}
+  {% endfor %}
+</div>
