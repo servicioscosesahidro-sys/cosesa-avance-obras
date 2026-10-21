@@ -1204,12 +1204,6 @@ def importar_cronograma_excel(obra_id):
         existente_id = clave_a_id.get((tagk, norm_clave(t["nombre"])))
         if existente_id in usados:
             existente_id = None
-        if not existente_id and tagk and filas_por_tag.get(tagk) == 1:
-            # Una sola fila con ese tag y una sola tarea con ese tag en la obra:
-            # se asume que es la misma y se le cambió el nombre.
-            candidatos = por_tag.get(tagk, [])
-            if len(candidatos) == 1 and candidatos[0] not in usados:
-                existente_id = candidatos[0]
         if existente_id:
             db.execute(
                 "UPDATE items SET nombre=?, descripcion=?, fecha_inicio_plan=?, fecha_fin_plan=? WHERE id=?",
