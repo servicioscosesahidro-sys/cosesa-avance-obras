@@ -39,6 +39,10 @@ def _migrate_schema(conn):
         conn.execute("ALTER TABLE items ADD COLUMN pausado_en TEXT")
         changed = True
 
+    if not _column_exists(conn, "usuarios", "secciones"):
+        conn.execute("ALTER TABLE usuarios ADD COLUMN secciones TEXT")
+        changed = True
+
     if not _column_exists(conn, "items", "orden"):
         conn.execute("ALTER TABLE items ADD COLUMN orden INTEGER NOT NULL DEFAULT 0")
         # Conserva el orden actual (por fecha de carga) dentro de cada obra.

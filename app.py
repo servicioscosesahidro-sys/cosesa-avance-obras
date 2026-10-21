@@ -354,6 +354,116 @@ def is_admin(user):
     return user is not None and user["rol"] == "cosesa_admin"
 
 
+# ---------------------------------------------------------------------------
+# Secciones de información (qué ve el cliente / qué lleva el reporte cliente)
+# ---------------------------------------------------------------------------
+
+# (clave, etiqueta, grupo, activa por defecto)
+SECCIONES = [
+    ("cronograma", "Cronograma de la obra (gráfico de barras)", "Obra", True),
+    ("curva", "Curva de avance planificado vs. real", "Obra", True),
+    ("carga", "Carga diaria planificada y real", "Obra", True),
+    ("certificados", "Certificados de obra firmados", "Obra", True),
+    ("demoras", "Demoras (detalle y total de horas perdidas)", "Obra", False),
+    ("horas", "Horas hombre y horas bomba por tarea", "Obra", False),
+    ("aprendizajes", "Aprendizajes de la obra", "Obra", False),
+    ("bitacora", "Bitácora de la obra", "Obra", False),
+    ("mantenimiento", "Mantenimiento de planta", "Obra", False),
+    ("items", "Listado y detalle de ítems / equipos", "Ítems / equipos", True),
+    ("item_observaciones", "Observaciones de cada ítem", "Ítems / equipos", True),
+    ("item_checklist", "Checklist, piezas y documentos firmados", "Ítems / equipos", True),
+    ("item_antes_despues", "Fotos de antes y después", "Ítems / equipos", True),
+    ("item_progreso", "Fotos de avance durante el trabajo", "Ítems / equipos", True),
+    ("item_avances", "Seguimiento día a día (avances con comentarios)", "Ítems / equipos", True),
+]
+SECCIONES_KEYS = [k for k, _l, _g, _d in SECCIONES]
+SECCIONES_DEFAULT = {k for k, _l, _g, d in SECCIONES if d}
+
+
+def parse_secciones(valor):
+    """valor: texto guardado en usuarios.secciones. None => predeterminado."""
+    if valor is None:
+        return set(SECCIONES_DEFAULT)
+    return {x for x in valor.split(",") if x in SECCIONES_KEYS}
+
+
+def secciones_a_texto(claves):
+    return ",".join(k for k in SECCIONES_KEYS if k in set(claves))
+
+
+def secciones_usuario(user):
+    if user is None or user["rol"] in COSESA_ROLES:
+        return set(SECCIONES_KEYS)
+    try:
+        return parse_secciones(user["secciones"])
+    except (KeyError, IndexError):
+        return set(SECCIONES_DEFAULT)
+
+
+def secciones_agrupadas():
+    grupos = {}
+    for k, l, g, d in SECCIONES:
+        grupos.setdefault(g, []).append((k, l))
+    return grupos
+
+
+def datos_extra_obra(db, obra_id, p):
+    """Datos de las secciones demoras / horas / aprendizajes / bitácora /
+    mantenimiento, solo de las que están en el conjunto p."""
+    ex = {}
+    if "horas" in p:
+        items = items_obra_con_horas(db, obra_id)
+        tareas = []
+        tot = {"hh": 0.0, "hm": 0.0, "trabajo": 0.0, "dia": 0.0, "noche": 0.0}
+        for it in items:
+            h = recompute_item_horas(db, it["id"], persistir=False) or {}
+            tareas.append({
+                "nombre": it["nombre"], "tag": it["tag_equipo"], "estado": it["estado"].replace("_", " "),
+                "inicio": it["fecha_inicio"], "fin": it["fecha_fin"],
+                "trabajo": h.get("horas_trabajo", 0), "dia": round(h.get("horas_dia", 0), 2),
+                "noche": round(h.get("horas_noche", 0), 2),
+                "hh": h.get("horas_hombre", 0), "hm": h.get("horas_maquina", 0),
+            })
+            tot["hh"] += h.get("horas_hombre", 0)
+            tot["hm"] += h.get("horas_maquina", 0)
+            tot["trabajo"] += h.get("horas_trabajo", 0)
+            tot["dia"] += h.get("horas_dia", 0)
+            tot["noche"] += h.get("horas_noche", 0)
+        ex["tareas"] = tareas
+        ex["tot"] = {k: round(v, 2) for k, v in tot.items()}
+    if "demoras" in p:
+        filas = db.execute(
+            "SELECT d.*, i.nombre AS item_nombre, i.tag_equipo AS item_tag FROM demoras d "
+            "JOIN items i ON i.id = d.item_id WHERE i.obra_id = ? ORDER BY d.fecha_inicio, d.id",
+            (obra_id,),
+        ).fetchall()
+        demoras, dem_min = [], 0
+        for d in filas:
+            minutos = demora_minutos(d)
+            dem_min += minutos
+            demoras.append({
+                "item": d["item_nombre"], "tag": d["item_tag"], "inicio": d["fecha_inicio"],
+                "fin": d["fecha_fin"], "motivo": d["motivo"], "dur": fmt_duracion(minutos),
+                "horas": round(minutos / 60, 2), "abierta": not d["fecha_fin"],
+            })
+        ex["demoras"] = demoras
+        ex["total_dem_horas"] = round(dem_min / 60, 2)
+        ex["total_dem_dur"] = fmt_duracion(dem_min)
+    if "aprendizajes" in p:
+        ex["aprendizajes"] = get_aprendizajes(db, obra_id)
+    if "bitacora" in p:
+        ex["bitacora"] = get_bitacora(db, obra_id)
+    if "mantenimiento" in p:
+        ex["mantenimientos"] = get_mantenimientos(db, obra_id)
+    return ex
+
+
+@app.context_processor
+def inject_secciones():
+    return {"SECCIONES_GRUPOS": secciones_agrupadas(), "SECCIONES_DEFAULT": SECCIONES_DEFAULT}
+
+
+
 def get_obras_asignadas_ids(db, usuario_id):
     """IDs de las obras que un usuario tipo 'cliente' puede ver."""
     rows = db.execute(
@@ -680,6 +790,7 @@ def editar_usuario_cliente(usuario_id):
         password = request.form.get("password", "").strip()
         cliente_id = request.form.get("cliente_id", type=int)
         obra_ids = [int(x) for x in request.form.getlist("obras") if x.isdigit()]
+        secciones_txt = secciones_a_texto(request.form.getlist("secciones"))
         if not (nombre and username and cliente_id):
             flash("Completá nombre, usuario y cliente.", "error")
             db.close()
@@ -687,13 +798,13 @@ def editar_usuario_cliente(usuario_id):
         try:
             if password:
                 db.execute(
-                    "UPDATE usuarios SET nombre = ?, username = ?, cliente_id = ?, password_hash = ? WHERE id = ?",
-                    (nombre, username, cliente_id, generate_password_hash(password), usuario_id),
+                    "UPDATE usuarios SET nombre = ?, username = ?, cliente_id = ?, secciones = ?, password_hash = ? WHERE id = ?",
+                    (nombre, username, cliente_id, secciones_txt, generate_password_hash(password), usuario_id),
                 )
             else:
                 db.execute(
-                    "UPDATE usuarios SET nombre = ?, username = ?, cliente_id = ? WHERE id = ?",
-                    (nombre, username, cliente_id, usuario_id),
+                    "UPDATE usuarios SET nombre = ?, username = ?, cliente_id = ?, secciones = ? WHERE id = ?",
+                    (nombre, username, cliente_id, secciones_txt, usuario_id),
                 )
             obras_validas = {
                 r["id"] for r in db.execute(
@@ -717,6 +828,7 @@ def editar_usuario_cliente(usuario_id):
     return render_template(
         "editar_usuario_cliente.html", usuario=usuario, clientes=clientes, obras=obras,
         obras_asignadas_ids=obras_asignadas_ids,
+        permisos=parse_secciones(usuario["secciones"]),
     )
 
 
@@ -786,6 +898,7 @@ def crear_usuario_cliente(cliente_id):
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "").strip()
     obra_ids = [int(x) for x in request.form.getlist("obras") if x.isdigit()]
+    secciones_txt = secciones_a_texto(request.form.getlist("secciones"))
     volver = request.form.get("volver") or "cliente"
     destino = (
         url_for("cosesa_usuarios")
@@ -798,9 +911,9 @@ def crear_usuario_cliente(cliente_id):
     db = get_db()
     try:
         cur = db.execute(
-            "INSERT INTO usuarios (nombre, username, password_hash, rol, cliente_id) "
-            "VALUES (?, ?, ?, 'cliente', ?)",
-            (nombre, username, generate_password_hash(password), cliente_id),
+            "INSERT INTO usuarios (nombre, username, password_hash, rol, cliente_id, secciones) "
+            "VALUES (?, ?, ?, 'cliente', ?, ?)",
+            (nombre, username, generate_password_hash(password), cliente_id, secciones_txt),
         )
         usuario_id = cur.lastrowid
         # Solo se asignan obras que efectivamente pertenecen a este cliente.
@@ -1878,16 +1991,18 @@ def cliente_obra_detail(obra_id):
     user = get_current_user()
     db = get_db()
     obra = _check_obra_asignada(db, obra_id, user["id"])
+    p = secciones_usuario(user)
     items = db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY orden, creado_en, id", (obra_id,)).fetchall()
     gantt_html, curve_html, carga_plan_html, carga_real_html = build_obra_charts(db, items)
     certificados = db.execute(
         "SELECT * FROM certificados WHERE obra_id = ? ORDER BY subida_en DESC", (obra_id,)
-    ).fetchall()
+    ).fetchall() if "certificados" in p else []
+    extra = datos_extra_obra(db, obra_id, p)
     db.close()
     return render_template(
         "cliente_obra_detail.html", obra=obra, items=items, gantt_html=gantt_html, curve_html=curve_html,
         carga_plan_html=carga_plan_html, carga_real_html=carga_real_html,
-        certificados=certificados,
+        certificados=certificados, p=p, **extra,
     )
 
 
@@ -1902,15 +2017,24 @@ def cliente_item_detail(item_id):
     ).fetchone()
     if item is None or not usuario_puede_ver_obra(db, user, item["obra_id"]):
         abort(403)
+    p = secciones_usuario(user)
+    if "items" not in p:
+        abort(403)
     avances = db.execute(
         "SELECT * FROM avance_log WHERE item_id = ? ORDER BY fecha DESC, id DESC", (item_id,)
     ).fetchall()
     fotos_todas = db.execute(
         "SELECT * FROM fotos WHERE item_id = ? ORDER BY subida_en DESC", (item_id,)
     ).fetchall()
-    fotos = [f for f in fotos_todas if f["tipo"] != "certificado_lavado"]
-    fotos_checklist = [f for f in fotos_todas if f["tipo"] == "certificado_lavado"]
-    checklist = db.execute("SELECT * FROM checklist_lavado WHERE item_id = ?", (item_id,)).fetchone()
+    tipos_ok = set()
+    if "item_antes_despues" in p:
+        tipos_ok |= {"antes", "despues"}
+    if "item_progreso" in p:
+        tipos_ok.add("progreso")
+    fotos = [f for f in fotos_todas if f["tipo"] in tipos_ok]
+    fotos_checklist = [f for f in fotos_todas if f["tipo"] == "certificado_lavado"] if "item_checklist" in p else []
+    checklist = db.execute("SELECT * FROM checklist_lavado WHERE item_id = ?", (item_id,)).fetchone() \
+        if "item_checklist" in p else None
     checklist_puntos = get_checklist_puntos(db, item_id)
     piezas = db.execute(
         "SELECT * FROM piezas_lavado WHERE item_id = ? ORDER BY creado_en", (item_id,)
@@ -1919,7 +2043,7 @@ def cliente_item_detail(item_id):
     return render_template(
         "cliente_item_detail.html", item=item, avances=avances, fotos=fotos,
         checklist=checklist, checklist_puntos=checklist_puntos,
-        fotos_checklist=fotos_checklist, piezas=piezas,
+        fotos_checklist=fotos_checklist, piezas=piezas, p=p,
     )
 
 
@@ -1929,6 +2053,30 @@ def cliente_item_detail(item_id):
 
 def _puede_ver_obra(db, user, obra):
     return usuario_puede_ver_obra(db, user, obra["id"])
+
+
+def _secciones_reporte(user):
+    """Secciones del reporte: el cliente ve solo lo que su cuenta permite;
+    COSESA elige con el formulario previo (parámetros inc / elegido)."""
+    if user["rol"] not in COSESA_ROLES:
+        return secciones_usuario(user)
+    if request.args.get("elegido"):
+        return {k for k in request.args.getlist("inc") if k in SECCIONES_KEYS}
+    return set(SECCIONES_DEFAULT)
+
+
+@app.route("/cosesa/obras/<int:obra_id>/reporte-cliente")
+@cosesa_required
+def reporte_cliente_opciones(obra_id):
+    db = get_db()
+    obra = db.execute(
+        "SELECT o.*, c.nombre AS cliente_nombre FROM obras o JOIN clientes c ON c.id = o.cliente_id WHERE o.id = ?",
+        (obra_id,),
+    ).fetchone()
+    db.close()
+    if obra is None:
+        abort(404)
+    return render_template("reporte_cliente_opciones.html", obra=obra, permisos=set(SECCIONES_DEFAULT))
 
 
 @app.route("/reporte/obra/<int:obra_id>")
@@ -1943,6 +2091,7 @@ def reporte_obra(obra_id):
     ).fetchone()
     if obra is None or not _puede_ver_obra(db, user, obra):
         abort(403)
+    p = _secciones_reporte(user)
     items = db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY orden, creado_en, id", (obra_id,)).fetchall()
     gantt_html, curve_html, carga_plan_html, carga_real_html = build_obra_charts(db, items)
     items_data = []
@@ -1973,13 +2122,15 @@ def reporte_obra(obra_id):
         })
     certificados = db.execute(
         "SELECT * FROM certificados WHERE obra_id = ? ORDER BY subida_en DESC", (obra_id,)
-    ).fetchall()
+    ).fetchall() if "certificados" in p else []
+    extra = datos_extra_obra(db, obra_id, p)
     db.close()
     return render_template(
         "reporte_cliente.html", obra=obra, items_data=items_data,
-        gantt_html=gantt_html, curve_html=curve_html,
+        gantt_html=gantt_html, curve_html=curve_html, carga_plan_html=carga_plan_html,
+        carga_real_html=carga_real_html,
         generado_en=datetime.now().strftime("%d/%m/%Y %H:%M"),
-        certificados=certificados,
+        certificados=certificados, p=p, inc_list=[k for k in SECCIONES_KEYS if k in p], **extra,
     )
 
 
@@ -1995,7 +2146,10 @@ def reporte_obra_pdf(obra_id):
     if not puede_ver:
         abort(403)
     token = make_pdf_token(user["id"])
-    url = url_for("reporte_obra", obra_id=obra_id, pdf_token=token, _external=True)
+    extra_args = {}
+    if request.args.get("elegido"):
+        extra_args = {"elegido": 1, "inc": request.args.getlist("inc")}
+    url = url_for("reporte_obra", obra_id=obra_id, pdf_token=token, _external=True, **extra_args)
     out_path = os.path.join(tempfile.gettempdir(), f"reporte_obra_{obra_id}.pdf")
     render_pdf(url, out_path)
     return send_file(out_path, as_attachment=True, download_name=f"reporte_obra_{obra_id}.pdf")
