@@ -23,7 +23,7 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 CRONOGRAMA_HEADERS = ["nombre", "tag", "descripcion", "inicio_plan", "fin_plan"]
-REALES_HEADERS = ["tag", "inicio_real", "fin_real", "demora_inicio", "demora_fin", "motivo_demora"]
+REALES_HEADERS = ["tag", "inicio_real", "fin_real", "demora_inicio", "demora_fin", "motivo_demora", "nombre"]
 
 INTERNAL_FMT = "%Y-%m-%dT%H:%M"
 
@@ -69,9 +69,10 @@ def generar_plantilla_cronograma(items_existentes=None):
         "",
         "Una fila por cada ítem / equipo a intervenir en la obra.",
         "  - nombre: obligatorio.",
-        "  - tag: código del equipo. Se usa para identificar la tarea en esta y en la plantilla",
-        "    de 'Tiempos reales'. Si volvés a importar un tag que ya existe en la obra, esa tarea",
-        "    se actualiza en vez de duplicarse.",
+        "  - tag: código del equipo. Varias tareas pueden compartir el mismo tag.",
+        "  - Cada tarea se identifica por TAG + NOMBRE: si volvés a importar una fila con el mismo",
+        "    tag y el mismo nombre que ya existe en la obra, esa tarea se actualiza en vez de",
+        "    duplicarse. Si el mismo tag tiene otro nombre, se crea como tarea aparte.",
         "  - inicio_plan / fin_plan: fecha y hora planificadas.",
         "  - Las fechas podés escribirlas como fecha de Excel o como texto 'AAAA-MM-DD HH:MM'.",
         "",
@@ -96,21 +97,24 @@ def generar_plantilla_reales(items_existentes=None, demoras_por_item=None):
             if demoras:
                 first = demoras[0]
                 ws.append([tag, it["fecha_inicio"] or "", it["fecha_fin"] or "",
-                           first["fecha_inicio"], first["fecha_fin"], first["motivo"] or ""])
+                           first["fecha_inicio"], first["fecha_fin"], first["motivo"] or "", it["nombre"]])
                 for dem in demoras[1:]:
-                    ws.append([tag, "", "", dem["fecha_inicio"], dem["fecha_fin"], dem["motivo"] or ""])
+                    ws.append([tag, "", "", dem["fecha_inicio"], dem["fecha_fin"], dem["motivo"] or "", it["nombre"]])
             else:
-                ws.append([tag, it["fecha_inicio"] or "", it["fecha_fin"] or "", "", "", ""])
+                ws.append([tag, it["fecha_inicio"] or "", it["fecha_fin"] or "", "", "", "", it["nombre"]])
     else:
         ws.append(["P-101", "2026-09-01 08:30", "2026-09-05 15:30",
-                    "2026-09-02 12:00", "2026-09-02 13:30", "Espera de repuesto en depósito."])
+                    "2026-09-02 12:00", "2026-09-02 13:30", "Espera de repuesto en depósito.",
+                    "Bomba centrífuga P-101"])
 
     _hoja_instrucciones(wb, [
         "Cómo usar esta plantilla — Tiempos reales y demoras",
         "",
-        "Una fila por tarea (identificada por su TAG, que ya tiene que existir en la obra —",
+        "Una fila por tarea (identificada por su TAG + NOMBRE, que ya tienen que existir en la obra —",
         "primero importá o cargá el cronograma planificado).",
-        "  - tag: obligatorio, tiene que coincidir con el tag de una tarea de la obra.",
+        "  - tag: tiene que coincidir con el tag de una tarea de la obra.",
+        "  - nombre: nombre de la tarea. Obligatorio cuando un mismo tag tiene varias tareas",
+        "    (la columna está al final; no cambies el nombre, copialo tal cual está en la app).",
         "  - inicio_real / fin_real: fecha y hora real de inicio/fin de la tarea (dejar vacío si",
         "    todavía no arrancó / no terminó).",
         "  - demora_inicio / demora_fin / motivo_demora: opcional. Si la tarea tuvo una demora,",
@@ -191,11 +195,13 @@ def leer_reales(file_storage):
             continue
         row = list(row) + [None] * (len(REALES_HEADERS) - len(row))
         tag = (str(row[0]).strip() if row[0] else "")
-        if not tag:
-            errores.append(f"Fila {idx}: sin tag, se saltea.")
+        nombre = (str(row[6]).strip() if row[6] else "")
+        if not tag and not nombre:
+            errores.append(f"Fila {idx}: sin tag ni nombre, se saltea.")
             continue
         filas.append({
             "tag": tag,
+            "nombre": nombre,
             "fecha_inicio": _norm_fecha(row[1]),
             "fecha_fin": _norm_fecha(row[2]),
             "demora_inicio": _norm_fecha(row[3]),
@@ -203,3 +209,8 @@ def leer_reales(file_storage):
             "motivo_demora": (str(row[5]).strip() if row[5] else ""),
         })
     return filas, errores
+
+
+def norm_clave(txt):
+    """Normaliza un texto para comparar (sin mayúsculas ni espacios de más)."""
+    return " ".join((txt or "").split()).casefold()

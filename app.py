@@ -22,7 +22,7 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from db import get_db, init_db, DB_PATH
 from backup import restore_latest, backup_now, iniciar_backup_periodico
 from charts import gantt_svg, curve_svg, carga_diaria_planificada_svg, carga_diaria_real_svg
-from excel_io import generar_plantilla_cronograma, generar_plantilla_reales, leer_cronograma, leer_reales
+from excel_io import generar_plantilla_cronograma, generar_plantilla_reales, leer_cronograma, leer_reales, norm_clave
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Si se define DATA_DIR (por ejemplo, apuntando a un disco persistente en el
@@ -1183,18 +1183,39 @@ def importar_cronograma_excel(obra_id):
         return redirect(url_for("cosesa_obra_detail", obra_id=obra_id))
 
     items_existentes = db.execute(
-        "SELECT id, tag_equipo FROM items WHERE obra_id = ?", (obra_id,)
+        "SELECT id, nombre, tag_equipo FROM items WHERE obra_id = ?", (obra_id,)
     ).fetchall()
-    tag_a_id = {i["tag_equipo"]: i["id"] for i in items_existentes if i["tag_equipo"]}
+    # Una tarea se identifica por TAG + NOMBRE: varias tareas pueden compartir tag.
+    clave_a_id = {}
+    por_tag = {}
+    for i in items_existentes:
+        clave_a_id.setdefault((norm_clave(i["tag_equipo"]), norm_clave(i["nombre"])), i["id"])
+        if i["tag_equipo"]:
+            por_tag.setdefault(norm_clave(i["tag_equipo"]), []).append(i["id"])
+    filas_por_tag = {}
+    for t in tareas:
+        if t["tag"]:
+            filas_por_tag[norm_clave(t["tag"])] = filas_por_tag.get(norm_clave(t["tag"]), 0) + 1
+    usados = set()
 
     creados, actualizados = 0, 0
     for t in tareas:
-        existente_id = tag_a_id.get(t["tag"]) if t["tag"] else None
+        tagk = norm_clave(t["tag"])
+        existente_id = clave_a_id.get((tagk, norm_clave(t["nombre"])))
+        if existente_id in usados:
+            existente_id = None
+        if not existente_id and tagk and filas_por_tag.get(tagk) == 1:
+            # Una sola fila con ese tag y una sola tarea con ese tag en la obra:
+            # se asume que es la misma y se le cambió el nombre.
+            candidatos = por_tag.get(tagk, [])
+            if len(candidatos) == 1 and candidatos[0] not in usados:
+                existente_id = candidatos[0]
         if existente_id:
             db.execute(
                 "UPDATE items SET nombre=?, descripcion=?, fecha_inicio_plan=?, fecha_fin_plan=? WHERE id=?",
                 (t["nombre"], t["descripcion"], t["fecha_inicio_plan"], t["fecha_fin_plan"], existente_id),
             )
+            usados.add(existente_id)
             actualizados += 1
         else:
             cur = db.execute(
@@ -1203,8 +1224,8 @@ def importar_cronograma_excel(obra_id):
                 (obra_id, t["nombre"], t["descripcion"], t["tag"], t["fecha_inicio_plan"], t["fecha_fin_plan"], obra_id),
             )
             crear_personal_default(db, cur.lastrowid)
-            if t["tag"]:
-                tag_a_id[t["tag"]] = cur.lastrowid
+            clave_a_id[(tagk, norm_clave(t["nombre"]))] = cur.lastrowid
+            usados.add(cur.lastrowid)
             creados += 1
 
     db.commit()
@@ -1241,16 +1262,33 @@ def importar_reales_excel(obra_id):
         return redirect(url_for("cosesa_obra_detail", obra_id=obra_id))
 
     items_existentes = db.execute(
-        "SELECT id, tag_equipo, fecha_inicio, fecha_fin, avance_pct FROM items WHERE obra_id = ?", (obra_id,)
+        "SELECT id, nombre, tag_equipo, fecha_inicio, fecha_fin, avance_pct FROM items WHERE obra_id = ?", (obra_id,)
     ).fetchall()
-    tag_a_item = {i["tag_equipo"]: i for i in items_existentes if i["tag_equipo"]}
+    por_clave = {(norm_clave(i["tag_equipo"]), norm_clave(i["nombre"])): i for i in items_existentes}
+    por_tag = {}
+    por_nombre_sin_tag = {}
+    for i in items_existentes:
+        if i["tag_equipo"]:
+            por_tag.setdefault(norm_clave(i["tag_equipo"]), []).append(i)
+        else:
+            por_nombre_sin_tag[norm_clave(i["nombre"])] = i
 
     items_actualizados, demoras_creadas, demoras_repetidas = 0, 0, 0
     ya_tocados = set()
     for f in filas:
-        item = tag_a_item.get(f["tag"])
+        tagk, nomk = norm_clave(f["tag"]), norm_clave(f["nombre"])
+        item = None
+        if nomk:
+            item = por_clave.get((tagk, nomk)) or (por_nombre_sin_tag.get(nomk) if not tagk else None)
+        if not item and tagk:
+            cand = por_tag.get(tagk, [])
+            if len(cand) == 1 and not nomk:
+                item = cand[0]
+            elif len(cand) > 1 and not nomk:
+                errores.append(f"Tiempos reales: el tag '{f['tag']}' tiene {len(cand)} tareas; completá la columna nombre. Se saltea.")
+                continue
         if not item:
-            errores.append(f"Tiempos reales: no se encontró ninguna tarea con tag '{f['tag']}', se saltea.")
+            errores.append(f"Tiempos reales: no se encontró la tarea '{f['nombre'] or ''}' con tag '{f['tag']}', se saltea.")
             continue
 
         if f["fecha_inicio"] or f["fecha_fin"]:
