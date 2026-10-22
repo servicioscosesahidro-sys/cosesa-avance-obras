@@ -372,6 +372,7 @@ SECCIONES = [
     ("items", "Listado y detalle de ítems / equipos", "Ítems / equipos", True),
     ("item_observaciones", "Observaciones de cada ítem", "Ítems / equipos", True),
     ("item_checklist", "Checklist, piezas y documentos firmados", "Ítems / equipos", True),
+    ("item_subtareas", "Subtareas certificadas por etapas", "Ítems / equipos", True),
     ("item_antes_despues", "Fotos de antes y después", "Ítems / equipos", True),
     ("item_progreso", "Fotos de avance durante el trabajo", "Ítems / equipos", True),
     ("item_avances", "Seguimiento día a día (avances con comentarios)", "Ítems / equipos", True),
@@ -570,6 +571,68 @@ def get_or_create_checklist(db, item_id):
         db.commit()
         row = db.execute("SELECT * FROM checklist_lavado WHERE item_id = ?", (item_id,)).fetchone()
     return row
+
+
+def get_subtareas(db, item_id):
+    return db.execute(
+        "SELECT * FROM subtareas WHERE item_id = ? ORDER BY orden, id", (item_id,)
+    ).fetchall()
+
+
+@app.route("/cosesa/items/<int:item_id>/subtareas/nueva", methods=["POST"])
+@cosesa_required
+def crear_subtarea(item_id):
+    db = get_db()
+    if db.execute("SELECT 1 FROM items WHERE id = ?", (item_id,)).fetchone() is None:
+        db.close()
+        abort(404)
+    texto = request.form.get("texto", "").strip()
+    if not texto:
+        flash("Escribí la descripción de la subtarea.", "error")
+    else:
+        orden = db.execute(
+            "SELECT COALESCE(MAX(orden), 0) + 1 FROM subtareas WHERE item_id = ?", (item_id,)
+        ).fetchone()[0]
+        db.execute(
+            "INSERT INTO subtareas (item_id, texto, orden, fecha) VALUES (?,?,?,?)",
+            (item_id, texto, orden, now_local_str()),
+        )
+        db.commit()
+        flash("Subtarea agregada.", "success")
+    db.close()
+    return redirect(url_for("cosesa_item_detail", item_id=item_id) + "#subtareas")
+
+
+@app.route("/cosesa/subtareas/<int:sub_id>/editar", methods=["POST"])
+@cosesa_required
+def editar_subtarea(sub_id):
+    db = get_db()
+    sub = db.execute("SELECT * FROM subtareas WHERE id = ?", (sub_id,)).fetchone()
+    if sub is None:
+        db.close()
+        abort(404)
+    texto = request.form.get("texto", "").strip()
+    if texto:
+        fecha = request.form.get("fecha", "").strip() or sub["fecha"]
+        db.execute("UPDATE subtareas SET texto = ?, fecha = ? WHERE id = ?", (texto, fecha, sub_id))
+        db.commit()
+    db.close()
+    return redirect(url_for("cosesa_item_detail", item_id=sub["item_id"]) + "#subtareas")
+
+
+@app.route("/cosesa/subtareas/<int:sub_id>/eliminar", methods=["POST"])
+@cosesa_required
+def eliminar_subtarea(sub_id):
+    db = get_db()
+    sub = db.execute("SELECT * FROM subtareas WHERE id = ?", (sub_id,)).fetchone()
+    if sub is None:
+        db.close()
+        abort(404)
+    db.execute("DELETE FROM subtareas WHERE id = ?", (sub_id,))
+    db.commit()
+    db.close()
+    flash("Subtarea eliminada.", "success")
+    return redirect(url_for("cosesa_item_detail", item_id=sub["item_id"]) + "#subtareas")
 
 
 def get_checklist_puntos(db, item_id):
@@ -1389,6 +1452,7 @@ def cosesa_item_detail(item_id):
         "SELECT * FROM piezas_lavado WHERE item_id = ? ORDER BY creado_en", (item_id,)
     ).fetchall()
     personal = get_personal(db, item_id)
+    subtareas = get_subtareas(db, item_id)
     horas = recompute_item_horas(db, item_id, persistir=False)
     item = db.execute(
         "SELECT i.*, o.id AS obra_id, o.nombre AS obra_nombre, o.cliente_id, c.nombre AS cliente_nombre "
@@ -1402,6 +1466,7 @@ def cosesa_item_detail(item_id):
         checklist=checklist, checklist_puntos=checklist_puntos, checklist_estados=CHECKLIST_ESTADOS,
         fotos_checklist=fotos_checklist, piezas=piezas, piezas_sugeridas=PIEZAS_SUGERIDAS,
         personal=personal, cargos_personal=CARGOS_PERSONAL, turnos=TURNOS, horas=horas,
+        subtareas=subtareas,
     )
 
 
@@ -1863,10 +1928,11 @@ def checklist_item_html(item_id):
     piezas = db.execute(
         "SELECT * FROM piezas_lavado WHERE item_id = ? ORDER BY creado_en", (item_id,)
     ).fetchall()
+    subtareas = get_subtareas(db, item_id)
     db.close()
     return render_template(
         "checklist_lavado.html", item=item, checklist=checklist, checklist_puntos=checklist_puntos,
-        piezas=piezas, generado_en=datetime.now().strftime("%d/%m/%Y %H:%M"),
+        piezas=piezas, subtareas=subtareas, generado_en=datetime.now().strftime("%d/%m/%Y %H:%M"),
     )
 
 
@@ -2071,11 +2137,13 @@ def cliente_item_detail(item_id):
     piezas = db.execute(
         "SELECT * FROM piezas_lavado WHERE item_id = ? ORDER BY creado_en", (item_id,)
     ).fetchall()
+    subtareas = get_subtareas(db, item_id) if "item_subtareas" in p else []
     db.close()
     return render_template(
         "cliente_item_detail.html", item=item, avances=avances, fotos=fotos,
         checklist=checklist, checklist_puntos=checklist_puntos,
         fotos_checklist=fotos_checklist, piezas=piezas, p=p,
+        subtareas=subtareas,
     )
 
 
@@ -2151,6 +2219,7 @@ def reporte_obra(obra_id):
             "checklist_puntos": checklist_puntos,
             "piezas": piezas,
             "avances": avances,
+            "subtareas": get_subtareas(db, item["id"]) if "item_subtareas" in p else [],
         })
     certificados = db.execute(
         "SELECT * FROM certificados WHERE obra_id = ? ORDER BY subida_en DESC", (obra_id,)

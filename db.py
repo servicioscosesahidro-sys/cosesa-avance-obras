@@ -78,6 +78,14 @@ def _migrate_schema(conn):
     # Aprendizajes de la obra y bitácora (con bloques de texto/imagen).
     conn.executescript(
         """
+        CREATE TABLE IF NOT EXISTS subtareas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+            texto TEXT NOT NULL,
+            orden INTEGER NOT NULL DEFAULT 0,
+            fecha TEXT,
+            creado_en TEXT DEFAULT (datetime('now'))
+        );
         CREATE TABLE IF NOT EXISTS aprendizajes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             obra_id INTEGER NOT NULL REFERENCES obras(id) ON DELETE CASCADE,
