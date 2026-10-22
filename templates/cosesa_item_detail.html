@@ -237,6 +237,47 @@
   </form>
 </div>
 
+<div class="card" id="subtareas">
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <h2 style="margin:0;">Subtareas (certificación por etapas)</h2>
+    <button type="button" class="btn btn-sm" onclick="document.getElementById('form-subtarea-nueva').style.display='block';this.style.display='none';document.getElementById('subtarea-texto').focus();">+ Agregar subtarea</button>
+  </div>
+  <p class="subtitle">Escribí cada etapa del trabajo a medida que avanza. En el reporte de la tarea ("Ver / imprimir reporte") cada subtarea sale con dos espacios para firmar: COSESA y cliente.</p>
+  <form id="form-subtarea-nueva" method="post" action="{{ url_for('crear_subtarea', item_id=item['id']) }}" style="display:none;margin-bottom:12px;">
+    <input type="text" id="subtarea-texto" name="texto" placeholder="Ej: Desarme y limpieza de placas lado A" required>
+    <button class="btn btn-dark btn-sm" type="submit">Confirmar</button>
+    <button class="btn btn-outline btn-sm" type="button" onclick="this.form.style.display='none';document.querySelector('#subtareas .btn-sm').style.display='';">Cancelar</button>
+  </form>
+  {% if subtareas %}
+  <table>
+    <tr><th style="width:36px;">N°</th><th>Subtarea</th><th>Fecha</th><th></th></tr>
+    {% for s in subtareas %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>{{ s['texto'] }}</td>
+      <td>{{ s['fecha']|fmtdt if s['fecha'] else '—' }}</td>
+      <td style="white-space:nowrap;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="var r=document.getElementById('edit-sub-{{ s['id'] }}');r.style.display=r.style.display==='none'?'table-row':'none';">Editar</button>
+        <form method="post" action="{{ url_for('eliminar_subtarea', sub_id=s['id']) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar esta subtarea?');"><button class="btn btn-outline btn-sm" type="submit">Eliminar</button></form>
+      </td>
+    </tr>
+    <tr id="edit-sub-{{ s['id'] }}" style="display:none;">
+      <td></td>
+      <td colspan="3">
+        <form method="post" action="{{ url_for('editar_subtarea', sub_id=s['id']) }}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input type="text" name="texto" value="{{ s['texto'] }}" required style="flex:1;min-width:220px;">
+          <input type="datetime-local" name="fecha" value="{{ s['fecha'] or '' }}" style="width:auto;">
+          <button class="btn btn-dark btn-sm" type="submit">Confirmar</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="subtitle">Todavía no hay subtareas.</p>
+  {% endif %}
+</div>
+
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;">
     <h2 style="margin:0;">Checklist de certificación de lavado</h2>

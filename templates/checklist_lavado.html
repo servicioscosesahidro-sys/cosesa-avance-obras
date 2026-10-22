@@ -103,6 +103,25 @@
     <p class="subtitle" style="margin-top:6px;">Estas dos firmas certifican el ítem completo{% if piezas %} (independientemente de las firmas por pieza, más abajo){% endif %}.</p>
   </div>
 
+  {% if subtareas %}
+  <div class="card">
+    <h2 style="margin-top:0;">Subtareas certificadas por etapas</h2>
+    <p class="subtitle" style="margin-top:-6px;">Cada etapa lleva su propio par de firmas, a medida que se avanza con la tarea.</p>
+    {% for s in subtareas %}
+    <div class="pieza-card">
+      <div class="pieza-meta">
+        <span><strong>{{ loop.index }}.</strong> {{ s['texto'] }}</span>
+        <span><strong>Fecha:</strong> {{ s['fecha']|fmtdt if s['fecha'] else '—' }}</span>
+      </div>
+      <div class="grid grid-2" style="margin-top:10px;">
+        <div class="firma-box compact">COSESA<br><span class="subtitle">Firma y aclaración</span></div>
+        <div class="firma-box compact">Cliente ({{ item['cliente_nombre'] }})<br><span class="subtitle">Firma y aclaración</span></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   {% if piezas %}
   <div class="card">
     <h2 style="margin-top:0;">Piezas del equipo</h2>

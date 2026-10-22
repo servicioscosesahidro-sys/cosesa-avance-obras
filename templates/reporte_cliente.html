@@ -141,6 +141,14 @@
     {% endif %}
     {% endif %}
 
+    {% if d['subtareas'] %}
+    <h4 style="margin-bottom:6px;">Subtareas certificadas por etapas</h4>
+    <table>
+      <tr><th style="width:36px;">N°</th><th>Subtarea</th><th>Fecha</th></tr>
+      {% for s in d['subtareas'] %}<tr><td>{{ loop.index }}</td><td>{{ s['texto'] }}</td><td>{{ s['fecha']|fmtdt if s['fecha'] else '—' }}</td></tr>{% endfor %}
+    </table>
+    {% endif %}
+
     {% if (d['fotos_antes'] or d['fotos_despues']) and 'item_antes_despues' in p %}
     <div class="grid grid-2">
       {% if d['fotos_antes'] %}
