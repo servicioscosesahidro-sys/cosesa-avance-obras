@@ -82,6 +82,7 @@
   <h1 style="margin-bottom:2px;">{{ item['nombre'] }}{% if item['tag_equipo'] %} <span class="subtitle">({{ item['tag_equipo'] }})</span>{% endif %}</h1>
   <p class="subtitle">{{ item['descripcion'] or '' }}</p>
 
+  {% if not subtareas %}
   <div class="card">
     <h2 style="margin-top:0;">Checklist de tareas realizadas</h2>
     {% for p in checklist_puntos %}
@@ -102,6 +103,7 @@
     </div>
     <p class="subtitle" style="margin-top:6px;">Estas dos firmas certifican el ítem completo{% if piezas %} (independientemente de las firmas por pieza, más abajo){% endif %}.</p>
   </div>
+  {% endif %}
 
   {% if subtareas %}
   <div class="card">
@@ -113,6 +115,15 @@
         <span><strong>{{ loop.index }}.</strong> {{ s['texto'] }}</span>
         <span><strong>Fecha:</strong> {{ s['fecha']|fmtdt if s['fecha'] else '—' }}</span>
       </div>
+      {% for p in s['puntos'] %}
+      <div class="chk-row">
+        <strong>{{ p['etiqueta'] }}</strong>
+        <div class="chk-opts">
+          <span class="chk-opt"><span class="chk-box">{{ 'X' if p['estado'] == 'ok' else '' }}</span> Cumplido</span>
+          <span class="chk-opt"><span class="chk-box">{{ 'X' if p['estado'] == 'na' else '' }}</span> No aplica</span>
+        </div>
+      </div>
+      {% endfor %}
       <div class="grid grid-2" style="margin-top:10px;">
         <div class="firma-box compact">COSESA<br><span class="subtitle">Firma y aclaración</span></div>
         <div class="firma-box compact">Cliente ({{ item['cliente_nombre'] }})<br><span class="subtitle">Firma y aclaración</span></div>

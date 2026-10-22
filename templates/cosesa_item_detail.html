@@ -249,30 +249,45 @@
     <button class="btn btn-outline btn-sm" type="button" onclick="this.form.style.display='none';document.querySelector('#subtareas .btn-sm').style.display='';">Cancelar</button>
   </form>
   {% if subtareas %}
-  <table>
-    <tr><th style="width:36px;">N°</th><th>Subtarea</th><th>Fecha</th><th></th></tr>
-    {% for s in subtareas %}
-    <tr>
-      <td>{{ loop.index }}</td>
-      <td>{{ s['texto'] }}</td>
-      <td>{{ s['fecha']|fmtdt if s['fecha'] else '—' }}</td>
-      <td style="white-space:nowrap;">
-        <button type="button" class="btn btn-outline btn-sm" onclick="var r=document.getElementById('edit-sub-{{ s['id'] }}');r.style.display=r.style.display==='none'?'table-row':'none';">Editar</button>
-        <form method="post" action="{{ url_for('eliminar_subtarea', sub_id=s['id']) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar esta subtarea?');"><button class="btn btn-outline btn-sm" type="submit">Eliminar</button></form>
-      </td>
-    </tr>
-    <tr id="edit-sub-{{ s['id'] }}" style="display:none;">
-      <td></td>
-      <td colspan="3">
-        <form method="post" action="{{ url_for('editar_subtarea', sub_id=s['id']) }}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <input type="text" name="texto" value="{{ s['texto'] }}" required style="flex:1;min-width:220px;">
-          <input type="datetime-local" name="fecha" value="{{ s['fecha'] or '' }}" style="width:auto;">
-          <button class="btn btn-dark btn-sm" type="submit">Confirmar</button>
-        </form>
-      </td>
-    </tr>
-    {% endfor %}
-  </table>
+  {% for s in subtareas %}
+  <div id="sub-{{ s['id'] }}" style="border:1px solid var(--cosesa-border);border-radius:8px;padding:12px 14px;margin-bottom:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <div><strong>{{ loop.index }}. {{ s['texto'] }}</strong> <span class="subtitle">· {{ s['fecha']|fmtdt if s['fecha'] else '—' }}</span></div>
+      <div style="white-space:nowrap;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="var r=document.getElementById('edit-sub-{{ s['id'] }}');r.style.display=r.style.display==='none'?'block':'none';">Editar</button>
+        <form method="post" action="{{ url_for('eliminar_subtarea', sub_id=s['id']) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar esta subtarea y su checklist?');"><button class="btn btn-outline btn-sm" type="submit">Eliminar</button></form>
+      </div>
+    </div>
+    <div id="edit-sub-{{ s['id'] }}" style="display:none;margin-top:8px;">
+      <form method="post" action="{{ url_for('editar_subtarea', sub_id=s['id']) }}" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="text" name="texto" value="{{ s['texto'] }}" required style="flex:1;min-width:220px;">
+        <input type="datetime-local" name="fecha" value="{{ s['fecha'] or '' }}" style="width:auto;">
+        <button class="btn btn-dark btn-sm" type="submit">Confirmar</button>
+      </form>
+    </div>
+    <div style="margin-top:10px;">
+      <div class="subtitle" style="font-weight:700;margin-bottom:4px;">Checklist de esta subtarea</div>
+      {% for p in s['puntos'] %}
+      <form method="post" action="{{ url_for('editar_punto_subtarea', punto_id=p['id']) }}" class="field-inline" style="align-items:center;margin-bottom:6px;">
+        <div style="flex:2;"><input type="text" name="etiqueta" value="{{ p['etiqueta'] }}" required></div>
+        <div>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-weight:normal;"><input type="radio" name="estado" value="pendiente" {% if p['estado']=='pendiente' %}checked{% endif %}> Pendiente</label>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-weight:normal;margin-left:10px;"><input type="radio" name="estado" value="ok" {% if p['estado']=='ok' %}checked{% endif %}> Cumplido</label>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-weight:normal;margin-left:10px;"><input type="radio" name="estado" value="na" {% if p['estado']=='na' %}checked{% endif %}> No aplica</label>
+        </div>
+        <div style="white-space:nowrap;"><button class="btn btn-outline btn-sm" type="submit">Guardar</button></div>
+      </form>
+      <form method="post" action="{{ url_for('eliminar_punto_subtarea', punto_id=p['id']) }}" onsubmit="return confirm('¿Eliminar este punto?');" style="margin:-2px 0 10px;"><button class="btn btn-sm btn-danger" type="submit">Eliminar punto</button></form>
+      {% else %}
+      <p class="subtitle">Sin puntos de checklist.</p>
+      {% endfor %}
+      <form method="post" action="{{ url_for('crear_punto_subtarea', sub_id=s['id']) }}" class="field-inline" style="align-items:center;">
+        <div style="flex:2;"><input type="text" name="etiqueta" placeholder="Agregar punto al checklist (ej: Pasaje de agua, Prueba hidráulica)" required></div>
+        <div><button class="btn btn-outline btn-sm" type="submit">Agregar punto</button></div>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
   {% else %}
   <p class="subtitle">Todavía no hay subtareas.</p>
   {% endif %}

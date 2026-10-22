@@ -69,7 +69,7 @@
   <h2>Subtareas por etapas</h2>
   <table>
     <tr><th style="width:36px;">N°</th><th>Subtarea</th><th>Fecha</th></tr>
-    {% for s in subtareas %}<tr><td>{{ loop.index }}</td><td>{{ s['texto'] }}</td><td>{{ s['fecha']|fmtdt if s['fecha'] else '—' }}</td></tr>{% endfor %}
+    {% for s in subtareas %}<tr><td>{{ loop.index }}</td><td>{{ s['texto'] }}{% if s['puntos'] %}<ul style="margin:4px 0 0 16px;padding:0;">{% for p in s['puntos'] %}<li>{{ p['etiqueta'] }} — {{ 'Cumplido' if p['estado']=='ok' else ('No aplica' if p['estado']=='na' else 'Pendiente') }}</li>{% endfor %}</ul>{% endif %}</td><td>{{ s['fecha']|fmtdt if s['fecha'] else '—' }}</td></tr>{% endfor %}
   </table>
 </div>
 {% endif %}
