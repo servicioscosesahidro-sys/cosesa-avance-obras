@@ -574,9 +574,73 @@ def get_or_create_checklist(db, item_id):
 
 
 def get_subtareas(db, item_id):
-    return db.execute(
-        "SELECT * FROM subtareas WHERE item_id = ? ORDER BY orden, id", (item_id,)
-    ).fetchall()
+    """Subtareas del ítem; cada una con su checklist propio en la clave 'puntos'."""
+    res = []
+    for s in db.execute("SELECT * FROM subtareas WHERE item_id = ? ORDER BY orden, id", (item_id,)).fetchall():
+        d = dict(s)
+        d["puntos"] = db.execute(
+            "SELECT * FROM subtarea_puntos WHERE subtarea_id = ? ORDER BY orden, id", (s["id"],)
+        ).fetchall()
+        res.append(d)
+    return res
+
+
+@app.route("/cosesa/subtareas/<int:sub_id>/puntos/nuevo", methods=["POST"])
+@cosesa_required
+def crear_punto_subtarea(sub_id):
+    db = get_db()
+    sub = db.execute("SELECT * FROM subtareas WHERE id = ?", (sub_id,)).fetchone()
+    if sub is None:
+        db.close()
+        abort(404)
+    etiqueta = request.form.get("etiqueta", "").strip()
+    if etiqueta:
+        orden = db.execute(
+            "SELECT COALESCE(MAX(orden), 0) + 1 FROM subtarea_puntos WHERE subtarea_id = ?", (sub_id,)
+        ).fetchone()[0]
+        db.execute(
+            "INSERT INTO subtarea_puntos (subtarea_id, etiqueta, orden) VALUES (?,?,?)", (sub_id, etiqueta, orden)
+        )
+        db.commit()
+    db.close()
+    return redirect(url_for("cosesa_item_detail", item_id=sub["item_id"]) + f"#sub-{sub_id}")
+
+
+@app.route("/cosesa/subtareas/puntos/<int:punto_id>/editar", methods=["POST"])
+@cosesa_required
+def editar_punto_subtarea(punto_id):
+    db = get_db()
+    p = db.execute(
+        "SELECT p.*, s.item_id FROM subtarea_puntos p JOIN subtareas s ON s.id = p.subtarea_id WHERE p.id = ?",
+        (punto_id,),
+    ).fetchone()
+    if p is None:
+        db.close()
+        abort(404)
+    etiqueta = request.form.get("etiqueta", "").strip() or p["etiqueta"]
+    estado = request.form.get("estado", "pendiente")
+    estado = estado if estado in CHECKLIST_ESTADOS else "pendiente"
+    db.execute("UPDATE subtarea_puntos SET etiqueta = ?, estado = ? WHERE id = ?", (etiqueta, estado, punto_id))
+    db.commit()
+    db.close()
+    return redirect(url_for("cosesa_item_detail", item_id=p["item_id"]) + f"#sub-{p['subtarea_id']}")
+
+
+@app.route("/cosesa/subtareas/puntos/<int:punto_id>/eliminar", methods=["POST"])
+@cosesa_required
+def eliminar_punto_subtarea(punto_id):
+    db = get_db()
+    p = db.execute(
+        "SELECT p.*, s.item_id FROM subtarea_puntos p JOIN subtareas s ON s.id = p.subtarea_id WHERE p.id = ?",
+        (punto_id,),
+    ).fetchone()
+    if p is None:
+        db.close()
+        abort(404)
+    db.execute("DELETE FROM subtarea_puntos WHERE id = ?", (punto_id,))
+    db.commit()
+    db.close()
+    return redirect(url_for("cosesa_item_detail", item_id=p["item_id"]) + f"#sub-{p['subtarea_id']}")
 
 
 @app.route("/cosesa/items/<int:item_id>/subtareas/nueva", methods=["POST"])
@@ -628,6 +692,7 @@ def eliminar_subtarea(sub_id):
     if sub is None:
         db.close()
         abort(404)
+    db.execute("DELETE FROM subtarea_puntos WHERE subtarea_id = ?", (sub_id,))
     db.execute("DELETE FROM subtareas WHERE id = ?", (sub_id,))
     db.commit()
     db.close()

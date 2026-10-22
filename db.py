@@ -86,6 +86,13 @@ def _migrate_schema(conn):
             fecha TEXT,
             creado_en TEXT DEFAULT (datetime('now'))
         );
+        CREATE TABLE IF NOT EXISTS subtarea_puntos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subtarea_id INTEGER NOT NULL REFERENCES subtareas(id) ON DELETE CASCADE,
+            etiqueta TEXT NOT NULL,
+            estado TEXT NOT NULL DEFAULT 'pendiente',
+            orden INTEGER NOT NULL DEFAULT 0
+        );
         CREATE TABLE IF NOT EXISTS aprendizajes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             obra_id INTEGER NOT NULL REFERENCES obras(id) ON DELETE CASCADE,
