@@ -27,8 +27,12 @@
       <label>Texto</label>
       <textarea name="b_{{ b['id'] }}" rows="4">{{ b['texto'] }}</textarea>
       {% else %}
+      {% if b['archivo'].lower().endswith('.pdf') %}
+      <div>📄 <a target="_blank" href="{{ url_for('uploaded_file', filename=b['archivo']) }}">{{ b['archivo'].split('/')[-1].split('_',1)[-1] }}</a></div>
+      {% else %}
       <img src="{{ url_for('uploaded_file', filename=b['archivo']) }}" style="max-width:100%;max-height:260px;border-radius:6px;">
-      <label>Pie de foto</label>
+      {% endif %}
+      <label>Pie / descripción</label>
       <input type="text" name="b_{{ b['id'] }}" value="{{ b['texto'] or '' }}">
       {% endif %}
       <label style="display:flex;gap:6px;align-items:center;margin-top:6px;"><input type="checkbox" name="del_{{ b['id'] }}" value="1" style="width:auto;"> Quitar este bloque</label>

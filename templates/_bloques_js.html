@@ -2,7 +2,7 @@
 <input type="hidden" name="orden" id="orden-bloques" value="">
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px;">
   <button type="button" class="btn btn-outline btn-sm" onclick="addBloque('texto')">+ Texto</button>
-  <button type="button" class="btn btn-outline btn-sm" onclick="addBloque('imagen')">+ Imagen</button>
+  <button type="button" class="btn btn-outline btn-sm" onclick="addBloque('imagen')">+ Imagen / PDF</button>
 </div>
 <script>
   var _nb = 0, _orden = [];
@@ -17,8 +17,8 @@
     if (tipo === 'texto') {
       h += '<label>Texto</label><textarea name="texto_' + i + '" rows="4" placeholder="Escribí el relato..."></textarea>';
     } else {
-      h += '<label>Imagen</label><input type="file" name="img_' + i + '" accept="image/*">' +
-           '<label>Pie de foto (opcional)</label><input type="text" name="pie_' + i + '">';
+      h += '<label>Imagen o archivo PDF</label><input type="file" name="img_' + i + '" accept="image/*,application/pdf,.pdf">' +
+           '<label>Pie / descripción (opcional)</label><input type="text" name="pie_' + i + '">';
     }
     h += '<button type="button" class="btn btn-sm btn-danger" style="margin-top:6px;" onclick="quitarBloque(' + i + ')">Quitar bloque</button>';
     d.innerHTML = h;
