@@ -2955,8 +2955,9 @@ def _guardar_fotos_mant(db, mant_id, obra_id):
     for f in request.files.getlist("fotos"):
         if not f or not f.filename:
             continue
-        if not allowed_file(f.filename):
-            flash(f"'{f.filename}': formato de imagen no permitido (usá jpg, png, webp).", "error")
+        ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+        if not (allowed_file(f.filename) or ext == "pdf"):
+            flash(f"'{f.filename}': formato no permitido (usá imagen jpg/png/webp o PDF).", "error")
             continue
         carpeta = os.path.join(UPLOAD_DIR, "mantenimiento", str(obra_id))
         os.makedirs(carpeta, exist_ok=True)
@@ -3095,6 +3096,35 @@ def reporte_mantenimiento_pdf(obra_id):
     url = url_for("reporte_mantenimiento", obra_id=obra_id, pdf_token=token, _external=True)
     out_path = os.path.join(tempfile.gettempdir(), f"reporte_mantenimiento_{obra_id}.pdf")
     render_pdf(url, out_path)
+    # Los PDF adjuntos a cada mantenimiento se agregan completos al final.
+    db = get_db()
+    rutas = [
+        os.path.join(UPLOAD_DIR, r["archivo"]) for r in db.execute(
+            "SELECT f.archivo FROM mantenimiento_fotos f JOIN mantenimientos m ON m.id = f.mantenimiento_id "
+            "WHERE m.obra_id = ? AND f.archivo LIKE '%.pdf' ORDER BY COALESCE(m.fecha, m.creado_en), m.id, f.id",
+            (obra_id,),
+        ).fetchall()
+    ]
+    db.close()
+    rutas = [r for r in rutas if os.path.isfile(r)]
+    if rutas:
+        from pypdf import PdfReader, PdfWriter
+        writer = PdfWriter()
+        for pg in PdfReader(out_path).pages:
+            writer.add_page(pg)
+        for r in rutas:
+            try:
+                rd = PdfReader(r)
+                if rd.is_encrypted:
+                    rd.decrypt("")
+                inicio = len(writer.pages)
+                for pg in rd.pages:
+                    writer.add_page(pg)
+                writer.add_outline_item(os.path.basename(r).split("_", 1)[-1], inicio)
+            except Exception:
+                app.logger.exception("No se pudo agregar %s al reporte de mantenimiento", r)
+        with open(out_path, "wb") as fh:
+            writer.write(fh)
     return send_file(out_path, as_attachment=True, download_name=f"reporte_mantenimiento_obra_{obra_id}.pdf")
 
 
