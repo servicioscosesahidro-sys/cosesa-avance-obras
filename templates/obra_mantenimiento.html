@@ -35,8 +35,8 @@
       <div><label>Prioridad (si queda pendiente)</label><select name="prioridad">{{ opciones('') }}</select></div>
       <div><label>Responsable</label><input type="text" name="responsable"></div>
     </div>
-    <label>Fotos (podés elegir varias)</label>
-    <input type="file" name="fotos" accept="image/*" multiple>
+    <label>Fotos y/o archivos PDF (podés elegir varios)</label>
+    <input type="file" name="fotos" accept="image/*,application/pdf,.pdf" multiple>
     <button class="btn" type="submit" style="margin-top:10px;">Guardar mantenimiento</button>
   </form>
 </div>
@@ -53,7 +53,7 @@
       <p style="white-space:pre-wrap;margin:8px 0;">{{ m['descripcion'] }}</p>
       {% if x['fotos'] %}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-        {% for f in x['fotos'] %}<a href="{{ url_for('uploaded_file', filename=f['archivo']) }}" target="_blank"><img src="{{ url_for('uploaded_file', filename=f['archivo']) }}" style="height:90px;border-radius:6px;"></a>{% endfor %}
+        {% for f in x['fotos'] %}{% if f['archivo'].lower().endswith('.pdf') %}<a class="btn btn-outline btn-sm" href="{{ url_for('uploaded_file', filename=f['archivo']) }}" target="_blank">📄 {{ f['archivo'].split('/')[-1].split('_',1)[-1] }}</a>{% else %}<a href="{{ url_for('uploaded_file', filename=f['archivo']) }}" target="_blank"><img src="{{ url_for('uploaded_file', filename=f['archivo']) }}" style="height:90px;border-radius:6px;"></a>{% endif %}{% endfor %}
       </div>
       {% endif %}
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -79,11 +79,11 @@
       {% if x['fotos'] %}
       <label>Fotos actuales (tildá las que quieras quitar)</label>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
-        {% for f in x['fotos'] %}<label style="width:auto;"><img src="{{ url_for('uploaded_file', filename=f['archivo']) }}" style="height:80px;border-radius:6px;display:block;"><input type="checkbox" name="delfoto_{{ f['id'] }}" value="1" style="width:auto;"> Quitar</label>{% endfor %}
+        {% for f in x['fotos'] %}<label style="width:auto;">{% if f['archivo'].lower().endswith('.pdf') %}<span style="display:block;padding:8px;border:1px solid var(--cosesa-border);border-radius:6px;">📄 {{ f['archivo'].split('/')[-1].split('_',1)[-1] }}</span>{% else %}<img src="{{ url_for('uploaded_file', filename=f['archivo']) }}" style="height:80px;border-radius:6px;display:block;">{% endif %}<input type="checkbox" name="delfoto_{{ f['id'] }}" value="1" style="width:auto;"> Quitar</label>{% endfor %}
       </div>
       {% endif %}
-      <label>Agregar fotos</label>
-      <input type="file" name="fotos" accept="image/*" multiple>
+      <label>Agregar fotos o PDF</label>
+      <input type="file" name="fotos" accept="image/*,application/pdf,.pdf" multiple>
       <div style="display:flex;gap:8px;margin-top:10px;">
         <button class="btn btn-sm" type="submit">Guardar</button>
         <button type="button" class="btn btn-outline btn-sm" onclick="editarM({{ m['id'] }}, false)">Cancelar</button>
