@@ -2,7 +2,7 @@ services:
   - type: web
     name: cosesa-avance-obras
     runtime: docker
-    plan: free
+    plan: starter
     envVars:
       - key: SECRET_KEY
         generateValue: true
@@ -20,11 +20,9 @@ services:
         sync: false
       - key: GITHUB_BACKUP_BRANCH
         value: main
-    # Disco persistente opcional (plan pago). Sin esto, /var/data se reinicia
-    # en cada nuevo despliegue — pero con GITHUB_BACKUP_* configurado, la app
-    # restaura sola el último backup al arrancar, así que no hace falta pagar
-    # este disco para no perder datos.
-    # disks:
-    #   - name: cosesa-data
-    #     mountPath: /var/data
-    #     sizeGB: 1
+    # Disco persistente: la base de datos y las fotos sobreviven a los reinicios
+    # y a cada actualización. El backup en GitHub sigue funcionando como respaldo.
+    disk:
+      name: cosesa-data
+      mountPath: /var/data
+      sizeGB: 1
