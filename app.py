@@ -2438,6 +2438,14 @@ def certificacion_obra_pdf(obra_id):
         rutas = [r for r in rutas if os.path.isfile(r)]
         if rutas:
             secciones.append((it, rutas))
+    pdfs_bitacora = [
+        os.path.join(UPLOAD_DIR, r["archivo"]) for r in db.execute(
+            "SELECT bb.archivo FROM bitacora_bloques bb JOIN bitacora b ON b.id = bb.entrada_id "
+            "WHERE b.obra_id = ? AND bb.archivo LIKE '%.pdf' ORDER BY b.fecha_hora, b.id, bb.orden, bb.id",
+            (obra_id,),
+        ).fetchall()
+    ]
+    pdfs_bitacora = [r for r in pdfs_bitacora if os.path.isfile(r)]
     db.close()
     # Resumen de la obra (cronograma, curva, demoras, horas): se genera antes de
     # abrir el Chromium del armado, porque render_pdf abre el suyo.
@@ -2494,7 +2502,10 @@ td.p{{text-align:right;width:20mm}}
     partes = []  # (nombre, [bytes de PDF por documento])
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        for it, rutas in secciones:
+        _lista = [(it["nombre"] + (f" ({it['tag_equipo']})" if it["tag_equipo"] else ""), rutas) for it, rutas in secciones]
+        if pdfs_bitacora:
+            _lista.append(("Bitácora: documentos PDF adjuntos", pdfs_bitacora))
+        for _nombre_sec, rutas in _lista:
             pdfs = []
             for r in rutas:
                 try:
@@ -2506,7 +2517,7 @@ td.p{{text-align:right;width:20mm}}
                 except Exception:
                     app.logger.exception("No se pudo incorporar %s a la certificación", r)
             if pdfs:
-                partes.append((it["nombre"] + (f" ({it['tag_equipo']})" if it["tag_equipo"] else ""), pdfs))
+                partes.append((_nombre_sec, pdfs))
 
         # contar páginas de cada ítem para armar el índice
         paginas_item = []
@@ -2712,8 +2723,9 @@ def get_bitacora(db, obra_id, descendente=False):
 def _guardar_img_bitacora(obra_id, file_storage):
     if not file_storage or not file_storage.filename:
         return None
-    if not allowed_file(file_storage.filename):
-        flash("Formato de imagen no permitido (usá jpg, png, webp).", "error")
+    ext = file_storage.filename.rsplit(".", 1)[-1].lower() if "." in file_storage.filename else ""
+    if not (allowed_file(file_storage.filename) or ext == "pdf"):
+        flash("Formato no permitido (usá imagen jpg/png/webp o un PDF).", "error")
         return None
     carpeta = os.path.join(UPLOAD_DIR, "bitacora", str(obra_id))
     os.makedirs(carpeta, exist_ok=True)

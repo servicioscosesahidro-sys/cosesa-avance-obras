@@ -39,7 +39,7 @@ from db import DATA_DIR, DB_PATH
 
 GITHUB_API = "https://api.github.com"
 BACKUP_PATH_IN_REPO = "backup/latest.zip"
-INTERVALO_BACKUP_SEGUNDOS = 20 * 60   # backup de seguridad aunque no haya cambios
+INTERVALO_BACKUP_SEGUNDOS = 12 * 3600  # backup de seguridad aunque no haya cambios (ya se hace uno con cada cambio)
 REVISION_SEGUNDOS = 5                 # cada cuánto se mira si hubo cambios
 QUIETO_SEGUNDOS = 8                   # se espera a que los cambios "se calmen"
 ESPERA_MAXIMA_SEGUNDOS = 60           # tope si hay cambios continuos
@@ -222,7 +222,7 @@ def _firma_datos():
 def iniciar_backup_periodico():
     """Arranca un hilo en segundo plano que vigila la carpeta de datos: apenas
     detecta cambios (y se calman unos segundos) hace un backup. Además hace uno
-    cada 20 minutos de todas formas. No hace nada si no está configurado."""
+    cada 12 horas de todas formas. No hace nada si no está configurado."""
     if _config() is None:
         return
 
