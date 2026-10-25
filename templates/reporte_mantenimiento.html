@@ -50,7 +50,8 @@
       <div class="t">{{ loop.index }}. {{ m['equipo'] or 'Sin equipo indicado' }}</div>
       <div class="m">{{ m['fecha']|fmtdt if m['fecha'] else '' }}{% if m['responsable'] %} · Responsable: {{ m['responsable'] }}{% endif %}{% if m['prioridad'] %} · Prioridad: {{ m['prioridad'] }}{% endif %}</div>
       <p>{{ m['descripcion'] }}</p>
-      {% if x['fotos'] %}<div class="fotos">{% for f in x['fotos'] %}<img src="{{ url_for('uploaded_file', filename=f['archivo']) }}">{% endfor %}</div>{% endif %}
+      {% if x['fotos'] %}<div class="fotos">{% for f in x['fotos'] %}{% if not f['archivo'].lower().endswith('.pdf') %}<img src="{{ url_for('uploaded_file', filename=f['archivo']) }}">{% endif %}{% endfor %}</div>
+      {% for f in x['fotos'] %}{% if f['archivo'].lower().endswith('.pdf') %}<div style="margin:4px 0;padding:5px 8px;border:1px solid #ccd;border-radius:5px;font-size:11px;">📄 Documento adjunto: <strong>{{ f['archivo'].split('/')[-1].split('_',1)[-1] }}</strong> <span style="color:#667;">(incluido completo al final del PDF)</span></div>{% endif %}{% endfor %}{% endif %}
     </div>
     {% else %}
     <p class="subtitle">{{ 'No hay trabajos pendientes.' if titulo.startswith('Pend') else 'No se registraron mantenimientos realizados.' }}</p>
