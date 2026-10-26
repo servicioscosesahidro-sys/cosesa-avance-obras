@@ -6,7 +6,7 @@
 {% block content %}
 {% set nav_id = item['obra_id'] %}{% set nav_nombre = item['obra_nombre'] %}{% set nav_activo = '' %}
 {% include "_obra_nav.html" %}
-<h1>{{ item['nombre'] }} <span class="pill pill-{{ item['estado'] }}">{{ item['estado'].replace('_',' ') }}</span>{% if item['pausado_en'] %} <span class="pill pill-pausado">Pausado</span>{% endif %}</h1>
+<h1>{{ item['nombre'] }} {% if item['cancelada'] %}<span class="pill" style="background:#e4e6e8;color:#5b636b;">Cancelada</span>{% else %}<span class="pill pill-{{ item['estado'] }}">{{ item['estado'].replace('_',' ') }}</span>{% endif %}{% if item['pausado_en'] %} <span class="pill pill-pausado">Pausado</span>{% endif %}</h1>
 <p class="subtitle">{{ item['descripcion'] or '' }}</p>
 
 <div class="card" style="border-left:4px solid {{ '#c0392b' if item['pausado_en'] else 'var(--cosesa-border)' }};">
@@ -27,10 +27,25 @@
     <p class="subtitle">Pausar solo tiene sentido cuando la tarea ya está en curso.</p>
   {% endif %}
 
+  {% if item['cancelada'] or (item['estado'] == 'finalizado' and item['avance_pct'] < 100) %}
+  <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:16px 0;">
+  <p class="subtitle">{% if item['cancelada'] %}Esta tarea está <strong>cancelada</strong>.{% else %}Esta tarea se cerró con {{ item['avance_pct'] }}% de avance.{% endif %} Su avance queda registrado, pero <strong>no cuenta para el avance total de la obra</strong>.</p>
+  <form method="post" action="{{ url_for('reabrir_item', item_id=item['id']) }}" onsubmit="return confirm('¿Reabrir esta tarea? Vuelve a contar para el avance total de la obra.');">
+    <button class="btn btn-dark" type="submit">Reabrir tarea</button>
+  </form>
+  {% endif %}
+
   {% if item['estado'] != 'finalizado' %}
   <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:16px 0;">
   <form method="post" action="{{ url_for('finalizar_item', item_id=item['id']) }}" onsubmit="return confirm('¿Finalizar esta tarea con el avance actual ({{ item['avance_pct'] }}%)? Va a quedar marcada como finalizada aunque no haya llegado al 100%.');">
     <button class="btn btn-success" type="submit">Finalizar tarea con el avance actual ({{ item['avance_pct'] }}%)</button>
+  </form>
+  {% endif %}
+
+  {% if not item['cancelada'] %}
+  <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:16px 0;">
+  <form method="post" action="{{ url_for('cancelar_item', item_id=item['id']) }}" onsubmit="return confirm('¿Cancelar esta tarea? Su avance queda registrado pero ya no cuenta para el avance total de la obra. Podés reabrirla después.');">
+    <button class="btn btn-danger" type="submit">Cancelar tarea</button>
   </form>
   {% endif %}
 </div>

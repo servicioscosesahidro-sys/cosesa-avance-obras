@@ -87,7 +87,7 @@
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <h3 style="margin:0;">{{ item['nombre'] }}{% if item['tag_equipo'] %} ({{ item['tag_equipo'] }}){% endif %}</h3>
-      <span class="pill pill-{{ item['estado'] }}">{{ item['estado'].replace('_',' ') }}</span>
+      {% if item['cancelada'] %}<span class="pill" style="background:#e4e6e8;color:#5b636b;">Cancelada</span>{% else %}<span class="pill pill-{{ item['estado'] }}">{{ item['estado'].replace('_',' ') }}</span>{% endif %}
     </div>
     <p class="subtitle">{{ item['descripcion'] or '' }}</p>
     <div class="progress-bar-bg" style="height:12px;"><div class="progress-bar-fill" style="width:{{ item['avance_pct'] }}%;"></div></div>

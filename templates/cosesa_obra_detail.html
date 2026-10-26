@@ -70,7 +70,7 @@
     {% for i in items %}
     <tr>
       <td><a href="{{ url_for('cosesa_item_detail', item_id=i['id']) }}">{{ i['nombre'] }}</a>{% if i['tag_equipo'] %} <span class="subtitle">({{ i['tag_equipo'] }})</span>{% endif %}</td>
-      <td><span class="pill pill-{{ i['estado'] }}">{{ i['estado'].replace('_',' ') }}</span>{% if i['pausado_en'] %} <span class="pill pill-pausado">Pausado</span>{% endif %}</td>
+      <td>{% if i['cancelada'] %}<span class="pill" style="background:#e4e6e8;color:#5b636b;">Cancelada</span>{% else %}<span class="pill pill-{{ i['estado'] }}">{{ i['estado'].replace('_',' ') }}</span>{% endif %}{% if i['pausado_en'] %} <span class="pill pill-pausado">Pausado</span>{% endif %}</td>
       <td style="min-width:160px;">
         <form method="post" action="{{ url_for('registrar_avance', item_id=i['id']) }}" id="avance-form-{{ i['id'] }}" style="margin:0;">
           <input type="hidden" name="volver" value="obra">

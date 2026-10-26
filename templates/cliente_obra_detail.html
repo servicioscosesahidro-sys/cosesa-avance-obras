@@ -72,7 +72,7 @@
     {% for i in items %}
     <tr>
       <td>{{ i['nombre'] }}</td>
-      <td><span class="pill pill-{{ i['estado'] }}">{{ i['estado'].replace('_',' ') }}</span>{% if i['pausado_en'] %} <span class="pill pill-pausado">Pausado</span>{% endif %}</td>
+      <td>{% if i['cancelada'] %}<span class="pill" style="background:#e4e6e8;color:#5b636b;">Cancelada</span>{% else %}<span class="pill pill-{{ i['estado'] }}">{{ i['estado'].replace('_',' ') }}</span>{% endif %}{% if i['pausado_en'] %} <span class="pill pill-pausado">Pausado</span>{% endif %}</td>
       <td style="min-width:140px;">
         <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:{{ i['avance_pct'] }}%;"></div></div>
         <span class="subtitle">{{ i['avance_pct'] }}%</span>
