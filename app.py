@@ -706,6 +706,19 @@ def get_checklist_puntos(db, item_id):
     ).fetchall()
 
 
+def _item_cancelada(it):
+    try:
+        return bool(it["cancelada"])
+    except (KeyError, IndexError):
+        return False
+
+
+def item_excluido(it):
+    """True si la tarea no cuenta para el avance total de la obra: está
+    cancelada, o fue finalizada a mano con menos del 100% de avance."""
+    return _item_cancelada(it) or (it["estado"] == "finalizado" and (it["avance_pct"] or 0) < 100)
+
+
 def build_obra_charts(db, items, interactive=False):
     """Devuelve (gantt_html, curve_html) para una lista de ítems de una obra.
     interactive=True agrega al Gantt un link al ítem y botones −/+ de avance
@@ -718,17 +731,21 @@ def build_obra_charts(db, items, interactive=False):
         avances = db.execute(
             "SELECT * FROM avance_log WHERE item_id = ? ORDER BY fecha", (it["id"],)
         ).fetchall()
-        items_con_avances.append({"item": it, "avances": avances})
+        # Las tareas canceladas, o finalizadas con avance parcial, no cuentan
+        # para el avance total de la obra (curva) ni para la carga diaria.
+        if not item_excluido(it):
+            items_con_avances.append({"item": it, "avances": avances})
         demoras = db.execute(
             "SELECT * FROM demoras WHERE item_id = ? ORDER BY fecha_inicio", (it["id"],)
         ).fetchall()
         items_con_demoras.append({"item": it, "demoras": demoras})
         personal = get_personal(db, it["id"])
         _, total_bombas = total_personal(personal)
-        items_con_bombas.append({"item": it, "bombas": total_bombas})
+        if not _item_cancelada(it):
+            items_con_bombas.append({"item": it, "bombas": total_bombas})
     gantt_html = gantt_svg(items_con_demoras, interactive=interactive) if items else "<p class='subtitle'>Todavía no hay ítems cargados.</p>"
-    curve_html = curve_svg(items_con_avances) if items else "<p class='subtitle'>Todavía no hay ítems cargados.</p>"
-    if items:
+    curve_html = curve_svg(items_con_avances) if items_con_avances else "<p class='subtitle'>No hay tareas que cuenten para el avance de la obra.</p>"
+    if items_con_bombas:
         carga_plan_html = carga_diaria_planificada_svg(items_con_bombas)
         carga_real_html = carga_diaria_real_svg(items_con_bombas)
     else:
@@ -806,7 +823,7 @@ def cosesa_dashboard():
     obras_activas = db.execute(
         "SELECT o.*, c.nombre AS cliente_nombre, "
         "(SELECT COUNT(*) FROM items i WHERE i.obra_id = o.id) AS n_items, "
-        "(SELECT COALESCE(AVG(avance_pct),0) FROM items i WHERE i.obra_id = o.id) AS avance_prom "
+        "(SELECT COALESCE(AVG(CASE WHEN i.cancelada = 1 OR (i.estado = 'finalizado' AND i.avance_pct < 100) THEN NULL ELSE i.avance_pct END),0) FROM items i WHERE i.obra_id = o.id) AS avance_prom "
         "FROM obras o JOIN clientes c ON c.id = o.cliente_id "
         "WHERE o.estado != 'finalizada' ORDER BY o.creado_en DESC"
     ).fetchall()
@@ -1006,7 +1023,7 @@ def cosesa_cliente_detail(cliente_id):
     obras = db.execute(
         "SELECT o.*, "
         "(SELECT COUNT(*) FROM items i WHERE i.obra_id = o.id) AS n_items, "
-        "(SELECT COALESCE(AVG(avance_pct),0) FROM items i WHERE i.obra_id = o.id) AS avance_prom "
+        "(SELECT COALESCE(AVG(CASE WHEN i.cancelada = 1 OR (i.estado = 'finalizado' AND i.avance_pct < 100) THEN NULL ELSE i.avance_pct END),0) FROM items i WHERE i.obra_id = o.id) AS avance_prom "
         "FROM obras o WHERE o.cliente_id = ? ORDER BY o.creado_en DESC",
         (cliente_id,),
     ).fetchall()
@@ -1686,6 +1703,71 @@ def finalizar_item(item_id):
     return redirect(url_for("cosesa_item_detail", item_id=item_id))
 
 
+@app.route("/cosesa/items/<int:item_id>/cancelar", methods=["POST"])
+@cosesa_required
+def cancelar_item(item_id):
+    db = get_db()
+    item = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    if item is None:
+        db.close()
+        abort(404)
+    if item["cancelada"]:
+        flash("Esta tarea ya estaba cancelada.", "error")
+        db.close()
+        return redirect(url_for("cosesa_item_detail", item_id=item_id))
+    user = get_current_user()
+    ahora = now_local_str()
+    # Cierra la demora/pausa abierta para que no quede corriendo.
+    db.execute("UPDATE demoras SET fecha_fin = ? WHERE item_id = ? AND fecha_fin IS NULL", (ahora, item_id))
+    if item["fecha_inicio"] and item["estado"] != "finalizado":
+        # Ya había empezado: se cierra para que dejen de sumar horas.
+        db.execute(
+            "UPDATE items SET estado = 'finalizado', fecha_fin = ?, pausado_en = NULL, cancelada = 1 WHERE id = ?",
+            (ahora, item_id),
+        )
+    else:
+        db.execute("UPDATE items SET pausado_en = NULL, cancelada = 1 WHERE id = ?", (item_id,))
+    db.execute(
+        "INSERT INTO avance_log (item_id, fecha, avance_pct, comentario, usuario_id) VALUES (?, ?, ?, ?, ?)",
+        (item_id, ahora, item["avance_pct"], "Tarea cancelada. No cuenta para el avance total de la obra.", user["id"]),
+    )
+    db.commit()
+    recompute_item_horas(db, item_id)
+    db.close()
+    flash("Tarea cancelada: ya no cuenta para el avance total de la obra.", "success")
+    return redirect(url_for("cosesa_item_detail", item_id=item_id))
+
+
+@app.route("/cosesa/items/<int:item_id>/reabrir", methods=["POST"])
+@cosesa_required
+def reabrir_item(item_id):
+    db = get_db()
+    item = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    if item is None:
+        db.close()
+        abort(404)
+    if not item_excluido(item):
+        flash("Esta tarea no está cancelada ni cerrada con avance parcial.", "error")
+        db.close()
+        return redirect(url_for("cosesa_item_detail", item_id=item_id))
+    user = get_current_user()
+    ahora = now_local_str()
+    nuevo_estado = "en_curso" if item["fecha_inicio"] else "pendiente"
+    db.execute(
+        "UPDATE items SET cancelada = 0, estado = ?, fecha_fin = NULL, pausado_en = NULL WHERE id = ?",
+        (nuevo_estado, item_id),
+    )
+    db.execute(
+        "INSERT INTO avance_log (item_id, fecha, avance_pct, comentario, usuario_id) VALUES (?, ?, ?, ?, ?)",
+        (item_id, ahora, item["avance_pct"], "Tarea reabierta. Vuelve a contar para el avance total de la obra.", user["id"]),
+    )
+    db.commit()
+    recompute_item_horas(db, item_id)
+    db.close()
+    flash("Tarea reabierta: vuelve a contar para el avance total de la obra.", "success")
+    return redirect(url_for("cosesa_item_detail", item_id=item_id))
+
+
 @app.route("/cosesa/items/<int:item_id>/plan", methods=["POST"])
 @cosesa_required
 def actualizar_plan_item(item_id):
@@ -2128,7 +2210,7 @@ def cliente_dashboard():
     obras = db.execute(
         "SELECT o.*, "
         "(SELECT COUNT(*) FROM items i WHERE i.obra_id = o.id) AS n_items, "
-        "(SELECT COALESCE(AVG(avance_pct),0) FROM items i WHERE i.obra_id = o.id) AS avance_prom "
+        "(SELECT COALESCE(AVG(CASE WHEN i.cancelada = 1 OR (i.estado = 'finalizado' AND i.avance_pct < 100) THEN NULL ELSE i.avance_pct END),0) FROM items i WHERE i.obra_id = o.id) AS avance_prom "
         "FROM obras o JOIN usuario_obras uo ON uo.obra_id = o.id "
         "WHERE uo.usuario_id = ? ORDER BY o.creado_en DESC",
         (user["id"],),

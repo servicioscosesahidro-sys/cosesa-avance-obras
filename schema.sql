@@ -59,6 +59,7 @@ CREATE TABLE items (
     fecha_fin_plan TEXT,
     estado TEXT NOT NULL DEFAULT 'pendiente' CHECK (estado IN ('pendiente','en_curso','finalizado')),
     avance_pct INTEGER NOT NULL DEFAULT 0,
+    cancelada INTEGER NOT NULL DEFAULT 0,
     horas_hombre REAL NOT NULL DEFAULT 0,
     horas_maquina REAL NOT NULL DEFAULT 0,
     observaciones TEXT,

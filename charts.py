@@ -224,6 +224,11 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
         # grupo <g>, así se puede arrastrar completa para reordenarla.
         svg.append(f'<g class="gantt-row" data-id="{it["id"]}" data-i="{fila_idx}">')
         nombre = it["nombre"]
+        try:
+            if it["cancelada"]:
+                nombre = nombre + " [CANCELADA]"
+        except (KeyError, IndexError):
+            pass
         tag = (it["tag_equipo"] or "").strip() if "tag_equipo" in it.keys() else ""
         plan_ini, plan_fin = _parse(it["fecha_inicio_plan"]), _parse(it["fecha_fin_plan"])
         real_ini, real_fin = _parse(it["fecha_inicio"]), _parse(it["fecha_fin"]) or today
