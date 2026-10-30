@@ -1160,6 +1160,54 @@ def eliminar_certificado(cert_id):
     return redirect(url_for("cosesa_obra_detail", obra_id=obra_id))
 
 
+def _dt_local(valor):
+    """Valor para un <input type="datetime-local"> (acepta fecha sola o con hora)."""
+    if not valor:
+        return ""
+    valor = valor.replace(" ", "T")
+    return valor if "T" in valor else valor + "T00:00"
+
+
+@app.route("/cosesa/obras/<int:obra_id>/editar", methods=["GET", "POST"])
+@admin_required
+def editar_obra(obra_id):
+    db = get_db()
+    obra = db.execute(
+        "SELECT o.*, c.nombre AS cliente_nombre FROM obras o JOIN clientes c ON c.id = o.cliente_id WHERE o.id = ?",
+        (obra_id,),
+    ).fetchone()
+    if obra is None:
+        db.close()
+        abort(404)
+    if request.method == "POST":
+        nombre = request.form.get("nombre", "").strip()
+        if not nombre:
+            flash("El nombre de la obra es obligatorio.", "error")
+            db.close()
+            return redirect(url_for("editar_obra", obra_id=obra_id))
+        estado = request.form.get("estado", obra["estado"])
+        if estado not in ("planificada", "en_curso", "finalizada"):
+            estado = obra["estado"]
+        db.execute(
+            "UPDATE obras SET nombre = ?, descripcion = ?, ubicacion = ?, fecha_inicio = ?, "
+            "fecha_fin_estimada = ?, estado = ? WHERE id = ?",
+            (
+                nombre, request.form.get("descripcion", "").strip(), request.form.get("ubicacion", "").strip(),
+                request.form.get("fecha_inicio") or None, request.form.get("fecha_fin_estimada") or None,
+                estado, obra_id,
+            ),
+        )
+        db.commit()
+        db.close()
+        flash("Datos de la obra actualizados.", "success")
+        return redirect(url_for("cosesa_obra_detail", obra_id=obra_id))
+    db.close()
+    return render_template(
+        "editar_obra.html", obra=obra, fecha_inicio=_dt_local(obra["fecha_inicio"]),
+        fecha_fin=_dt_local(obra["fecha_fin_estimada"]),
+    )
+
+
 @app.route("/cosesa/obras/<int:obra_id>/finalizar", methods=["POST"])
 @admin_required
 def finalizar_obra(obra_id):
