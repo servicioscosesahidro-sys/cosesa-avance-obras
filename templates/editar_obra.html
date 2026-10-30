@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Editar obra · {{ obra['nombre'] }}{% endblock %}
+{% block back_link %}
+<a class="btn btn-outline btn-sm btn-back no-print" href="{{ url_for('cosesa_obra_detail', obra_id=obra['id']) }}">&larr; Volver</a>
+{% endblock %}
+{% block content %}
+<div class="breadcrumb">
+  <a href="{{ url_for('cosesa_dashboard') }}">Panel COSESA</a> /
+  <a href="{{ url_for('cosesa_cliente_detail', cliente_id=obra['cliente_id']) }}">{{ obra['cliente_nombre'] }}</a> /
+  <a href="{{ url_for('cosesa_obra_detail', obra_id=obra['id']) }}">{{ obra['nombre'] }}</a> / Editar
+</div>
+<h1>Editar datos de la obra</h1>
+<p class="subtitle">Cliente: {{ obra['cliente_nombre'] }}</p>
+
+<div class="card" style="max-width:640px;">
+  <form method="post">
+    <label>Nombre de la obra</label>
+    <input type="text" name="nombre" value="{{ obra['nombre'] }}" required>
+    <label>Descripción</label>
+    <textarea name="descripcion" rows="3">{{ obra['descripcion'] or '' }}</textarea>
+    <label>Ubicación</label>
+    <input type="text" name="ubicacion" value="{{ obra['ubicacion'] or '' }}">
+    <div class="field-inline">
+      <div>
+        <label>Fecha de inicio</label>
+        <input type="datetime-local" name="fecha_inicio" value="{{ fecha_inicio }}">
+      </div>
+      <div>
+        <label>Fin estimado</label>
+        <input type="datetime-local" name="fecha_fin_estimada" value="{{ fecha_fin }}">
+      </div>
+    </div>
+    <label>Estado de la obra</label>
+    <select name="estado">
+      <option value="planificada" {{ 'selected' if obra['estado'] == 'planificada' else '' }}>Planificada</option>
+      <option value="en_curso" {{ 'selected' if obra['estado'] == 'en_curso' else '' }}>En curso</option>
+      <option value="finalizada" {{ 'selected' if obra['estado'] == 'finalizada' else '' }}>Finalizada</option>
+    </select>
+    <div style="display:flex;gap:10px;margin-top:14px;">
+      <button class="btn btn-dark" type="submit">Guardar cambios</button>
+      <a class="btn btn-outline" href="{{ url_for('cosesa_obra_detail', obra_id=obra['id']) }}">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

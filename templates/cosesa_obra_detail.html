@@ -24,6 +24,7 @@
     <a class="btn btn-outline" target="_blank" href="{{ url_for('reporte_demoras_obra', obra_id=obra['id']) }}">Reporte de demoras</a>
     <a class="btn btn-outline" target="_blank" href="{{ url_for('reporte_interno_obra', obra_id=obra['id']) }}">Informe interno (hs)</a>
     {% if is_admin(current_user) %}
+    <a class="btn btn-outline" href="{{ url_for('editar_obra', obra_id=obra['id']) }}">Editar datos de la obra</a>
     {% if obra['estado'] != 'finalizada' %}
     <form method="post" action="{{ url_for('finalizar_obra', obra_id=obra['id']) }}" onsubmit="return confirm('¿Marcar la obra como finalizada?');">
       <button class="btn btn-success" type="submit">Finalizar obra</button>
