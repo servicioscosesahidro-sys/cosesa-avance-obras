@@ -23,13 +23,15 @@
     <a class="btn btn-outline" href="{{ url_for('obra_aprendizajes', obra_id=obra['id']) }}">Aprendizajes</a>
     <a class="btn btn-outline" target="_blank" href="{{ url_for('reporte_demoras_obra', obra_id=obra['id']) }}">Reporte de demoras</a>
     <a class="btn btn-outline" target="_blank" href="{{ url_for('reporte_interno_obra', obra_id=obra['id']) }}">Informe interno (hs)</a>
-    {% if is_admin(current_user) %}
+    {% if puede('editar_obra') %}
     <a class="btn btn-outline" href="{{ url_for('editar_obra', obra_id=obra['id']) }}">Editar datos de la obra</a>
     {% if obra['estado'] != 'finalizada' %}
     <form method="post" action="{{ url_for('finalizar_obra', obra_id=obra['id']) }}" onsubmit="return confirm('¿Marcar la obra como finalizada?');">
       <button class="btn btn-success" type="submit">Finalizar obra</button>
     </form>
     {% endif %}
+    {% endif %}
+    {% if puede('eliminar_obra') %}
     <form method="post" action="{{ url_for('eliminar_obra', obra_id=obra['id']) }}" onsubmit="return confirm('¿Eliminar la obra \'{{ obra['nombre'] }}\' y todos sus ítems, fotos y avances? Esta acción no se puede deshacer.');">
       <button class="btn btn-danger" type="submit">Eliminar obra</button>
     </form>
@@ -73,6 +75,10 @@
       <td><a href="{{ url_for('cosesa_item_detail', item_id=i['id']) }}">{{ i['nombre'] }}</a>{% if i['tag_equipo'] %} <span class="subtitle">({{ i['tag_equipo'] }})</span>{% endif %}</td>
       <td>{% if i['cancelada'] %}<span class="pill" style="background:#e4e6e8;color:#5b636b;">Cancelada</span>{% else %}<span class="pill pill-{{ i['estado'] }}">{{ i['estado'].replace('_',' ') }}</span>{% endif %}{% if i['pausado_en'] %} <span class="pill pill-pausado">Pausado</span>{% endif %}</td>
       <td style="min-width:160px;">
+        {% if not puede('avance') %}
+        <div class="progress-bar-bg" style="height:22px;"><div class="progress-bar-fill" style="width:{{ i['avance_pct'] }}%;"></div></div>
+        <span class="subtitle">{{ i['avance_pct'] }}%</span>
+        {% else %}
         <form method="post" action="{{ url_for('registrar_avance', item_id=i['id']) }}" id="avance-form-{{ i['id'] }}" style="margin:0;">
           <input type="hidden" name="volver" value="obra">
           <input type="hidden" name="avance_pct" id="avance-input-{{ i['id'] }}" value="{{ i['avance_pct'] }}">
@@ -85,12 +91,13 @@
             <button type="button" class="btn btn-sm btn-outline" onclick="ajustarAvanceObra({{ i['id'] }}, 10)">+</button>
           </div>
         </form>
+        {% endif %}
       </td>
       <td>{{ i['horas_hombre'] }}</td>
       <td>{{ i['horas_maquina'] }}</td>
       <td style="white-space:nowrap;">
         <a class="btn btn-sm" href="{{ url_for('cosesa_item_detail', item_id=i['id']) }}">Abrir</a>
-        {% if is_admin(current_user) %}
+        {% if puede('eliminar_tareas') %}
         <form method="post" action="{{ url_for('eliminar_item', item_id=i['id']) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar el ítem \'{{ i['nombre'] }}\'? Esta acción no se puede deshacer.');">
           <button class="btn btn-sm btn-danger" type="submit">Eliminar</button>
         </form>
@@ -123,10 +130,12 @@
   {% endif %}
 
   <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+  {% if puede('crear_tareas') or puede('importar_reales') %}
   <button type="button" class="btn" id="nuevo-item-toggle" onclick="toggleNuevoItem()">+ Nuevo ítem</button>
+  {% endif %}
 
   <div id="nuevo-item-panel" style="display:none;margin-top:16px;">
-    {% if is_admin(current_user) %}
+    {% if puede('crear_tareas') %}
     <h3>Agregar ítem / equipo a intervenir</h3>
     <p class="subtitle">Podés cargar el cronograma planificado (antes de empezar la obra) para poder comparar después el avance real contra lo previsto.</p>
     <form method="post" action="{{ url_for('crear_item', obra_id=obra['id']) }}">
@@ -167,7 +176,7 @@
     <form method="post" action="{{ url_for('importar_cronograma_excel', obra_id=obra['id']) }}" enctype="multipart/form-data" style="margin-top:10px;">
       <label>Archivo Excel (.xlsx) de cronograma</label>
       <input type="file" name="archivo" accept=".xlsx" required>
-      <p class="subtitle">Una tarea con un TAG que ya existe en esta obra se actualiza; si el TAG es nuevo (o está vacío) se crea una tarea nueva. Esta importación puede crear tareas nuevas, por eso está reservada al Administrador.</p>
+      <p class="subtitle">Una tarea con un TAG que ya existe en esta obra se actualiza; si el TAG es nuevo (o está vacío) se crea una tarea nueva. Esta importación puede crear tareas nuevas, por eso requiere el permiso "Crear tareas".</p>
       <button class="btn" type="submit">Importar cronograma</button>
     </form>
     <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
@@ -195,6 +204,7 @@
   </script>
 </div>
 
+{% if puede('editar_tareas') %}
 <div class="card">
   <h3>Editar cronograma planificado de un ítem existente</h3>
   <p class="subtitle">Usalo si ya cargaste el ítem y querés agregar o corregir sus fechas planificadas.</p>
@@ -211,6 +221,7 @@
   <p class="subtitle">Todavía no hay ítems cargados.</p>
   {% endif %}
 </div>
+{% endif %}
 
 <div class="card">
   <h2>Certificados de obra</h2>
@@ -224,7 +235,7 @@
       <td>{{ c['subida_en']|fmtdt }}</td>
       <td style="white-space:nowrap;">
         <a class="btn btn-outline btn-sm" href="{{ url_for('uploaded_file', filename=c['filename']) }}" target="_blank">Descargar</a>
-        {% if is_admin(current_user) %}
+        {% if puede('eliminar_certificados') %}
         <form method="post" action="{{ url_for('eliminar_certificado', cert_id=c['id']) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar el certificado \'{{ c['nombre_original'] }}\'?');">
           <button class="btn btn-sm btn-danger" type="submit">Eliminar</button>
         </form>
@@ -236,6 +247,7 @@
   {% else %}
   <p class="subtitle">Todavía no se cargaron certificados para esta obra.</p>
   {% endif %}
+  {% if puede('certificados') %}
   <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
   <h3>Subir certificado</h3>
   <form method="post" action="{{ url_for('subir_certificado', obra_id=obra['id']) }}" enctype="multipart/form-data">
@@ -243,6 +255,7 @@
     <input type="file" name="certificado" accept=".pdf,.png,.jpg,.jpeg,.webp" required>
     <button class="btn btn-dark" type="submit">Subir certificado</button>
   </form>
+  {% endif %}
 </div>
 
 {% endblock %}

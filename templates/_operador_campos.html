@@ -1,0 +1,44 @@
+{# Alcance de obras + permisos de un operador COSESA.
+   Variables: pref (id único), obras, obras_todas (bool), obras_asignadas_ids (set), permisos (set) #}
+<div class="operador-campos" id="{{ pref }}-campos">
+  <label style="margin-top:14px;">Obras que puede ver</label>
+  <label class="check-inline" style="display:block;"><input type="radio" name="obras_alcance" value="todas" {{ 'checked' if obras_todas else '' }} onchange="operadorAlcance('{{ pref }}')"> Todas las obras (incluidas las que se creen más adelante)</label>
+  <label class="check-inline" style="display:block;"><input type="radio" name="obras_alcance" value="elegidas" {{ '' if obras_todas else 'checked' }} onchange="operadorAlcance('{{ pref }}')"> Solo las obras que marque abajo</label>
+  <div class="checkbox-list" id="{{ pref }}-obras" style="{{ 'display:none;' if obras_todas else '' }}margin-top:6px;">
+    {% if obras %}
+    <div style="margin-bottom:6px;">
+      <button type="button" class="btn btn-outline btn-sm" onclick="document.querySelectorAll('#{{ pref }}-obras input[type=checkbox]').forEach(c=>c.checked=true)">Marcar todas</button>
+      <button type="button" class="btn btn-outline btn-sm" onclick="document.querySelectorAll('#{{ pref }}-obras input[type=checkbox]').forEach(c=>c.checked=false)">Desmarcar todas</button>
+    </div>
+    {% set ns = namespace(cli=None) %}
+    {% for o in obras %}
+      {% if o['cliente_nombre'] != ns.cli %}{% set ns.cli = o['cliente_nombre'] %}<div style="font-weight:700;margin:10px 0 4px;">{{ o['cliente_nombre'] }}</div>{% endif %}
+      <label class="check-inline" style="display:block;"><input type="checkbox" name="obras" value="{{ o['id'] }}" {{ 'checked' if o['id'] in obras_asignadas_ids else '' }}> {{ o['nombre'] }}{% if o['estado'] == 'finalizada' %} <span class="subtitle">(finalizada)</span>{% endif %}</label>
+    {% endfor %}
+    {% else %}
+    <p class="subtitle">Todavía no hay obras cargadas.</p>
+    {% endif %}
+  </div>
+
+  <label style="margin-top:14px;">Qué puede hacer en la app</label>
+  <p class="subtitle" style="margin-top:0;">Lo que no esté tildado lo puede ver, pero no modificar. Gestionar usuarios, crear clientes y restaurar backups queda siempre reservado al Administrador.</p>
+  <div class="checkbox-list" id="{{ pref }}-permisos" style="max-height:none;">
+    <div style="margin-bottom:6px;">
+      <button type="button" class="btn btn-outline btn-sm" onclick="document.querySelectorAll('#{{ pref }}-permisos input[type=checkbox]').forEach(c=>c.checked=true)">Marcar todo</button>
+      <button type="button" class="btn btn-outline btn-sm" onclick="document.querySelectorAll('#{{ pref }}-permisos input[type=checkbox]').forEach(c=>c.checked=false)">Desmarcar todo (solo lectura)</button>
+      <button type="button" class="btn btn-outline btn-sm" onclick="document.querySelectorAll('#{{ pref }}-permisos input[type=checkbox]').forEach(c=>c.checked=c.dataset.def==='1')">Valores por defecto</button>
+    </div>
+    {% for grupo, lista in PERMISOS_GRUPOS.items() %}
+    <div style="font-weight:700;margin:10px 0 4px;">{{ grupo }}</div>
+    {% for clave, etiqueta in lista %}
+    <label class="check-inline" style="display:block;"><input type="checkbox" name="permisos" value="{{ clave }}" data-def="{{ '1' if clave in PERMISOS_DEFAULT else '0' }}" {{ 'checked' if clave in permisos else '' }}> {{ etiqueta }}</label>
+    {% endfor %}
+    {% endfor %}
+  </div>
+</div>
+<script>
+function operadorAlcance(pref) {
+  const el = document.querySelector('#' + pref + '-campos input[name=obras_alcance]:checked');
+  document.getElementById(pref + '-obras').style.display = (el && el.value === 'elegidas') ? 'block' : 'none';
+}
+</script>

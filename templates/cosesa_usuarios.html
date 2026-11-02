@@ -10,17 +10,25 @@
 
 <div class="card">
   <h2>Usuarios COSESA (operadores y administradores)</h2>
+  <p class="subtitle">El Administrador tiene acceso total. A cada Operador le elegís qué obras ve y qué acciones puede hacer.</p>
   {% if usuarios_cosesa %}
   <table>
-    <tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th></th></tr>
-    {% for u in usuarios_cosesa %}
+    <tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Obras</th><th>Permisos</th><th></th></tr>
+    {% for row in usuarios_cosesa %}{% set u = row['u'] %}
     <tr>
       <td>{{ u['nombre'] }}</td>
       <td>{{ u['username'] }}</td>
       <td><span class="pill {{ 'pill-finalizado' if u['rol'] == 'cosesa_admin' else 'pill-en_curso' }}">{{ 'Administrador' if u['rol'] == 'cosesa_admin' else 'Operador' }}</span></td>
       <td>
+        {% if row['todas'] %}<span class="subtitle">Todas</span>
+        {% elif row['obras'] %}{% for o in row['obras'] %}<span class="pill pill-en_curso" style="margin:2px 4px 2px 0;display:inline-block;">{{ o['nombre'] }}</span>{% endfor %}
+        {% else %}<span class="subtitle">Ninguna</span>{% endif %}
+      </td>
+      <td>{% if u['rol'] == 'cosesa_admin' %}<span class="subtitle">Todos</span>{% else %}<span class="subtitle">{{ row['n_permisos'] }} de {{ PERMISOS|length }}</span>{% endif %}</td>
+      <td style="white-space:nowrap;">
+        <a class="btn btn-sm btn-outline" href="{{ url_for('editar_usuario_cosesa', usuario_id=u['id']) }}">Editar</a>
         {% if u['id'] != current_user['id'] %}
-        <form method="post" action="{{ url_for('eliminar_usuario_cosesa', usuario_id=u['id']) }}" onsubmit="return confirm('¿Eliminar el usuario \'{{ u['username'] }}\'?');">
+        <form method="post" action="{{ url_for('eliminar_usuario_cosesa', usuario_id=u['id']) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar el usuario \'{{ u['username'] }}\'?');">
           <button class="btn btn-sm btn-danger" type="submit">Eliminar</button>
         </form>
         {% else %}
@@ -34,7 +42,8 @@
     <p class="subtitle">Todavía no hay otros usuarios de COSESA cargados.</p>
   {% endif %}
   <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
-  <h3>Nuevo usuario COSESA</h3>
+  <button type="button" class="btn" id="nuevo-cosesa-toggle" onclick="toggleNuevoCosesa()">+ Nuevo usuario COSESA</button>
+  <div id="nuevo-cosesa-panel" style="display:none;margin-top:16px;">
   <form method="post" action="{{ url_for('crear_usuario_cosesa') }}">
     <div class="field-inline">
       <div>
@@ -43,8 +52,8 @@
       </div>
       <div>
         <label>Rol</label>
-        <select name="rol">
-          <option value="cosesa">Operador (carga info, no borra ni agrega obras)</option>
+        <select name="rol" id="sel-rol-nuevo" onchange="document.getElementById('nuevo-op-campos').style.display = this.value === 'cosesa' ? 'block' : 'none'">
+          <option value="cosesa">Operador (obras y permisos a elección)</option>
           <option value="cosesa_admin">Administrador (acceso total)</option>
         </select>
       </div>
@@ -59,9 +68,21 @@
         <input type="password" name="password" required>
       </div>
     </div>
-    <button class="btn btn-dark" type="submit">Crear usuario</button>
+    {% set pref = 'nuevo-op' %}{% set obras_todas = True %}{% set obras_asignadas_ids = [] %}{% set permisos = PERMISOS_DEFAULT %}
+    {% include "_operador_campos.html" %}
+    <button class="btn btn-dark" type="submit" style="margin-top:10px;">Crear usuario</button>
   </form>
+  </div>
 </div>
+<script>
+function toggleNuevoCosesa() {
+  const panel = document.getElementById('nuevo-cosesa-panel');
+  const btn = document.getElementById('nuevo-cosesa-toggle');
+  const abierto = panel.style.display !== 'none';
+  panel.style.display = abierto ? 'none' : 'block';
+  btn.textContent = abierto ? '+ Nuevo usuario COSESA' : '− Ocultar';
+}
+</script>
 
 <div class="card">
   <h2>Usuarios cliente</h2>

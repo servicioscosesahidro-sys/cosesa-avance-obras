@@ -67,7 +67,7 @@
     <textarea name="descripcion" rows="3">{{ item['descripcion'] or '' }}</textarea>
     <button class="btn btn-outline" type="submit">Guardar cambios</button>
   </form>
-  {% if is_admin(current_user) %}
+  {% if puede('eliminar_tareas') %}
   <form method="post" action="{{ url_for('eliminar_item', item_id=item['id']) }}" onsubmit="return confirm('¿Eliminar el ítem \'{{ item['nombre'] }}\'? Esta acción no se puede deshacer.');">
     <button class="btn btn-danger" type="submit">Eliminar ítem</button>
   </form>
@@ -255,7 +255,9 @@
 <div class="card" id="subtareas">
   <div style="display:flex;justify-content:space-between;align-items:center;">
     <h2 style="margin:0;">Subtareas (certificación por etapas)</h2>
+    {% if puede('checklist') %}
     <button type="button" class="btn btn-sm" onclick="document.getElementById('form-subtarea-nueva').style.display='block';this.style.display='none';document.getElementById('subtarea-texto').focus();">+ Agregar subtarea</button>
+    {% endif %}
   </div>
   <p class="subtitle">Escribí cada etapa del trabajo a medida que avanza. En el reporte de la tarea ("Ver / imprimir reporte") cada subtarea sale con dos espacios para firmar: COSESA y cliente.</p>
   <form id="form-subtarea-nueva" method="post" action="{{ url_for('crear_subtarea', item_id=item['id']) }}" style="display:none;margin-bottom:12px;">

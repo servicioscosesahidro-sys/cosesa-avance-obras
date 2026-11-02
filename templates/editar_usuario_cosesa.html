@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Editar {{ usuario['nombre'] }} · COSESA{% endblock %}
+{% block back_link %}
+<a class="btn btn-outline btn-sm btn-back no-print" href="{{ url_for('cosesa_usuarios') }}">&larr; Volver</a>
+{% endblock %}
+{% block content %}
+<div class="breadcrumb"><a href="{{ url_for('cosesa_dashboard') }}">Panel COSESA</a> / <a href="{{ url_for('cosesa_usuarios') }}">Usuarios</a> / {{ usuario['nombre'] }}</div>
+<h1>Editar usuario COSESA</h1>
+<p class="subtitle">Cambiá los datos de acceso, el rol, qué obras ve y qué acciones puede hacer. Dejá la contraseña vacía para no cambiarla.</p>
+
+<div class="card" style="max-width:720px;">
+  <form method="post">
+    <div class="field-inline">
+      <div>
+        <label>Nombre de la persona</label>
+        <input type="text" name="nombre" value="{{ usuario['nombre'] }}" required>
+      </div>
+      <div>
+        <label>Usuario</label>
+        <input type="text" name="username" value="{{ usuario['username'] }}" required>
+      </div>
+    </div>
+    <div class="field-inline">
+      <div>
+        <label>Nueva contraseña (opcional)</label>
+        <input type="password" name="password" placeholder="Dejar vacío para no cambiarla">
+      </div>
+      <div>
+        <label>Rol</label>
+        {% if es_yo %}
+        <input type="hidden" name="rol" value="cosesa_admin">
+        <input type="text" value="Administrador (no podés cambiar tu propio rol)" disabled>
+        {% else %}
+        <select name="rol" onchange="document.getElementById('editar-op-wrap').style.display = this.value === 'cosesa' ? 'block' : 'none'">
+          <option value="cosesa" {{ 'selected' if usuario['rol'] == 'cosesa' else '' }}>Operador (obras y permisos a elección)</option>
+          <option value="cosesa_admin" {{ 'selected' if usuario['rol'] == 'cosesa_admin' else '' }}>Administrador (acceso total)</option>
+        </select>
+        {% endif %}
+      </div>
+    </div>
+
+    <div id="editar-op-wrap" style="{{ '' if usuario['rol'] == 'cosesa' else 'display:none;' }}">
+      {% set pref = 'editar-op' %}
+      {% include "_operador_campos.html" %}
+    </div>
+    {% if usuario['rol'] == 'cosesa_admin' %}
+    <p class="subtitle" id="nota-admin">Un Administrador ve todas las obras y puede hacer todo. Si lo pasás a Operador, elegí arriba sus obras y permisos.</p>
+    {% endif %}
+
+    <div style="display:flex;gap:10px;margin-top:14px;">
+      <button class="btn btn-dark" type="submit">Guardar cambios</button>
+      <a class="btn btn-outline" href="{{ url_for('cosesa_usuarios') }}">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

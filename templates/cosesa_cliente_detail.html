@@ -22,7 +22,7 @@
         <td>{{ '%.0f' % o['avance_prom'] }}%</td>
         <td style="white-space:nowrap;">
           <a class="btn btn-sm" href="{{ url_for('cosesa_obra_detail', obra_id=o['id']) }}">Abrir</a>
-          {% if is_admin(current_user) %}
+          {% if puede('eliminar_obra') %}
           <form method="post" action="{{ url_for('eliminar_obra', obra_id=o['id']) }}" style="display:inline;" onsubmit="return confirm('¿Eliminar la obra \'{{ o['nombre'] }}\' y todos sus ítems, fotos y avances? Esta acción no se puede deshacer.');">
             <button class="btn btn-sm btn-danger" type="submit">Eliminar</button>
           </form>
@@ -34,7 +34,7 @@
     {% else %}
       <p class="subtitle">Este cliente todavía no tiene obras cargadas.</p>
     {% endif %}
-    {% if is_admin(current_user) %}
+    {% if puede('crear_obras') %}
     <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
     <h3>Nueva obra</h3>
     <form method="post" action="{{ url_for('crear_obra', cliente_id=cliente['id']) }}">
@@ -69,7 +69,7 @@
       <tr>
         <td>{{ u['nombre'] }}</td>
         <td>{{ u['username'] }}</td>
-        <td><a class="btn btn-sm btn-outline" href="{{ url_for('editar_usuario_cliente', usuario_id=u['id']) }}">Editar accesos</a></td>
+        <td>{% if is_admin(current_user) %}<a class="btn btn-sm btn-outline" href="{{ url_for('editar_usuario_cliente', usuario_id=u['id']) }}">Editar accesos</a>{% endif %}</td>
       </tr>
       {% endfor %}
     </table>

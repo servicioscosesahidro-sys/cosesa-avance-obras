@@ -274,6 +274,39 @@ var CROPPER_CSS = "/*!\n * Cropper.js v1.6.2\n * https://fengyuanchen.github.io/
 })();
 
   </script>
+  {% if rutas_bloqueadas %}
+  <script>
+  /* Operador sin algunos permisos: oculta los botones de acciones que no puede
+     hacer y deja en solo lectura los formularios con datos. (El servidor igual
+     bloquea esas acciones; esto es solo para que no aparezcan.) */
+  (function () {
+    var rutas = {{ rutas_bloqueadas|tojson }}.map(function (r) { return new RegExp(r); });
+    function bloqueada(url) {
+      if (!url) return false;
+      var path;
+      try { path = new URL(url, location.href).pathname; } catch (e) { return false; }
+      return rutas.some(function (r) { return r.test(path); });
+    }
+    function aplicar() {
+      document.querySelectorAll('form[action]').forEach(function (f) {
+        if (!bloqueada(f.getAttribute('action'))) return;
+        var datos = f.querySelectorAll('textarea, select, input:not([type=hidden]):not([type=file]):not([type=submit]):not([type=button])');
+        if (!datos.length) { f.style.display = 'none'; return; }
+        f.querySelectorAll('input, select, textarea, button').forEach(function (el) {
+          if (el.type === 'hidden') return;
+          if (el.tagName === 'BUTTON' || el.type === 'submit' || el.type === 'file') { el.style.display = 'none'; }
+          else { el.disabled = true; }
+        });
+        f.addEventListener('submit', function (e) { e.preventDefault(); });
+      });
+      document.querySelectorAll('a[href]').forEach(function (a) {
+        if (bloqueada(a.getAttribute('href'))) a.style.display = 'none';
+      });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', aplicar); else aplicar();
+  })();
+  </script>
+  {% endif %}
   {% endblock %}
 </body>
 </html>
