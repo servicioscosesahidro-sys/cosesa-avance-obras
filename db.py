@@ -47,6 +47,16 @@ def _migrate_schema(conn):
         conn.execute("ALTER TABLE usuarios ADD COLUMN secciones TEXT")
         changed = True
 
+    # Usuarios COSESA (operadores): obras visibles y permisos por acción.
+    # obras_todas NULL/1 = ve todas las obras; 0 = solo las de usuario_obras.
+    # permisos NULL = permisos por defecto del operador.
+    if not _column_exists(conn, "usuarios", "obras_todas"):
+        conn.execute("ALTER TABLE usuarios ADD COLUMN obras_todas INTEGER")
+        changed = True
+    if not _column_exists(conn, "usuarios", "permisos"):
+        conn.execute("ALTER TABLE usuarios ADD COLUMN permisos TEXT")
+        changed = True
+
     if not _column_exists(conn, "items", "orden"):
         conn.execute("ALTER TABLE items ADD COLUMN orden INTEGER NOT NULL DEFAULT 0")
         # Conserva el orden actual (por fecha de carga) dentro de cada obra.

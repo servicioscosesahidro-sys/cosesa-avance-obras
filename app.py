@@ -485,7 +485,7 @@ def set_obras_asignadas(db, usuario_id, obra_ids):
 
 def usuario_puede_ver_obra(db, usuario, obra_id):
     if usuario["rol"] in COSESA_ROLES:
-        return True
+        return ve_todas_las_obras(usuario) or obra_id in get_obras_asignadas_ids(db, usuario["id"])
     return db.execute(
         "SELECT 1 FROM usuario_obras WHERE usuario_id = ? AND obra_id = ?",
         (usuario["id"], obra_id),
@@ -495,6 +495,228 @@ def usuario_puede_ver_obra(db, usuario, obra_id):
 @app.context_processor
 def inject_is_admin():
     return {"is_admin": is_admin}
+
+
+# ---------------------------------------------------------------------------
+# Usuarios COSESA: obras visibles y permisos por acción
+# ---------------------------------------------------------------------------
+# El Administrador puede todo y ve todas las obras. El Operador ve "todas las
+# obras" o solo las asignadas (usuarios.obras_todas + usuario_obras) y solo
+# puede hacer las acciones tildadas en usuarios.permisos (NULL = por defecto,
+# que equivale a lo que podía hacer un operador antes de este cambio).
+
+# (clave, etiqueta, grupo, activo por defecto para un operador)
+PERMISOS = [
+    ("crear_obras", "Crear obras nuevas", "Obras", False),
+    ("editar_obra", "Editar datos de la obra y finalizarla", "Obras", False),
+    ("eliminar_obra", "Eliminar obras", "Obras", False),
+    ("certificados", "Subir certificados de obra", "Obras", True),
+    ("eliminar_certificados", "Eliminar certificados de obra", "Obras", False),
+    ("crear_tareas", "Crear tareas e importar cronograma (Excel)", "Tareas", False),
+    ("eliminar_tareas", "Eliminar tareas", "Tareas", False),
+    ("editar_tareas", "Editar tareas, cronograma planificado, fechas reales y orden", "Tareas", True),
+    ("avance", "Registrar avance, pausar, reanudar y finalizar tareas", "Tareas", True),
+    ("cancelar_tareas", "Cancelar y reabrir tareas", "Tareas", True),
+    ("demoras", "Cargar, editar y eliminar demoras", "Tareas", True),
+    ("personal", "Personal asignado y observaciones de la tarea", "Tareas", True),
+    ("importar_reales", "Importar tiempos reales y demoras (Excel)", "Tareas", True),
+    ("fotos", "Subir y eliminar fotos", "Tareas", True),
+    ("checklist", "Checklist, piezas, subtareas y documentos firmados", "Tareas", True),
+    ("bitacora", "Cargar, editar y eliminar entradas de bitácora", "Registros de obra", True),
+    ("aprendizajes", "Cargar, editar y eliminar aprendizajes", "Registros de obra", True),
+    ("mantenimiento", "Cargar, editar y eliminar mantenimientos", "Registros de obra", True),
+    ("reportes", "Generar reportes y PDF (cliente, obra, demoras, informe interno, mantenimiento, checklist)", "Reportes", True),
+]
+PERMISOS_KEYS = [k for k, _l, _g, _d in PERMISOS]
+PERMISOS_DEFAULT = {k for k, _l, _g, d in PERMISOS if d}
+
+# Qué permiso exige cada pantalla / acción (por nombre de función de Flask).
+ENDPOINT_PERMISO = {
+    "crear_obra": "crear_obras",
+    "editar_obra": "editar_obra", "finalizar_obra": "editar_obra",
+    "eliminar_obra": "eliminar_obra",
+    "subir_certificado": "certificados",
+    "eliminar_certificado": "eliminar_certificados",
+    "crear_item": "crear_tareas", "importar_cronograma_excel": "crear_tareas",
+    "eliminar_item": "eliminar_tareas",
+    "editar_item": "editar_tareas", "actualizar_plan_item": "editar_tareas",
+    "actualizar_fechas_reales": "editar_tareas", "guardar_orden_items": "editar_tareas",
+    "registrar_avance": "avance", "pausar_item": "avance", "reanudar_item": "avance",
+    "finalizar_item": "avance",
+    "cancelar_item": "cancelar_tareas", "reabrir_item": "cancelar_tareas",
+    "agregar_demora": "demoras", "cerrar_demora": "demoras", "editar_demora": "demoras",
+    "eliminar_demora": "demoras",
+    "actualizar_personal": "personal", "actualizar_observaciones": "personal",
+    "importar_reales_excel": "importar_reales",
+    "subir_foto": "fotos", "eliminar_foto": "fotos",
+    "actualizar_checklist": "checklist", "crear_punto_checklist": "checklist",
+    "editar_punto_checklist": "checklist", "eliminar_punto_checklist": "checklist",
+    "subir_foto_checklist": "checklist", "crear_pieza": "checklist", "editar_pieza": "checklist",
+    "eliminar_pieza": "checklist", "crear_subtarea": "checklist", "editar_subtarea": "checklist",
+    "eliminar_subtarea": "checklist", "crear_punto_subtarea": "checklist",
+    "editar_punto_subtarea": "checklist", "eliminar_punto_subtarea": "checklist",
+    "nueva_bitacora": "bitacora", "editar_bitacora": "bitacora", "eliminar_bitacora": "bitacora",
+    "nuevo_aprendizaje": "aprendizajes", "editar_aprendizaje": "aprendizajes",
+    "eliminar_aprendizaje": "aprendizajes",
+    "nuevo_mantenimiento": "mantenimiento", "editar_mantenimiento": "mantenimiento",
+    "mantenimiento_realizado": "mantenimiento", "eliminar_mantenimiento": "mantenimiento",
+    "reporte_cliente_opciones": "reportes", "reporte_obra": "reportes", "reporte_obra_pdf": "reportes",
+    "certificacion_resumen_html": "reportes", "certificacion_obra_pdf": "reportes",
+    "reporte_demoras_obra": "reportes", "reporte_demoras_obra_pdf": "reportes",
+    "reporte_interno_obra": "reportes", "reporte_interno_obra_pdf": "reportes",
+    "reporte_mantenimiento": "reportes", "reporte_mantenimiento_pdf": "reportes",
+    "checklist_item_html": "reportes", "checklist_item_pdf": "reportes",
+}
+
+# Cómo encontrar la obra a partir del parámetro de la URL.
+_OBRA_DE_PARAM = {
+    "item_id": "SELECT obra_id FROM items WHERE id = ?",
+    "sub_id": "SELECT i.obra_id FROM subtareas s JOIN items i ON i.id = s.item_id WHERE s.id = ?",
+    "demora_id": "SELECT i.obra_id FROM demoras d JOIN items i ON i.id = d.item_id WHERE d.id = ?",
+    "pieza_id": "SELECT i.obra_id FROM piezas_lavado p JOIN items i ON i.id = p.item_id WHERE p.id = ?",
+    "foto_id": "SELECT i.obra_id FROM fotos f JOIN items i ON i.id = f.item_id WHERE f.id = ?",
+    "cert_id": "SELECT obra_id FROM certificados WHERE id = ?",
+    "ap_id": "SELECT obra_id FROM aprendizajes WHERE id = ?",
+    "entrada_id": "SELECT obra_id FROM bitacora WHERE id = ?",
+    "mid": "SELECT obra_id FROM mantenimientos WHERE id = ?",
+}
+_SQL_PUNTO_SUBTAREA = (
+    "SELECT i.obra_id FROM subtarea_puntos p JOIN subtareas s ON s.id = p.subtarea_id "
+    "JOIN items i ON i.id = s.item_id WHERE p.id = ?"
+)
+_SQL_PUNTO_CHECKLIST = "SELECT i.obra_id FROM checklist_puntos p JOIN items i ON i.id = p.item_id WHERE p.id = ?"
+
+
+def _col(user, nombre):
+    try:
+        return user[nombre]
+    except (KeyError, IndexError):
+        return None
+
+
+def parse_permisos(valor):
+    if valor is None:
+        return set(PERMISOS_DEFAULT)
+    return {x for x in valor.split(",") if x in PERMISOS_KEYS}
+
+
+def permisos_a_texto(claves):
+    return ",".join(k for k in PERMISOS_KEYS if k in set(claves))
+
+
+def permisos_usuario(user):
+    if user is None or user["rol"] not in COSESA_ROLES:
+        return set()
+    if user["rol"] == "cosesa_admin":
+        return set(PERMISOS_KEYS)
+    return parse_permisos(_col(user, "permisos"))
+
+
+def puede(clave, user=None):
+    user = user if user is not None else get_current_user()
+    return clave in permisos_usuario(user)
+
+
+def ve_todas_las_obras(user):
+    if user is None or user["rol"] == "cliente":
+        return False
+    if user["rol"] == "cosesa_admin":
+        return True
+    return _col(user, "obras_todas") != 0
+
+
+def obras_visibles_ids(db, user):
+    """None = todas. Si no, el conjunto de IDs de obra que el usuario puede ver."""
+    if ve_todas_las_obras(user):
+        return None
+    return get_obras_asignadas_ids(db, user["id"])
+
+
+def _sql_filtro_obras(db, user, columna="o.id"):
+    """Fragmento SQL ' AND o.id IN (...)' para filtrar listados. '' si ve todas."""
+    ids = obras_visibles_ids(db, user)
+    if ids is None:
+        return ""
+    if not ids:
+        return " AND 0"
+    return f" AND {columna} IN ({','.join(str(int(i)) for i in ids)})"
+
+
+def _obra_de_request(db):
+    args = request.view_args or {}
+    if "obra_id" in args:
+        return args["obra_id"]
+    if "punto_id" in args:
+        sql = _SQL_PUNTO_SUBTAREA if request.endpoint.endswith("_punto_subtarea") else _SQL_PUNTO_CHECKLIST
+        row = db.execute(sql, (args["punto_id"],)).fetchone()
+        return row[0] if row else None
+    for param, sql in _OBRA_DE_PARAM.items():
+        if param in args:
+            row = db.execute(sql, (args[param],)).fetchone()
+            return row[0] if row else None
+    return None
+
+
+def _sin_permiso(mensaje):
+    if request.is_json:
+        return jsonify({"ok": False, "error": mensaje}), 403
+    flash(mensaje, "error")
+    destino = request.referrer
+    if not destino or destino == request.url:
+        destino = url_for("cosesa_dashboard")
+    return redirect(destino)
+
+
+@app.before_request
+def controlar_permisos_operador():
+    """Chequeo central para operadores COSESA: obra asignada + permiso de la acción."""
+    if request.endpoint in (None, "static", "login", "logout", "uploaded_file"):
+        return None
+    user = get_current_user()
+    if user is None or user["rol"] != "cosesa":
+        return None
+    clave = ENDPOINT_PERMISO.get(request.endpoint)
+    if clave and clave not in permisos_usuario(user):
+        etiqueta = next((l for k, l, _g, _d in PERMISOS if k == clave), clave)
+        return _sin_permiso(f"No tenés permiso para esta acción ({etiqueta}). Pedíselo a un administrador.")
+    if not ve_todas_las_obras(user):
+        db = get_db()
+        obra_id = _obra_de_request(db)
+        permitido = obra_id is None or obra_id in get_obras_asignadas_ids(db, user["id"])
+        db.close()
+        if not permitido:
+            abort(403)
+    return None
+
+
+def _regex_de_regla(rule):
+    import re as _re
+    patron = _re.sub(r"<(?:int:)?[^>]+>", "__PARAM__", rule.rule)
+    patron = _re.escape(patron).replace("__PARAM__", "[^/]+")
+    return "^" + patron + "$"
+
+
+@app.context_processor
+def inject_permisos():
+    user = get_current_user()
+    bloqueadas = []
+    if user is not None and user["rol"] == "cosesa":
+        mios = permisos_usuario(user)
+        for rule in app.url_map.iter_rules():
+            clave = ENDPOINT_PERMISO.get(rule.endpoint)
+            if clave and clave not in mios:
+                bloqueadas.append(_regex_de_regla(rule))
+    return {
+        "puede": puede, "PERMISOS": PERMISOS, "PERMISOS_DEFAULT": PERMISOS_DEFAULT,
+        "PERMISOS_GRUPOS": _permisos_agrupados(), "rutas_bloqueadas": bloqueadas,
+    }
+
+
+def _permisos_agrupados():
+    grupos = {}
+    for k, l, g, _d in PERMISOS:
+        grupos.setdefault(g, []).append((k, l))
+    return grupos
 
 
 def allowed_file(filename):
@@ -815,22 +1037,37 @@ def logout():
 @cosesa_required
 def cosesa_dashboard():
     db = get_db()
+    user = get_current_user()
+    filtro = _sql_filtro_obras(db, user)
     clientes = db.execute(
         "SELECT c.*, "
-        "(SELECT COUNT(*) FROM obras o WHERE o.cliente_id = c.id) AS n_obras "
+        "(SELECT COUNT(*) FROM obras o WHERE o.cliente_id = c.id" + filtro + ") AS n_obras "
         "FROM clientes c ORDER BY c.nombre"
     ).fetchall()
+    if filtro and not puede("crear_obras", user):
+        # Un operador con obras limitadas solo ve los clientes de sus obras.
+        clientes = [c for c in clientes if c["n_obras"]]
     obras_activas = db.execute(
         "SELECT o.*, c.nombre AS cliente_nombre, "
         "(SELECT COUNT(*) FROM items i WHERE i.obra_id = o.id) AS n_items, "
         "(SELECT COALESCE(AVG(CASE WHEN i.cancelada = 1 OR (i.estado = 'finalizado' AND i.avance_pct < 100) THEN NULL ELSE i.avance_pct END),0) FROM items i WHERE i.obra_id = o.id) AS avance_prom "
         "FROM obras o JOIN clientes c ON c.id = o.cliente_id "
-        "WHERE o.estado != 'finalizada' ORDER BY o.creado_en DESC"
+        "WHERE o.estado != 'finalizada'" + filtro + " ORDER BY o.creado_en DESC"
     ).fetchall()
     db.close()
     return render_template(
         "cosesa_dashboard.html", clientes=clientes, obras_activas=obras_activas,
     )
+
+
+def _datos_operador_form(db):
+    """Lee del formulario el alcance de obras y los permisos de un usuario COSESA."""
+    obras_todas = 0 if request.form.get("obras_alcance") == "elegidas" else 1
+    obra_ids = [int(x) for x in request.form.getlist("obras") if x.isdigit()]
+    validas = {r["id"] for r in db.execute("SELECT id FROM obras").fetchall()}
+    obra_ids = [o for o in obra_ids if o in validas]
+    permisos_txt = permisos_a_texto(request.form.getlist("permisos"))
+    return obras_todas, obra_ids, permisos_txt
 
 
 @app.route("/cosesa/usuarios/nuevo", methods=["POST"])
@@ -848,10 +1085,14 @@ def crear_usuario_cosesa():
         return redirect(url_for("cosesa_usuarios"))
     db = get_db()
     try:
-        db.execute(
-            "INSERT INTO usuarios (nombre, username, password_hash, rol) VALUES (?, ?, ?, ?)",
-            (nombre, username, generate_password_hash(password), rol),
+        obras_todas, obra_ids, permisos_txt = _datos_operador_form(db)
+        if rol == "cosesa_admin":
+            obras_todas, obra_ids, permisos_txt = 1, [], None
+        cur = db.execute(
+            "INSERT INTO usuarios (nombre, username, password_hash, rol, obras_todas, permisos) VALUES (?, ?, ?, ?, ?, ?)",
+            (nombre, username, generate_password_hash(password), rol, obras_todas, permisos_txt),
         )
+        set_obras_asignadas(db, cur.lastrowid, obra_ids if not obras_todas else [])
         db.commit()
         etiqueta = "Administrador" if rol == "cosesa_admin" else "Operador"
         flash(f"Usuario {etiqueta.lower()} '{username}' creado.", "success")
@@ -859,6 +1100,65 @@ def crear_usuario_cosesa():
         flash(f"No se pudo crear el usuario (¿nombre de usuario repetido?): {e}", "error")
     db.close()
     return redirect(url_for("cosesa_usuarios"))
+
+
+@app.route("/cosesa/usuarios/<int:usuario_id>/editar-cosesa", methods=["GET", "POST"])
+@admin_required
+def editar_usuario_cosesa(usuario_id):
+    db = get_db()
+    usuario = db.execute(
+        "SELECT * FROM usuarios WHERE id = ? AND rol IN ('cosesa','cosesa_admin')", (usuario_id,)
+    ).fetchone()
+    if usuario is None:
+        db.close()
+        abort(404)
+    yo = get_current_user()
+    if request.method == "POST":
+        nombre = request.form.get("nombre", "").strip()
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "").strip()
+        rol = request.form.get("rol", usuario["rol"]).strip()
+        if rol not in ("cosesa", "cosesa_admin"):
+            rol = usuario["rol"]
+        if usuario_id == yo["id"] and rol != "cosesa_admin":
+            flash("No podés quitarte a vos mismo el rol de Administrador.", "error")
+            rol = "cosesa_admin"
+        if not (nombre and username):
+            flash("Completá nombre y usuario.", "error")
+            db.close()
+            return redirect(url_for("editar_usuario_cosesa", usuario_id=usuario_id))
+        obras_todas, obra_ids, permisos_txt = _datos_operador_form(db)
+        if rol == "cosesa_admin":
+            obras_todas, obra_ids = 1, []
+            permisos_txt = usuario["permisos"]
+        try:
+            db.execute(
+                "UPDATE usuarios SET nombre = ?, username = ?, rol = ?, obras_todas = ?, permisos = ? WHERE id = ?",
+                (nombre, username, rol, obras_todas, permisos_txt, usuario_id),
+            )
+            if password:
+                db.execute("UPDATE usuarios SET password_hash = ? WHERE id = ?",
+                           (generate_password_hash(password), usuario_id))
+            set_obras_asignadas(db, usuario_id, obra_ids if not obras_todas else [])
+            db.commit()
+            flash(f"Usuario '{username}' actualizado.", "success")
+            db.close()
+            return redirect(url_for("cosesa_usuarios"))
+        except Exception as e:
+            flash(f"No se pudo actualizar el usuario (¿nombre de usuario repetido?): {e}", "error")
+    obras = db.execute(
+        "SELECT o.*, c.nombre AS cliente_nombre FROM obras o JOIN clientes c ON c.id = o.cliente_id "
+        "ORDER BY c.nombre, o.estado = 'finalizada', o.nombre"
+    ).fetchall()
+    obras_asignadas_ids = get_obras_asignadas_ids(db, usuario_id)
+    db.close()
+    return render_template(
+        "editar_usuario_cosesa.html", usuario=usuario, obras=obras,
+        obras_asignadas_ids=obras_asignadas_ids,
+        obras_todas=_col(usuario, "obras_todas") != 0,
+        permisos=parse_permisos(_col(usuario, "permisos")),
+        es_yo=(usuario_id == yo["id"]),
+    )
 
 
 @app.route("/cosesa/usuarios/<int:usuario_id>/eliminar", methods=["POST"])
@@ -885,9 +1185,18 @@ def eliminar_usuario_cosesa(usuario_id):
 @admin_required
 def cosesa_usuarios():
     db = get_db()
-    usuarios_cosesa = db.execute(
-        "SELECT * FROM usuarios WHERE rol IN ('cosesa','cosesa_admin') ORDER BY rol, nombre"
-    ).fetchall()
+    usuarios_cosesa = []
+    for u in db.execute(
+        "SELECT * FROM usuarios WHERE rol IN ('cosesa','cosesa_admin') ORDER BY rol DESC, nombre"
+    ).fetchall():
+        obras_u = db.execute(
+            "SELECT o.id, o.nombre FROM obras o JOIN usuario_obras uo ON uo.obra_id = o.id "
+            "WHERE uo.usuario_id = ? ORDER BY o.nombre", (u["id"],)
+        ).fetchall()
+        usuarios_cosesa.append({
+            "u": u, "obras": obras_u, "todas": ve_todas_las_obras(u),
+            "n_permisos": len(permisos_usuario(u)),
+        })
     usuarios_cliente_rows = db.execute(
         "SELECT u.*, c.nombre AS cliente_nombre FROM usuarios u "
         "JOIN clientes c ON c.id = u.cliente_id WHERE u.rol = 'cliente' ORDER BY c.nombre, u.nombre"
@@ -1020,13 +1329,18 @@ def cosesa_cliente_detail(cliente_id):
     cliente = db.execute("SELECT * FROM clientes WHERE id = ?", (cliente_id,)).fetchone()
     if cliente is None:
         abort(404)
+    user = get_current_user()
+    filtro = _sql_filtro_obras(db, user)
     obras = db.execute(
         "SELECT o.*, "
         "(SELECT COUNT(*) FROM items i WHERE i.obra_id = o.id) AS n_items, "
         "(SELECT COALESCE(AVG(CASE WHEN i.cancelada = 1 OR (i.estado = 'finalizado' AND i.avance_pct < 100) THEN NULL ELSE i.avance_pct END),0) FROM items i WHERE i.obra_id = o.id) AS avance_prom "
-        "FROM obras o WHERE o.cliente_id = ? ORDER BY o.creado_en DESC",
+        "FROM obras o WHERE o.cliente_id = ?" + filtro + " ORDER BY o.creado_en DESC",
         (cliente_id,),
     ).fetchall()
+    if filtro and not obras and not puede("crear_obras", user):
+        db.close()
+        abort(403)
     usuarios_cliente = db.execute(
         "SELECT * FROM usuarios WHERE cliente_id = ? AND rol = 'cliente'", (cliente_id,)
     ).fetchall()
@@ -1077,7 +1391,7 @@ def crear_usuario_cliente(cliente_id):
 
 
 @app.route("/cosesa/clientes/<int:cliente_id>/obras/nueva", methods=["POST"])
-@admin_required
+@cosesa_required
 def crear_obra(cliente_id):
     nombre = request.form.get("nombre", "").strip()
     descripcion = request.form.get("descripcion", "").strip()
@@ -1094,6 +1408,10 @@ def crear_obra(cliente_id):
         (cliente_id, nombre, descripcion, ubicacion, fecha_inicio, fecha_fin_estimada),
     )
     obra_id = cur.lastrowid
+    user = get_current_user()
+    if not ve_todas_las_obras(user):
+        # El operador con obras limitadas queda asignado a la obra que creó.
+        db.execute("INSERT OR IGNORE INTO usuario_obras (usuario_id, obra_id) VALUES (?, ?)", (user["id"], obra_id))
     db.commit()
     db.close()
     flash(f"Obra '{nombre}' creada.", "success")
@@ -1111,7 +1429,9 @@ def cosesa_obra_detail(obra_id):
     if obra is None:
         abort(404)
     items = items_obra_con_horas(db, obra_id)
-    gantt_html, curve_html, carga_plan_html, carga_real_html = build_obra_charts(db, items, interactive=True)
+    # Los controles del cronograma (−/+ de avance y reordenar) solo para quien puede usarlos.
+    interactivo = puede("avance") and puede("editar_tareas")
+    gantt_html, curve_html, carga_plan_html, carga_real_html = build_obra_charts(db, items, interactive=interactivo)
     certificados = db.execute(
         "SELECT * FROM certificados WHERE obra_id = ? ORDER BY subida_en DESC", (obra_id,)
     ).fetchall()
@@ -1140,7 +1460,7 @@ def subir_certificado(obra_id):
 
 
 @app.route("/cosesa/certificados/<int:cert_id>/eliminar", methods=["POST"])
-@admin_required
+@cosesa_required
 def eliminar_certificado(cert_id):
     db = get_db()
     cert = db.execute("SELECT * FROM certificados WHERE id = ?", (cert_id,)).fetchone()
@@ -1169,7 +1489,7 @@ def _dt_local(valor):
 
 
 @app.route("/cosesa/obras/<int:obra_id>/editar", methods=["GET", "POST"])
-@admin_required
+@cosesa_required
 def editar_obra(obra_id):
     db = get_db()
     obra = db.execute(
@@ -1209,7 +1529,7 @@ def editar_obra(obra_id):
 
 
 @app.route("/cosesa/obras/<int:obra_id>/finalizar", methods=["POST"])
-@admin_required
+@cosesa_required
 def finalizar_obra(obra_id):
     db = get_db()
     db.execute("UPDATE obras SET estado = 'finalizada' WHERE id = ?", (obra_id,))
@@ -1220,7 +1540,7 @@ def finalizar_obra(obra_id):
 
 
 @app.route("/cosesa/obras/<int:obra_id>/eliminar", methods=["POST"])
-@admin_required
+@cosesa_required
 def eliminar_obra(obra_id):
     db = get_db()
     obra = db.execute("SELECT * FROM obras WHERE id = ?", (obra_id,)).fetchone()
@@ -1235,7 +1555,7 @@ def eliminar_obra(obra_id):
 
 
 @app.route("/cosesa/items/<int:item_id>/eliminar", methods=["POST"])
-@admin_required
+@cosesa_required
 def eliminar_item(item_id):
     db = get_db()
     item = db.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
@@ -1250,7 +1570,7 @@ def eliminar_item(item_id):
 
 
 @app.route("/cosesa/obras/<int:obra_id>/items/nuevo", methods=["POST"])
-@admin_required
+@cosesa_required
 def crear_item(obra_id):
     nombre = request.form.get("nombre", "").strip()
     descripcion = request.form.get("descripcion", "").strip()
@@ -1352,7 +1672,7 @@ def descargar_plantilla_reales(obra_id):
 
 
 @app.route("/cosesa/obras/<int:obra_id>/importar-cronograma", methods=["POST"])
-@admin_required
+@cosesa_required
 def importar_cronograma_excel(obra_id):
     db = get_db()
     obra = db.execute("SELECT * FROM obras WHERE id = ?", (obra_id,)).fetchone()
