@@ -4,6 +4,26 @@
 <meta charset="utf-8">
 <title>Reporte de obra - {{ obra['nombre'] }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+  /* Una hoja por tarea. A4 con márgenes de 15/12 mm: área útil 186 x 267 mm. */
+  .item-hoja { max-width: 186mm; margin: 24px auto 0; border-top: 3px solid var(--cosesa-navy); padding-top: 3mm; }
+  .item-detalle-sigue { max-width: 186mm; margin: 6px auto 0; }
+  .hoja-fotos { height: 262mm; display: flex; flex-direction: column; overflow: hidden; }
+  .item-cab { flex: 0 0 auto; margin-bottom: 2mm; }
+  .bloque-fotos { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; margin-top: 2mm; }
+  .bloque-fotos h4 { margin: 0 0 1.5mm; flex: 0 0 auto; }
+  .fotos-area { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; gap: 2mm; }
+  .fotos-fila { flex: 1 1 0; min-height: 0; display: flex; gap: 2mm; }
+  .fotos-fila figure { flex: 1 1 0; min-width: 0; margin: 0; position: relative; overflow: hidden; border-radius: 6px; background: #eef1f4; }
+  .fotos-fila img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .fotos-fila figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 3px 6px; font-size: 10px; color: #fff; background: rgba(20,30,50,.6); }
+  @media print {
+    @page { size: A4; margin: 15mm 12mm; }
+    .container { max-width: none !important; padding: 0 !important; margin: 0 !important; }
+    .item-hoja { break-before: page; page-break-before: always; margin-top: 0; border-top: none; padding-top: 0; }
+    .fotos-fila figure, .item-cab { break-inside: avoid; }
+  }
+</style>
 </head>
 <body style="background:white;">
 <div class="container">
@@ -81,21 +101,67 @@
   {% include "_secciones_extra.html" %}
 
   {% if 'items' in p %}
-  <h2>Detalle por ítem / equipo</h2>
+  <h2 class="no-print">Detalle por ítem / equipo</h2>
   {% for d in items_data %}
   {% set item = d['item'] %}
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <h3 style="margin:0;">{{ item['nombre'] }}{% if item['tag_equipo'] %} ({{ item['tag_equipo'] }}){% endif %}</h3>
-      {% if item['cancelada'] %}<span class="pill" style="background:#e4e6e8;color:#5b636b;">Cancelada</span>{% else %}<span class="pill pill-{{ item['estado'] }}">{{ item['estado'].replace('_',' ') }}</span>{% endif %}
+  {% set antes = d['fotos_antes'] if 'item_antes_despues' in p else [] %}
+  {% set despues = d['fotos_despues'] if 'item_antes_despues' in p else [] %}
+  {% set progreso = d['fotos_progreso'] if 'item_progreso' in p else [] %}
+  {% set tiene_fotos = antes or despues %}
+  <div class="item-hoja {{ 'hoja-fotos' if tiene_fotos else '' }}">
+    <div class="item-cab">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <h3 style="margin:0;">{{ item['nombre'] }}{% if item['tag_equipo'] %} ({{ item['tag_equipo'] }}){% endif %}</h3>
+        {% if item['cancelada'] %}<span class="pill" style="background:#e4e6e8;color:#5b636b;">Cancelada</span>{% else %}<span class="pill pill-{{ item['estado'] }}">{{ item['estado'].replace('_',' ') }}</span>{% endif %}
+      </div>
+      {% if item['descripcion'] %}<p class="subtitle" style="margin:2px 0 4px;">{{ item['descripcion'] }}</p>{% endif %}
+      <div class="progress-bar-bg" style="height:8px;margin:4px 0;"><div class="progress-bar-fill" style="width:{{ item['avance_pct'] }}%;"></div></div>
+      <p class="subtitle" style="margin:0;">{{ item['avance_pct'] }}% de avance · Inicio: {{ item['fecha_inicio']|fmtdt }} · Fin: {{ item['fecha_fin']|fmtdt }}</p>
     </div>
-    <p class="subtitle">{{ item['descripcion'] or '' }}</p>
-    <div class="progress-bar-bg" style="height:12px;"><div class="progress-bar-fill" style="width:{{ item['avance_pct'] }}%;"></div></div>
-    <p class="subtitle">{{ item['avance_pct'] }}% de avance ·
-      Inicio: {{ item['fecha_inicio']|fmtdt }} ·
-      Fin: {{ item['fecha_fin']|fmtdt }}
-    </p>
 
+    {% if tiene_fotos %}
+    {% set alto = 112 if (antes and despues) else 236 %}
+    {% for titulo, fotos in [('Antes', antes), ('Después', despues)] if fotos %}
+    <div class="bloque-fotos">
+      <h4>{{ titulo }}</h4>
+      <div class="fotos-area">
+        {% for fila in partir_en_filas(fotos, 186, alto) %}
+        <div class="fotos-fila">
+          {% for f in fila %}
+          <figure><img src="{{ url_for('uploaded_file', filename=f['filename'], w=1600) }}" alt="{{ titulo }}">{% if f['comentario'] %}<figcaption>{{ f['comentario'] }}</figcaption>{% endif %}</figure>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+
+  {% if progreso %}
+  {% for grupo in progreso|batch(12) %}
+  <div class="item-hoja hoja-fotos">
+    <div class="item-cab"><h3 style="margin:0;">{{ item['nombre'] }}{% if item['tag_equipo'] %} ({{ item['tag_equipo'] }}){% endif %}</h3></div>
+    <div class="bloque-fotos">
+      <h4>Fotos de avance durante el trabajo{% if progreso|length > 12 %} ({{ loop.index }}/{{ loop.length }}){% endif %}</h4>
+      <div class="fotos-area">
+        {% for fila in partir_en_filas(grupo, 186, 240) %}
+        <div class="fotos-fila">
+          {% for f in fila %}
+          <figure><img src="{{ url_for('uploaded_file', filename=f['filename'], w=1600) }}" alt="Avance">{% if f['comentario'] %}<figcaption>{{ f['comentario'] }}</figcaption>{% endif %}</figure>
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% set hay_detalle = (item['observaciones'] and 'item_observaciones' in p) or (d['checklist'] and 'item_checklist' in p) or d['subtareas'] or (d['avances'] and 'item_avances' in p) %}
+  {% if hay_detalle %}
+  <div class="{{ 'item-hoja' if (tiene_fotos or progreso) else 'item-detalle-sigue' }}">
+    {% if tiene_fotos or progreso %}<div class="item-cab"><h3 style="margin:0;">{{ item['nombre'] }}{% if item['tag_equipo'] %} ({{ item['tag_equipo'] }}){% endif %} · detalle</h3></div>{% endif %}
     {% if item['observaciones'] and 'item_observaciones' in p %}
     <p><strong>Observaciones:</strong> {{ item['observaciones'] }}</p>
     {% endif %}
@@ -135,7 +201,7 @@
     {% if d['fotos_checklist'] %}
     <div class="photo-grid" style="margin-top:8px;">
       {% for f in d['fotos_checklist'] %}
-      <figure><img src="{{ url_for('uploaded_file', filename=f['filename']) }}"><figcaption>Documento firmado</figcaption></figure>
+      <figure><img src="{{ url_for('uploaded_file', filename=f['filename'], w=2000) }}"><figcaption>Documento firmado</figcaption></figure>
       {% endfor %}
     </div>
     {% endif %}
@@ -149,40 +215,6 @@
     </table>
     {% endif %}
 
-    {% if (d['fotos_antes'] or d['fotos_despues']) and 'item_antes_despues' in p %}
-    <div class="grid grid-2">
-      {% if d['fotos_antes'] %}
-      <div>
-        <h4 style="margin-bottom:6px;">Antes</h4>
-        <div class="photo-grid">
-          {% for f in d['fotos_antes'] %}
-          <figure><img src="{{ url_for('uploaded_file', filename=f['filename']) }}">{% if f['comentario'] %}<figcaption>{{ f['comentario'] }}</figcaption>{% endif %}</figure>
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
-      {% if d['fotos_despues'] %}
-      <div>
-        <h4 style="margin-bottom:6px;">Después</h4>
-        <div class="photo-grid">
-          {% for f in d['fotos_despues'] %}
-          <figure><img src="{{ url_for('uploaded_file', filename=f['filename']) }}">{% if f['comentario'] %}<figcaption>{{ f['comentario'] }}</figcaption>{% endif %}</figure>
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
-    </div>
-    {% endif %}
-
-    {% if d['fotos_progreso'] and 'item_progreso' in p %}
-    <h4 style="margin-bottom:6px;">Fotos de avance durante el trabajo</h4>
-    <div class="photo-grid">
-      {% for f in d['fotos_progreso'] %}
-      <figure><img src="{{ url_for('uploaded_file', filename=f['filename']) }}">{% if f['comentario'] %}<figcaption>{{ f['comentario'] }}</figcaption>{% endif %}</figure>
-      {% endfor %}
-    </div>
-    {% endif %}
-
     {% if d['avances'] and 'item_avances' in p %}
     <h4>Cronograma de avance</h4>
     <table>
@@ -193,10 +225,11 @@
     </table>
     {% endif %}
   </div>
+  {% endif %}
   {% endfor %}
   {% endif %}
 
-  <p class="subtitle" style="text-align:center;margin-top:30px;">COSESA Servicios Industriales · Especialistas en Hidrocinética</p>
+  <p class="subtitle no-print" style="text-align:center;margin-top:30px;">COSESA Servicios Industriales · Especialistas en Hidrocinética</p>
 </div>
 </body>
 </html>
