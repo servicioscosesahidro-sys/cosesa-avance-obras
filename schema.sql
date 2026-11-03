@@ -31,6 +31,8 @@ CREATE TABLE usuarios (
     rol TEXT NOT NULL CHECK (rol IN ('cosesa', 'cosesa_admin', 'cliente')),
     cliente_id INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
     secciones TEXT,
+    obras_todas INTEGER,
+    permisos TEXT,
     creado_en TEXT DEFAULT (datetime('now'))
 );
 

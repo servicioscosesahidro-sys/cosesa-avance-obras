@@ -975,6 +975,40 @@ def build_obra_charts(db, items, interactive=False):
     return gantt_html, curve_html, carga_plan_html, carga_real_html
 
 
+# --disable-dev-shm-usage: en Docker /dev/shm mide 64 MB y Chromium se queda
+# sin memoria compartida con muchas fotos (quedaban imágenes rotas en el PDF).
+CHROMIUM_ARGS = ["--disable-dev-shm-usage", "--disable-gpu"]
+
+
+def _esperar_imagenes(page):
+    """Espera a que todas las imágenes estén cargadas y decodificadas; las que
+    fallaron se vuelven a pedir (hasta 3 intentos) antes de generar el PDF."""
+    try:
+        page.evaluate("""async () => {
+          const esperar = (img) => new Promise((ok) => {
+            if (img.complete) return ok();
+            img.addEventListener('load', ok, { once: true });
+            img.addEventListener('error', ok, { once: true });
+            setTimeout(ok, 30000);
+          });
+          for (let intento = 1; intento <= 3; intento++) {
+            const imgs = Array.from(document.images);
+            await Promise.all(imgs.map(esperar));
+            const rotas = imgs.filter((i) => !i.naturalWidth);
+            if (!rotas.length) break;
+            rotas.forEach((i) => {
+              const u = new URL(i.src, location.href);
+              u.searchParams.set('reintento', String(intento));
+              i.src = u.toString();
+            });
+            await new Promise((r) => setTimeout(r, 500));
+          }
+          await Promise.all(Array.from(document.images).map((i) => i.decode ? i.decode().catch(() => {}) : null));
+        }""")
+    except Exception:
+        app.logger.exception("Error esperando las imágenes del PDF")
+
+
 def render_pdf(html_url, out_path):
     """Renderiza una URL interna a PDF usando Chromium headless (Playwright para Python).
     Usa el paquete `playwright` de pip directamente, sin depender de Node ni de
@@ -983,9 +1017,10 @@ def render_pdf(html_url, out_path):
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        browser = p.chromium.launch(args=CHROMIUM_ARGS)
         page = browser.new_page()
-        page.goto(html_url, wait_until="networkidle")
+        page.goto(html_url, wait_until="networkidle", timeout=180000)
+        _esperar_imagenes(page)
         page.pdf(
             path=out_path,
             format="A4",
@@ -2778,6 +2813,7 @@ def reporte_obra_pdf(obra_id):
 def _pdf_de_imagen(browser, img_path):
     """Convierte una imagen escaneada/foto en una página A4 PDF (bytes)."""
     import base64, mimetypes
+    img_path = imagen_reducida(img_path, 2000)
     mime = mimetypes.guess_type(img_path)[0] or "image/jpeg"
     with open(img_path, "rb") as fh:
         b64 = base64.b64encode(fh.read()).decode()
@@ -2951,7 +2987,7 @@ td.p{{text-align:right;width:20mm}}
 
     partes = []  # (nombre, [bytes de PDF por documento])
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        browser = p.chromium.launch(args=CHROMIUM_ARGS)
         _lista = [(it["nombre"] + (f" ({it['tag_equipo']})" if it["tag_equipo"] else ""), rutas) for it, rutas in secciones]
         if pdfs_bitacora:
             _lista.append(("Bitácora: documentos PDF adjuntos", pdfs_bitacora))
@@ -3639,9 +3675,85 @@ def restaurar_backup():
 # Archivos subidos
 # ---------------------------------------------------------------------------
 
+_IMG_REDUCIBLES = (".jpg", ".jpeg", ".png", ".webp")
+# Fuera de DATA_DIR a propósito: así el caché no entra en el backup.
+_CACHE_IMG_DIR = os.path.join(tempfile.gettempdir(), "cosesa_img_cache")
+
+
+def imagen_reducida(ruta_abs, ancho):
+    """Devuelve la ruta de una copia JPEG de la imagen con el lado mayor <= ancho
+    (girada según el EXIF del celular). Se guarda en caché. Si algo falla,
+    devuelve la imagen original."""
+    if not ruta_abs.lower().endswith(_IMG_REDUCIBLES) or not os.path.isfile(ruta_abs):
+        return ruta_abs
+    try:
+        from PIL import Image, ImageOps
+        st = os.stat(ruta_abs)
+        clave = f"{ancho}_{int(st.st_mtime)}_{st.st_size}_" + ruta_abs.replace(os.sep, "_")[-150:]
+        destino = os.path.join(_CACHE_IMG_DIR, os.path.splitext(clave)[0] + ".jpg")
+        if os.path.isfile(destino):
+            return destino
+        os.makedirs(_CACHE_IMG_DIR, exist_ok=True)
+        with Image.open(ruta_abs) as im:
+            im.draft("RGB", (ancho, ancho))  # decodifica JPEG ya achicado: usa poca memoria
+            im = ImageOps.exif_transpose(im)
+            im.thumbnail((ancho, ancho))
+            if im.mode != "RGB":
+                fondo = Image.new("RGB", im.size, "white")
+                fondo.paste(im, mask=im.split()[-1] if im.mode in ("RGBA", "LA") else None)
+                im = fondo
+            tmp = destino + ".tmp"
+            im.save(tmp, "JPEG", quality=82, optimize=True)
+        os.replace(tmp, destino)
+        return destino
+    except Exception:
+        app.logger.exception("No se pudo reducir la imagen %s", ruta_abs)
+        return ruta_abs
+
+
 @app.route("/uploads/<path:filename>")
 def uploaded_file(filename):
+    ancho = request.args.get("w", type=int)
+    if ancho and filename.lower().endswith(_IMG_REDUCIBLES):
+        ancho = max(200, min(ancho, 2400))
+        ruta = os.path.realpath(os.path.join(UPLOAD_DIR, filename))
+        if ruta.startswith(os.path.realpath(UPLOAD_DIR) + os.sep) and os.path.isfile(ruta):
+            reducida = imagen_reducida(ruta, ancho)
+            if reducida != ruta:
+                return send_file(reducida, mimetype="image/jpeg", max_age=86400)
     return send_from_directory(UPLOAD_DIR, filename)
+
+
+def grilla_fotos(n, ancho_mm, alto_mm, aspecto=4 / 3):
+    """Reparte n fotos en filas para que ocupen el máximo posible de un recuadro.
+    Devuelve una lista con la cantidad de fotos por fila (la última puede tener
+    menos; sus fotos se estiran para llenar el ancho)."""
+    if n <= 0:
+        return []
+    mejor = None
+    for cols in range(1, n + 1):
+        filas = -(-n // cols)
+        cw, ch = ancho_mm / cols, alto_mm / filas
+        # área que ocuparía una foto 4:3 entera dentro de la celda
+        w = min(cw, ch * aspecto)
+        puntaje = w * (w / aspecto) * n
+        if mejor is None or puntaje > mejor[0]:
+            mejor = (puntaje, cols, filas)
+    _p, cols, filas = mejor
+    # repartir parejo: p. ej. 7 fotos en 3 filas -> 3, 2, 2 (en vez de 3, 3, 1)
+    base, extra = divmod(n, filas)
+    return [base + (1 if i < extra else 0) for i in range(filas)]
+
+
+def partir_en_filas(fotos, ancho_mm, alto_mm):
+    filas, i = [], 0
+    for cant in grilla_fotos(len(fotos), ancho_mm, alto_mm):
+        filas.append(fotos[i:i + cant])
+        i += cant
+    return filas
+
+
+app.jinja_env.globals["partir_en_filas"] = partir_en_filas
 
 
 # Se ejecuta siempre al importar el módulo (tanto con `python3 app.py` en
