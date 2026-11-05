@@ -566,6 +566,7 @@ ENDPOINT_PERMISO = {
     "reporte_demoras_obra": "reportes", "reporte_demoras_obra_pdf": "reportes",
     "reporte_interno_obra": "reportes", "reporte_interno_obra_pdf": "reportes",
     "reporte_mantenimiento": "reportes", "reporte_mantenimiento_pdf": "reportes",
+    "reporte_aprendizajes": "reportes", "reporte_aprendizajes_pdf": "reportes",
     "checklist_item_html": "reportes", "checklist_item_pdf": "reportes",
 }
 
@@ -3299,6 +3300,31 @@ def obra_aprendizajes(obra_id):
     lista = get_aprendizajes(db, obra_id)
     db.close()
     return render_template("obra_aprendizajes.html", obra=obra, aprendizajes=lista, hoy=date.today().isoformat())
+
+
+@app.route("/cosesa/obras/<int:obra_id>/aprendizajes/reporte")
+@cosesa_required
+def reporte_aprendizajes(obra_id):
+    db = get_db()
+    obra = _obra_o_404(db, obra_id)
+    lista = get_aprendizajes(db, obra_id)
+    db.close()
+    autores = sorted({(a["autor"] or "").strip() for a in lista if (a["autor"] or "").strip()})
+    return render_template(
+        "reporte_aprendizajes.html", obra=obra, aprendizajes=lista, autores=autores,
+        generado_en=datetime.now().strftime("%d/%m/%Y %H:%M"),
+    )
+
+
+@app.route("/cosesa/obras/<int:obra_id>/aprendizajes/reporte/pdf")
+@cosesa_required
+def reporte_aprendizajes_pdf(obra_id):
+    user = get_current_user()
+    token = make_pdf_token(user["id"])
+    url = url_for("reporte_aprendizajes", obra_id=obra_id, pdf_token=token, _external=True)
+    out_path = os.path.join(tempfile.gettempdir(), f"reporte_aprendizajes_{obra_id}.pdf")
+    render_pdf(url, out_path)
+    return send_file(out_path, as_attachment=True, download_name=f"aprendizajes_obra_{obra_id}.pdf")
 
 
 @app.route("/cosesa/obras/<int:obra_id>/aprendizajes/nuevo", methods=["POST"])
