@@ -217,7 +217,8 @@ def gantt_svg(items_con_demoras, width=880, interactive=False, corte=None):
     # línea de "hoy"
     today_x = x(today)
     svg.append(f'<line x1="{today_x:.1f}" y1="{top_pad - 6}" x2="{today_x:.1f}" y2="{height - 10}" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="4,3" />')
-    svg.append(f'<text x="{today_x:.1f}" y="{y_hoy}" font-size="10" font-weight="600" fill="#c0392b" text-anchor="middle">{'fin obra' if corte else 'hoy'}</text>')
+    texto_hoy = "fin obra" if corte else "hoy"
+    svg.append(f'<text x="{today_x:.1f}" y="{y_hoy}" font-size="10" font-weight="600" fill="#c0392b" text-anchor="middle">{texto_hoy}</text>')
 
     y = top_pad
     for fila_idx, d in enumerate(items_con_demoras):
