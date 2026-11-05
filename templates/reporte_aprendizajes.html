@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Aprendizajes - {{ obra['nombre'] }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<style>
+  .report-header img { height:56px; }
+  .container { max-width:100%; padding:8px 12px 14px; }
+  .grid-2 { grid-template-columns: repeat(2, 1fr) !important; gap:8px; }
+  .stat .num { font-size:20px; }
+  .apr { display:flex; gap:10px; border:1px solid #dde; border-left:4px solid #f2c230; border-radius:6px; padding:9px 12px; margin-bottom:8px; page-break-inside:avoid; break-inside:avoid; }
+  .apr .n { font-weight:800; color:#33456b; min-width:24px; font-size:13px; }
+  .apr .txt { white-space:pre-wrap; font-size:12px; line-height:1.45; }
+  .apr .m { font-size:10px; color:#667; margin-top:4px; }
+  h2 { break-after:avoid; page-break-after:avoid; }
+  .card { page-break-inside:auto !important; break-inside:auto !important; }
+</style>
+</head>
+<body style="background:white;">
+<div class="container">
+  <div class="print-btn-bar no-print" style="text-align:right;">
+    <a class="btn" href="{{ url_for('reporte_aprendizajes_pdf', obra_id=obra['id']) }}">Descargar PDF</a>
+    <button class="btn btn-outline" onclick="window.print()">Imprimir</button>
+  </div>
+  <div class="report-header">
+    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="COSESA">
+    <div style="text-align:right;">
+      <h2 style="margin:0;">Aprendizajes de la obra</h2>
+      <div class="subtitle">Generado el {{ generado_en }}</div>
+    </div>
+  </div>
+  <h1 style="margin-bottom:2px;">{{ obra['nombre'] }}</h1>
+  <p class="subtitle">Cliente: {{ obra['cliente_nombre'] }}{% if obra['ubicacion'] %} · {{ obra['ubicacion'] }}{% endif %}</p>
+
+  <div class="grid grid-2" style="margin:12px 0;">
+    <div class="card stat"><div class="num">{{ aprendizajes|length }}</div><div class="lbl">Aprendizajes registrados</div></div>
+    <div class="card stat"><div class="num">{{ autores|length }}</div><div class="lbl">Personas que aportaron</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Lista de aprendizajes</h2>
+    {% if aprendizajes %}
+    {% for a in aprendizajes %}
+    <div class="apr">
+      <div class="n">{{ loop.index }}.</div>
+      <div style="flex:1;">
+        <div class="txt">{{ a['texto'] }}</div>
+        <div class="m">Lo mencionó: <strong>{{ a['autor'] or '—' }}</strong>{% if a['fecha'] %} · {{ a['fecha']|fmtdt }}{% endif %}</div>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="subtitle">Todavía no hay aprendizajes cargados en esta obra.</p>
+    {% endif %}
+  </div>
+
+  <p class="subtitle" style="text-align:center;margin-top:14px;">COSESA Servicios Industriales</p>
+</div>
+</body>
+</html>

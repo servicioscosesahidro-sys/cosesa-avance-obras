@@ -6,7 +6,15 @@
 {% block content %}
 {% set nav_id = obra['id'] %}{% set nav_nombre = obra['nombre'] %}{% set nav_activo = 'aprendizajes' %}
 {% include "_obra_nav.html" %}
-<h1>Aprendizajes de la obra</h1>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+  <div>
+    <h1>Aprendizajes de la obra</h1>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <a class="btn" href="{{ url_for('reporte_aprendizajes_pdf', obra_id=obra['id']) }}">Descargar reporte (PDF)</a>
+    <a class="btn btn-outline" target="_blank" href="{{ url_for('reporte_aprendizajes', obra_id=obra['id']) }}">Ver reporte</a>
+  </div>
+</div>
 
 <div class="card">
   <h2>Agregar aprendizaje</h2>
