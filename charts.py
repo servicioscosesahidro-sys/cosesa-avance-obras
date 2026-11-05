@@ -104,7 +104,7 @@ _GANTT_DRAG_JS = '''<script>
 </script>'''
 
 
-def gantt_svg(items_con_demoras, width=880, interactive=False):
+def gantt_svg(items_con_demoras, width=880, interactive=False, corte=None):
     """Una fila por ítem. Barra clara = cronograma planificado.
     Barra azul = avance real (ancho proporcional al % de avance dentro del
     rango real transcurrido). Los segmentos rojos marcan las demoras
@@ -123,7 +123,9 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
             d = _parse(it[key])
             if d:
                 all_dates.append(d)
-    today = datetime.now()
+    # corte: en una obra finalizada, el gráfico termina en el fin del último
+    # trabajo en vez de estirarse hasta hoy.
+    today = corte or datetime.now()
     all_dates.append(today)
 
     if not all_dates:
@@ -215,7 +217,7 @@ def gantt_svg(items_con_demoras, width=880, interactive=False):
     # línea de "hoy"
     today_x = x(today)
     svg.append(f'<line x1="{today_x:.1f}" y1="{top_pad - 6}" x2="{today_x:.1f}" y2="{height - 10}" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="4,3" />')
-    svg.append(f'<text x="{today_x:.1f}" y="{y_hoy}" font-size="10" font-weight="600" fill="#c0392b" text-anchor="middle">hoy</text>')
+    svg.append(f'<text x="{today_x:.1f}" y="{y_hoy}" font-size="10" font-weight="600" fill="#c0392b" text-anchor="middle">{'fin obra' if corte else 'hoy'}</text>')
 
     y = top_pad
     for fila_idx, d in enumerate(items_con_demoras):
@@ -423,7 +425,7 @@ def _actual_pct_series(item_avances, day):
     return val
 
 
-def curve_svg(items_con_avances, width=880):
+def curve_svg(items_con_avances, width=880, corte=None):
     """items_con_avances: lista de dicts {item: row, avances: [rows...]}"""
     all_dates = []
     for d in items_con_avances:
@@ -436,7 +438,7 @@ def curve_svg(items_con_avances, width=880):
             dt = _parse(a["fecha"])
             if dt:
                 all_dates.append(dt)
-    today = datetime.now()
+    today = corte or datetime.now()
     all_dates.append(today)
     if not all_dates:
         return "<p class='subtitle'>Cargá fechas de inicio/fin planificadas para poder comparar el avance.</p>"
@@ -528,7 +530,8 @@ def curve_svg(items_con_avances, width=880):
         marcas.append((obra_ini, "#2e7d4f", f"Inicio {obra_ini.strftime('%d/%m')}", 14, "5,4"))
     if obra_fin:
         marcas.append((obra_fin, "#c0392b", f"Fin {obra_fin.strftime('%d/%m')}", 14, "5,4"))
-    marcas.append((today, "#e0a100", f"Hoy {today.strftime('%d/%m')} · {pct_hoy:.0f}%", 32, ""))
+    etiqueta_hoy = "Fin real" if corte else "Hoy"
+    marcas.append((today, "#e0a100", f"{etiqueta_hoy} {today.strftime('%d/%m')} · {pct_hoy:.0f}%", 32, ""))
     for dt, color, texto, ty, dash in marcas:
         px = xt(dt)
         dash_attr = f' stroke-dasharray="{dash}"' if dash else ""
@@ -557,10 +560,10 @@ def curve_svg(items_con_avances, width=880):
 # planificado y otra según las fechas reales de ejecución.
 # ---------------------------------------------------------------------------
 
-def _carga_diaria_datos(items_con_bombas, campo_inicio, campo_fin, contar_abiertos_hasta_hoy):
+def _carga_diaria_datos(items_con_bombas, campo_inicio, campo_fin, contar_abiertos_hasta_hoy, corte=None):
     """Devuelve (dias, items_serie, bombas_serie) o None si no hay datos
     suficientes. items_con_bombas: lista de dicts {"item": fila, "bombas": int}."""
-    hoy = datetime.now()
+    hoy = corte or datetime.now()
     rangos = []
     for d in items_con_bombas:
         it = d["item"]
@@ -660,11 +663,11 @@ def carga_diaria_planificada_svg(items_con_bombas, width=880):
     return _carga_diaria_svg(*datos, width=width)
 
 
-def carga_diaria_real_svg(items_con_bombas, width=880):
+def carga_diaria_real_svg(items_con_bombas, width=880, corte=None):
     """Ítems y bombas activos por día, según las fechas reales de ejecución
     (fecha_inicio / fecha_fin). Un ítem en curso sin fecha de fin todavía se
     cuenta como activo hasta hoy."""
-    datos = _carga_diaria_datos(items_con_bombas, "fecha_inicio", "fecha_fin", contar_abiertos_hasta_hoy=True)
+    datos = _carga_diaria_datos(items_con_bombas, "fecha_inicio", "fecha_fin", contar_abiertos_hasta_hoy=True, corte=corte)
     if datos is None:
         return "<p class='subtitle'>Todavía no hay fechas reales de inicio cargadas en los ítems.</p>"
     return _carga_diaria_svg(*datos, width=width)

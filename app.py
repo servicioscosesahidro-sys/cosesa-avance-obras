@@ -22,6 +22,7 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from db import get_db, init_db, DB_PATH
 from backup import restore_latest, backup_now, iniciar_backup_periodico
 from charts import gantt_svg, curve_svg, carga_diaria_planificada_svg, carga_diaria_real_svg
+from charts import _parse as _parse_fecha_grafico
 from excel_io import generar_plantilla_cronograma, generar_plantilla_reales, leer_cronograma, leer_reales, norm_clave
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -941,6 +942,38 @@ def item_excluido(it):
     return _item_cancelada(it) or (it["estado"] == "finalizado" and (it["avance_pct"] or 0) < 100)
 
 
+def fecha_corte_obra(db, items):
+    """Si la obra está finalizada (o todas sus tareas ya terminaron), devuelve
+    la fecha/hora en que terminó el último trabajo (fin real de tareas, último
+    registro de avance o fin de demora). Los gráficos se cortan ahí en vez de
+    llegar hasta hoy. Devuelve None si la obra sigue en curso."""
+    if not items:
+        return None
+    obra = db.execute("SELECT estado FROM obras WHERE id = ?", (items[0]["obra_id"],)).fetchone()
+    if obra is None:
+        return None
+
+    def _terminada(it):
+        return _item_cancelada(it) or it["estado"] == "finalizado" or (it["avance_pct"] or 0) >= 100
+
+    if obra["estado"] != "finalizada" and not all(_terminada(it) for it in items):
+        return None
+    fechas = []
+    for it in items:
+        for campo in ("fecha_inicio", "fecha_fin"):
+            d = _parse_fecha_grafico(it[campo])
+            if d:
+                fechas.append(d)
+    ids = [it["id"] for it in items]
+    marcas = ",".join("?" * len(ids))
+    for sql in (f"SELECT MAX(fecha) FROM avance_log WHERE item_id IN ({marcas})",
+                f"SELECT MAX(fecha_fin) FROM demoras WHERE item_id IN ({marcas})"):
+        d = _parse_fecha_grafico(db.execute(sql, ids).fetchone()[0])
+        if d:
+            fechas.append(d)
+    return max(fechas) if fechas else None
+
+
 def build_obra_charts(db, items, interactive=False):
     """Devuelve (gantt_html, curve_html) para una lista de ítems de una obra.
     interactive=True agrega al Gantt un link al ítem y botones −/+ de avance
@@ -949,6 +982,7 @@ def build_obra_charts(db, items, interactive=False):
     items_con_avances = []
     items_con_demoras = []
     items_con_bombas = []
+    corte = fecha_corte_obra(db, items)
     for it in items:
         avances = db.execute(
             "SELECT * FROM avance_log WHERE item_id = ? ORDER BY fecha", (it["id"],)
@@ -965,11 +999,11 @@ def build_obra_charts(db, items, interactive=False):
         _, total_bombas = total_personal(personal)
         if not _item_cancelada(it):
             items_con_bombas.append({"item": it, "bombas": total_bombas})
-    gantt_html = gantt_svg(items_con_demoras, interactive=interactive) if items else "<p class='subtitle'>Todavía no hay ítems cargados.</p>"
-    curve_html = curve_svg(items_con_avances) if items_con_avances else "<p class='subtitle'>No hay tareas que cuenten para el avance de la obra.</p>"
+    gantt_html = gantt_svg(items_con_demoras, interactive=interactive, corte=corte) if items else "<p class='subtitle'>Todavía no hay ítems cargados.</p>"
+    curve_html = curve_svg(items_con_avances, corte=corte) if items_con_avances else "<p class='subtitle'>No hay tareas que cuenten para el avance de la obra.</p>"
     if items_con_bombas:
         carga_plan_html = carga_diaria_planificada_svg(items_con_bombas)
-        carga_real_html = carga_diaria_real_svg(items_con_bombas)
+        carga_real_html = carga_diaria_real_svg(items_con_bombas, corte=corte)
     else:
         carga_plan_html = carga_real_html = "<p class='subtitle'>Todavía no hay ítems cargados.</p>"
     return gantt_html, curve_html, carga_plan_html, carga_real_html
