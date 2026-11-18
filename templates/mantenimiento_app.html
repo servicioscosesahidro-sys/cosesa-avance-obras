@@ -443,6 +443,7 @@ textarea{ resize:vertical; min-height:70px; }
   .topbar{ padding:12px 14px; }
   .topbar-titles h1{ font-size:21px; }
 }
+.tareas-lista{ margin:8px 0 0; padding-left:18px; font-size:13px; color:var(--ink-soft); } .tareas-lista li{ margin:2px 0; }
 </style>
 
 <svg width="0" height="0" style="position:absolute">
@@ -1055,6 +1056,7 @@ function viewMachineDetail(id){
           (isAdmin() ? '<button class="btn btn-ghost btn-sm" data-action="task-edit" data-mid="'+m.id+'" data-id="'+t.id+'" title="Editar tarea"><svg><use href="#i-edit"/></svg></button><button class="btn btn-ghost btn-sm" data-action="task-delete" data-mid="'+m.id+'" data-id="'+t.id+'" title="Eliminar tarea"><svg><use href="#i-x"/></svg></button>' : '')+
         '</div>'+
       '</div>'+
+      htmlTareasLista(t.tareas, 6)+
       '<div class="progress" style="margin:12px 0 6px;"><i style="width:'+(pr.pct*100).toFixed(0)+'%; background:'+meta.bar+';"></i></div>'+
       '<div style="display:flex; justify-content:space-between; font-size:12px; color:var(--ink-faint);">'+
         (pr.status==="nodata" ? '<span>Sin último service registrado: se calcula a partir del primer mantenimiento que se genere.</span>' :
@@ -1683,12 +1685,15 @@ function viewOrden(solId){
         m.tasks.map(function(t){ return '<option value="'+t.id+'">'+escapeHtml(t.nombre)+' ('+fmtFrec(t.intervalo, tUnit(t,m))+')</option>'; }).join("")+
       '</select></div>'+
       '<div class="field"><label id="ordMeterLbl">Medidor actual ('+UNIT_LABEL[m.meterType]+')</label><input type="number" id="ordMeter" value="'+(hasMeter(m,m.meterType)?meterOf(m,m.meterType):"")+'" min="0" step="any" placeholder="Lectura del medidor" /></div>'+
-    '</div>';
+    '</div>'+
+    '<div class="field" style="display:none;"><label>Tareas del plan a realizar</label><textarea id="ordTareasPlan" rows="4" placeholder="'+escapeHtml(TAREAS_PH)+'"></textarea><div class="help">Vienen del plan elegido; si las cambiás, quedan solo en esta orden.</div></div>';
     document.getElementById("ordTask").onchange = function(){
       var t = getTask(m, this.value);
       var u = t ? unidadMedidor(tUnit(t, m), m) : m.meterType;
       document.getElementById("ordMeterLbl").textContent = "Medidor actual ("+UNIT_LABEL[u]+")";
       document.getElementById("ordMeter").value = hasMeter(m,u) ? meterOf(m,u) : "";
+      var ta = document.getElementById("ordTareasPlan");
+      if(ta){ ta.value = t ? (t.tareas||"") : ""; ta.closest(".field").style.display = t ? "" : "none"; }
       if(t){
         document.getElementById("ordParts").innerHTML = "";
         t.parts.forEach(function(tp){ partRow(tp.partId, tp.qty); });
@@ -1727,7 +1732,7 @@ function viewOrden(solId){
     var u = currentUser();
     var rec = {
       id: uid("MT"), numero: numero, machineId: m ? m.id : null, taskId: t ? t.id : null,
-      taskNombre: t ? t.nombre : "Correctivo", fecha: fecha, medidor: meter, tecnico: tech, notas: notas,
+      taskNombre: t ? t.nombre : "Correctivo", tareas: t && document.getElementById("ordTareasPlan") ? document.getElementById("ordTareasPlan").value.trim() : "", fecha: fecha, medidor: meter, tecnico: tech, notas: notas,
       trabajo: trabajo, equipoTexto: s.equipo || "",
       partesUsadas: partesUsadas, estado: "completado", faltante: faltante, cargadoPor: u ? u.nombre : "—",
       solicitud: { id: s.id, obra: s.obra, obra_codigo: s.obra_codigo, cliente: s.cliente, fecha: s.fecha,
@@ -2077,6 +2082,15 @@ function sembrarPlanesTipo(st){
 function planesTipoOrdenados(){
   return (state.planesTipo||[]).slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre) || (a.unidad<b.unidad?-1:1) || a.intervalo-b.intervalo; });
 }
+
+/* ================= TAREAS / PROCEDIMIENTO DE UN PLAN ================= */
+function lineasTareas(txt){ return String(txt||"").split(/\r?\n/).map(function(l){ return l.replace(/^\s*[-•*·☐]\s*/, "").trim(); }).filter(Boolean); }
+function htmlTareasLista(txt, max){
+  var ls = lineasTareas(txt); if(!ls.length) return "";
+  var mas = max && ls.length>max ? ls.length-max : 0;
+  return '<ul class="tareas-lista">'+(mas ? ls.slice(0,max) : ls).map(function(l){ return '<li>'+escapeHtml(l)+'</li>'; }).join("")+(mas ? '<li class="cell-muted">y '+mas+' más…</li>' : '')+'</ul>';
+}
+var TAREAS_PH = "Una tarea por renglón. Ej:\nPurgar pulmón de aire\nRevisar fugas en cañerías de aire\nRevisar manómetros de línea de aire";
 function getPlanTipo(id){ return (state.planesTipo||[]).find(function(p){ return p.id===id; }); }
 function planTipoLabel(p){ return p.nombre+" ("+fmtFrec(p.intervalo, p.unidad)+")"; }
 function existePlanTipo(nombre, intervalo, unidad){
@@ -2185,6 +2199,7 @@ function viewGenerar(preId, preTask){
       '<div class="field"><label>Plan de mantenimiento</label><select id="genTask">'+opcionesPlan(m, sel, admin)+'</select>'+
         (admin ? '<div class="help">Elegí un plan de la unidad, agregale uno predeterminado o creá uno nuevo.</div>' : '')+'</div>'+
       '<div id="genPlanForm"></div>'+
+      '<div class="field"><label>Tareas a realizar / procedimiento</label><textarea id="genTareas" rows="5" placeholder="'+escapeHtml(TAREAS_PH)+'"></textarea><div class="help" id="genTareasHelp"></div></div>'+
       '<div class="field-row">'+
         '<div class="field"><label id="genMeterLbl">Medidor actual</label><input type="number" id="genMeter" value="" min="0" step="any" /></div>'+
         '<div class="field"><label>Fecha</label><input type="date" id="genDate" value="'+todayISO()+'" /></div>'+
@@ -2236,6 +2251,11 @@ function viewGenerar(preId, preTask){
       document.getElementById("gpUnidad").addEventListener("change", function(){ syncMeter(m); renderEstado(m); });
     }
     syncMeter(m);
+    var tA = document.getElementById("genTareas");
+    tA.value = pe.tipo==="tarea" ? ((pe.t && pe.t.tareas) || "") : (pe.plan ? (pe.plan.tareas||"") : "");
+    document.getElementById("genTareasHelp").textContent = pe.tipo==="tarea"
+      ? "Vienen las tareas del plan. Si las cambiás acá, quedan solo en esta orden (para cambiarlas siempre, editá el plan en la ficha de la unidad)."
+      : "Texto libre, una tarea por renglón. Quedan guardadas como las tareas de este plan.";
     if(recargarRepuestos){
       var filas = pe.tipo==="tarea" && pe.t ? pe.t.parts.map(function(tp){ return { partId: tp.partId, qty: tp.qty }; }) : [];
       rep = editorRepuestos("genReps", filas, refreshShort);
@@ -2273,17 +2293,18 @@ function viewGenerar(preId, preTask){
     if(meterRaw==="" && !esTiempo(unidadT)){ toast("Cargá la lectura actual del medidor ("+UNIT_LABEL[unidadT]+")", "err"); return; }
     var meter = meterRaw==="" ? null : Number(meterRaw);
     var partes = rep ? rep.valores() : [];
+    var tareasTxt = document.getElementById("genTareas").value.trim();
     if(pe.tipo!=="tarea"){
       var nombre = document.getElementById("gpNombre").value.trim();
       var intervalo = Math.round(Number(document.getElementById("gpIntervalo").value)||0);
       if(!nombre){ toast("Poné un nombre para el plan", "err"); return; }
       if(intervalo<1){ toast("Indicá cada cuántas "+UNIT_LABEL[unidadT]+" se hace el plan", "err"); return; }
-      t = { id: uid("T"), nombre: nombre, intervalo: intervalo, unidad: unidadT,
+      t = { id: uid("T"), nombre: nombre, intervalo: intervalo, unidad: unidadT, tareas: tareasTxt,
             parts: partes.map(function(x){ return { partId:x.partId, qty:x.qty }; }), lastMeter: null, lastDate: null };
       m.tasks.push(t);
       var guardar = document.getElementById("gpGuardar");
       if(pe.tipo==="nuevo" && guardar && guardar.checked && !existePlanTipo(nombre, intervalo, unidadT)){
-        state.planesTipo.push({ id: uid("PL"), nombre: nombre, intervalo: intervalo, unidad: unidadT });
+        state.planesTipo.push({ id: uid("PL"), nombre: nombre, intervalo: intervalo, unidad: unidadT, tareas: tareasTxt });
       }
     }
     if(!t){ toast("Elegí un plan", "err"); return; }
@@ -2302,7 +2323,7 @@ function viewGenerar(preId, preTask){
     var u = currentUser();
     state.maintenances.unshift({
       id: uid("MT"), numero: numero, machineId: m.id, taskId: t.id, taskNombre: t.nombre,
-      fecha: date, medidor: meter, medidorUnidad: unidadMed, tecnico: tech || "Sin asignar", notas: notes,
+      fecha: date, medidor: meter, medidorUnidad: unidadMed, tecnico: tech || "Sin asignar", notas: notes, tareas: tareasTxt,
       partesUsadas: partesUsadas, estado: "completado", faltante: faltante, cargadoPor: u ? u.nombre : "—"
     });
     t.lastMeter = esTiempo(unidadT) ? null : meter;
@@ -2330,7 +2351,7 @@ function htmlPlanesTipo(){
   if(!lista.length) return html + emptyState("i-clip","Todavía no hay planes predeterminados.");
   html += '<div class="table-wrap"><table style="min-width:520px;"><thead><tr><th>Plan</th><th>Vence por</th><th>Frecuencia</th><th>Unidades que lo usan</th><th></th></tr></thead><tbody>'+
     lista.map(function(p){
-      return '<tr><td class="cell-strong">'+escapeHtml(p.nombre)+'</td><td>'+(esTiempo(p.unidad) ? "Período (fecha)" : VENCE_LABEL[p.unidad])+'</td><td class="mono">'+fmtFrec(p.intervalo, p.unidad)+'</td><td class="mono">'+usos(p)+'</td>'+
+      return '<tr><td class="cell-strong">'+escapeHtml(p.nombre)+(lineasTareas(p.tareas).length ? '<div class="cell-muted" style="font-size:11.5px; font-weight:500;">'+lineasTareas(p.tareas).length+' tarea(s) cargada(s)</div>' : '')+'</td><td>'+(esTiempo(p.unidad) ? "Período (fecha)" : VENCE_LABEL[p.unidad])+'</td><td class="mono">'+fmtFrec(p.intervalo, p.unidad)+'</td><td class="mono">'+usos(p)+'</td>'+
         '<td><div style="display:flex; gap:4px; justify-content:flex-end;">'+
           (isAdmin() ? '<button class="btn btn-ghost btn-sm" data-action="plantipo-asignar" data-id="'+p.id+'" title="Asignar a unidades"><svg><use href="#i-truck"/></svg>Asignar</button>'+
             '<button class="btn btn-ghost btn-sm" data-action="plantipo-edit" data-id="'+p.id+'" title="Editar"><svg><use href="#i-edit"/></svg></button>'+
@@ -2348,7 +2369,9 @@ function openPlanTipoModal(id){
     '<div class="field-row">'+
       '<div class="field"><label>Vence por</label><select id="ptUnidad">'+opcionesVencePor(p ? p.unidad : "km")+'</select></div>'+
       '<div class="field"><label>Frecuencia (cada cuántas)</label><input type="number" id="ptIntervalo" min="1" value="'+(p?p.intervalo:10000)+'" /><div class="help" id="ptFrecTxt"></div></div>'+
-    '</div></div>'+
+    '</div>'+
+    '<div class="field"><label>Tareas a realizar / procedimiento</label><textarea id="ptTareas" rows="5" placeholder="'+escapeHtml(TAREAS_PH)+'">'+escapeHtml(p?(p.tareas||""):"")+'</textarea><div class="help">Texto libre, una tarea por renglón. Se copia a las unidades a las que asignes este plan (después se puede ajustar en cada una).</div></div>'+
+    '</div>'+
     '<div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cancelar</button><button class="btn btn-primary" id="mSave">Guardar</button></div>');
   ajustarFrecuencia(document.getElementById("ptUnidad"), document.getElementById("ptIntervalo"), "ptFrecTxt");
   document.getElementById("mCancel").onclick = closeModal;
@@ -2360,8 +2383,9 @@ function openPlanTipoModal(id){
     if(intervalo<1){ toast("Indicá la frecuencia", "err"); return; }
     var dup = (state.planesTipo||[]).find(function(x){ return x.id!==(p&&p.id) && (x.nombre+"|"+x.intervalo+"|"+x.unidad).toLowerCase()===(nombre+"|"+intervalo+"|"+unidad).toLowerCase(); });
     if(dup){ toast("Ya existe ese plan predeterminado", "err"); return; }
-    if(p){ p.nombre = nombre; p.unidad = unidad; p.intervalo = intervalo; }
-    else state.planesTipo.push({ id: uid("PL"), nombre: nombre, intervalo: intervalo, unidad: unidad });
+    var tareasP = document.getElementById("ptTareas").value.trim();
+    if(p){ p.nombre = nombre; p.unidad = unidad; p.intervalo = intervalo; p.tareas = tareasP; }
+    else state.planesTipo.push({ id: uid("PL"), nombre: nombre, intervalo: intervalo, unidad: unidad, tareas: tareasP });
     saveState(); closeModal(); toast("Plan guardado"); render();
   };
 }
@@ -2394,11 +2418,11 @@ function openAsignarPlanModal(id){
       var m = getMachine(cb.dataset.asig); if(!m) return;
       if(esTiempo(p.unidad)){
         var f = (document.getElementById("asigFecha")||{}).value || null;
-        m.tasks.push({ id: uid("T"), nombre: p.nombre, intervalo: p.intervalo, unidad: p.unidad, parts: [], lastMeter: null, lastDate: f });
+        m.tasks.push({ id: uid("T"), nombre: p.nombre, intervalo: p.intervalo, unidad: p.unidad, parts: [], tareas: p.tareas||"", lastMeter: null, lastDate: f });
         n++; return;
       }
       var arranca = hasMeter(m, p.unidad) ? meterOf(m, p.unidad) : null;
-      m.tasks.push({ id: uid("T"), nombre: p.nombre, intervalo: p.intervalo, unidad: p.unidad, parts: [], lastMeter: arranca, lastDate: arranca!=null ? todayISO() : null });
+      m.tasks.push({ id: uid("T"), nombre: p.nombre, intervalo: p.intervalo, unidad: p.unidad, parts: [], tareas: p.tareas||"", lastMeter: arranca, lastDate: arranca!=null ? todayISO() : null });
       n++;
     });
     if(!n){ toast("No elegiste ninguna unidad", "err"); return; }
@@ -2785,6 +2809,8 @@ function openTaskModal(machineId, taskId){
       '<div class="field"><label id="tInicioLbl">Comienza a contar desde</label><input type="number" id="tInicio" step="any" min="0" placeholder="Medidor del último service o de inicio" /><input type="date" id="tInicioFecha" style="display:none;" />'+
         '<div class="help" id="tInicioHelp"></div></div>'+
       (!editing ? '<label style="display:flex; gap:8px; align-items:center; font-weight:600; color:var(--ink); margin:0 0 14px;"><input type="checkbox" id="tGuardarTipo" checked style="width:16px; height:16px;"> Guardar también como plan predeterminado</label>' : '')+
+      '<div class="field"><label>Tareas a realizar / procedimiento</label><textarea id="tTareas" rows="5" placeholder="'+escapeHtml(TAREAS_PH)+'">'+escapeHtml(editing?(editing.tareas||""):"")+'</textarea>'+
+        '<div class="help">Texto libre: escribí una tarea por renglón o las indicaciones del procedimiento. Sale en la orden impresa como lista para tildar.</div></div>'+
       '<div class="field"><label>Repuestos que consume esta tarea</label>'+
         '<div style="display:flex; gap:8px; margin-bottom:8px;">'+
           '<input type="search" id="tPartFilter" placeholder="Filtrar repuestos por nombre o código…" style="flex:1;" />'+
@@ -2843,6 +2869,7 @@ function openTaskModal(machineId, taskId){
       document.getElementById("tUnidad").value = pt.unidad;
       document.getElementById("tIntervalo").value = pt.intervalo;
       document.getElementById("tIntervalo").dispatchEvent(new Event("input"));
+      document.getElementById("tTareas").value = pt.tareas || "";
       syncInicio(true);
       if(g){ g.checked = false; g.parentNode.style.display = "none"; }
     } else if(g){ g.parentNode.style.display = ""; g.checked = true; }
@@ -2905,19 +2932,20 @@ function openTaskModal(machineId, taskId){
       parts.push({ partId: cb.value, qty: qty });
     });
     var unidadSel = document.getElementById("tUnidad").value;
+    var tareasTxt = document.getElementById("tTareas").value.trim();
     var iniRaw = document.getElementById("tInicio").value;
     var inicio = iniRaw==="" ? null : Math.max(0, Number(iniRaw));
     if(esTiempo(unidadSel)){
       var fIni = document.getElementById("tInicioFecha").value || null;
       if(editing){
-        editing.nombre = nombre; editing.intervalo = intervalo; editing.parts = parts; editing.unidad = unidadSel;
+        editing.nombre = nombre; editing.intervalo = intervalo; editing.parts = parts; editing.unidad = unidadSel; editing.tareas = tareasTxt;
         editing.lastMeter = null; editing.lastDate = fIni;
         toast("Plan actualizado");
       } else {
-        m.tasks.push({ id: uid("T"), nombre: nombre, intervalo: intervalo, unidad: unidadSel, parts: parts, lastMeter: null, lastDate: fIni });
+        m.tasks.push({ id: uid("T"), nombre: nombre, intervalo: intervalo, unidad: unidadSel, parts: parts, tareas: tareasTxt, lastMeter: null, lastDate: fIni });
         var g2 = document.getElementById("tGuardarTipo");
         if(g2 && g2.checked && g2.parentNode.style.display!=="none" && !existePlanTipo(nombre, intervalo, unidadSel)){
-          state.planesTipo.push({ id: uid("PL"), nombre: nombre, intervalo: intervalo, unidad: unidadSel });
+          state.planesTipo.push({ id: uid("PL"), nombre: nombre, intervalo: intervalo, unidad: unidadSel, tareas: tareasTxt });
         }
         toast("Plan agregado a la unidad");
       }
@@ -2925,14 +2953,14 @@ function openTaskModal(machineId, taskId){
     }
     if(editing){
       var cambioInicio = inicio !== editing.lastMeter || tUnit(editing, m)!==unidadSel;
-      editing.nombre = nombre; editing.intervalo = intervalo; editing.parts = parts; editing.unidad = unidadSel;
+      editing.nombre = nombre; editing.intervalo = intervalo; editing.parts = parts; editing.unidad = unidadSel; editing.tareas = tareasTxt;
       if(cambioInicio){ editing.lastMeter = inicio; editing.lastDate = inicio!=null ? (editing.lastDate || todayISO()) : null; }
       toast("Plan actualizado");
     } else {
-      m.tasks.push({ id: uid("T"), nombre: nombre, intervalo: intervalo, unidad: unidadSel, parts: parts, lastMeter: inicio, lastDate: inicio!=null ? todayISO() : null });
+      m.tasks.push({ id: uid("T"), nombre: nombre, intervalo: intervalo, unidad: unidadSel, parts: parts, tareas: tareasTxt, lastMeter: inicio, lastDate: inicio!=null ? todayISO() : null });
       var g = document.getElementById("tGuardarTipo");
       if(g && g.checked && g.parentNode.style.display!=="none" && !existePlanTipo(nombre, intervalo, unidadSel)){
-        state.planesTipo.push({ id: uid("PL"), nombre: nombre, intervalo: intervalo, unidad: unidadSel });
+        state.planesTipo.push({ id: uid("PL"), nombre: nombre, intervalo: intervalo, unidad: unidadSel, tareas: tareasTxt });
       }
       toast("Plan agregado a la unidad");
     }
@@ -3034,6 +3062,8 @@ function printMaintenance(id){
       '<div><b>Cargado por</b>'+escapeHtml(rec.cargadoPor||"—")+'</div>'+
       '<div><b>Notas</b>'+escapeHtml(rec.notas||"—")+'</div>'+
     '</div>'+
+    (lineasTareas(rec.tareas).length ? '<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#555;margin:0 0 6px;">Tareas a realizar</h3><table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px;">'+
+      lineasTareas(rec.tareas).map(function(l){ return '<tr><td style="width:26px;border-bottom:1px solid #ddd;padding:6px 4px;font-size:16px;">☐</td><td style="border-bottom:1px solid #ddd;padding:6px 4px;">'+escapeHtml(l)+'</td><td style="width:170px;border-bottom:1px solid #ddd;padding:6px 4px;color:#999;font-size:11px;">Obs.:</td></tr>'; }).join("")+'</table>' : '')+
     (rec.trabajo ? '<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#555;margin:0 0 6px;">Trabajo a realizar / realizado</h3><div style="border:1px solid #ccc;padding:10px 12px;font-size:13px;white-space:pre-wrap;margin-bottom:20px;">'+escapeHtml(rec.trabajo)+'</div>' : '')+
     (sol ? '<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#555;margin:0 0 6px;">Solicitud de la obra</h3>'+
       '<div class="grid" style="border:1px solid #ccc;padding:10px 12px;">'+
