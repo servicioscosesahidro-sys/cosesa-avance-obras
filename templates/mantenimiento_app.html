@@ -547,12 +547,12 @@ function fmtDate(iso){
   var d = new Date(iso+"T00:00:00");
   return d.toLocaleDateString("es-AR", {day:"2-digit", month:"short", year:"numeric"});
 }
-function todayISO(){ return new Date().toISOString().slice(0,10); }
+function todayISO(){ var d = new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
 function clamp(n,a,b){ return Math.max(a, Math.min(b,n)); }
 function escapeHtml(s){ return (s==null?"":String(s)).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]; }); }
 function h(strings){ return strings; }
 
-var UNIT_LABEL = { horas: "hs", km: "km" };
+var UNIT_LABEL = { horas: "hs", km: "km", dia: "días", semana: "semanas", mes: "meses", anio: "años" };
 var TYPE_LABEL = { motobomba: "Motobomba", vehiculo: "Vehículo" };
 
 /* ================= SEEDING / STATE ================= */
@@ -677,6 +677,8 @@ function partStatus(p){
   return "ok";
 }
 function taskProgress(t, mOrMeter){
+  var uT = (mOrMeter && typeof mOrMeter==="object") ? tUnit(t, mOrMeter) : t.unidad;
+  if(esTiempo(uT)) return progresoTiempo(t, uT);
   var currentMeter = (mOrMeter && typeof mOrMeter==="object") ? meterOf(mOrMeter, tUnit(t, mOrMeter)) : mOrMeter;
   if(t.lastMeter==null) return { pct: 0, status: "nodata", remaining: null, used: null };
   var used = currentMeter - t.lastMeter;
@@ -879,7 +881,7 @@ function viewDashboard(){
       var meta = statusMeta(row.pr.status);
       html += '<div class="row-link" data-nav="flota" data-id="'+row.m.id+'" style="display:flex; align-items:center; gap:12px; padding:11px 12px; border:1px solid var(--border-soft); border-radius:10px;">'+
         '<div class="mach-ic" style="width:32px;height:32px;"><svg><use href="#'+machineIcon(row.m.tipo)+'"/></svg></div>'+
-        '<div style="flex:1; min-width:0;"><div class="cell-strong">'+escapeHtml(row.m.nombre)+'</div><div class="cell-muted" style="font-size:12px;">'+escapeHtml(row.t.nombre)+' · '+(row.pr.remaining>0 ? 'vence en '+fmtInt(row.pr.remaining)+' '+UNIT_LABEL[tUnit(row.t,row.m)] : 'vencido hace '+fmtInt(-row.pr.remaining)+' '+UNIT_LABEL[tUnit(row.t,row.m)])+'</div></div>'+
+        '<div style="flex:1; min-width:0;"><div class="cell-strong">'+escapeHtml(row.m.nombre)+'</div><div class="cell-muted" style="font-size:12px;">'+escapeHtml(row.t.nombre)+' · '+(row.pr.remaining===0 && esTiempo(tUnit(row.t,row.m)) ? 'vence hoy' : row.pr.remaining>0 ? 'vence en '+fmtCant(row.pr.remaining, tUnit(row.t,row.m)) : 'vencido hace '+fmtCant(-row.pr.remaining, tUnit(row.t,row.m)))+'</div></div>'+
         '<span class="pill '+meta.cls+'"><svg><use href="#'+meta.icon+'"/></svg>'+meta.label+'</span>'+
       '</div>';
     });
@@ -1047,7 +1049,7 @@ function viewMachineDetail(id){
     html += '<div class="card card-pad">'+
       '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">'+
         '<div><div class="cell-strong" style="font-size:15.5px;">'+escapeHtml(t.nombre)+'</div>'+
-        '<div class="cell-muted" style="font-size:12.5px;">Cada '+fmtInt(t.intervalo)+' '+UNIT_LABEL[tUnit(t,m)]+' · último service: '+(t.lastMeter==null ? 'sin registrar' : fmtInt(t.lastMeter)+' '+UNIT_LABEL[tUnit(t,m)]+' ('+fmtDate(t.lastDate)+')')+'</div></div>'+
+        '<div class="cell-muted" style="font-size:12.5px;">'+capit(fmtFrec(t.intervalo, tUnit(t,m)))+' · '+txtUltimo(t, m)+'</div></div>'+
         '<div style="display:flex; align-items:center; gap:8px;">'+
           '<span class="pill '+meta.cls+'"><svg><use href="#'+meta.icon+'"/></svg>'+meta.label+'</span>'+
           (isAdmin() ? '<button class="btn btn-ghost btn-sm" data-action="task-edit" data-mid="'+m.id+'" data-id="'+t.id+'" title="Editar tarea"><svg><use href="#i-edit"/></svg></button><button class="btn btn-ghost btn-sm" data-action="task-delete" data-mid="'+m.id+'" data-id="'+t.id+'" title="Eliminar tarea"><svg><use href="#i-x"/></svg></button>' : '')+
@@ -1056,8 +1058,8 @@ function viewMachineDetail(id){
       '<div class="progress" style="margin:12px 0 6px;"><i style="width:'+(pr.pct*100).toFixed(0)+'%; background:'+meta.bar+';"></i></div>'+
       '<div style="display:flex; justify-content:space-between; font-size:12px; color:var(--ink-faint);">'+
         (pr.status==="nodata" ? '<span>Sin último service registrado: se calcula a partir del primer mantenimiento que se genere.</span>' :
-        '<span>'+fmtInt(pr.used)+' '+UNIT_LABEL[tUnit(t,m)]+' desde el último service</span>'+
-        '<span>'+(pr.remaining>=0 ? "Faltan "+fmtInt(pr.remaining) : "Vencido hace "+fmtInt(-pr.remaining))+' '+UNIT_LABEL[tUnit(t,m)]+'</span>')+
+        '<span>'+(pr.used<0 ? 'Empieza a contar el '+fmtDate(t.lastDate) : fmtCant(pr.used, tUnit(t,m))+' desde el último service')+'</span>'+
+        '<span>'+(pr.remaining>=0 ? "Faltan "+fmtCant(pr.remaining, tUnit(t,m)) : "Vencido hace "+fmtCant(-pr.remaining, tUnit(t,m)))+'</span>')+
       '</div>'+
       '<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:12px;">'+
         t.parts.map(function(tp){ var p=getPart(tp.partId); if(!p) return ""; var sm=stockMeta(partStatus(p));
@@ -1107,8 +1109,8 @@ function viewPlanes(){
     html += '<tr>'+
       '<td class="cell-strong row-link" data-nav="flota" data-id="'+r.m.id+'">'+escapeHtml(r.m.nombre)+'</td>'+
       '<td>'+escapeHtml(r.t.nombre)+'</td>'+
-      '<td class="mono cell-muted">'+fmtInt(r.t.intervalo)+' '+UNIT_LABEL[tUnit(r.t,r.m)]+'</td>'+
-      '<td class="mono cell-muted">'+(r.t.lastMeter==null ? 'Sin registrar' : fmtInt(r.t.lastMeter)+' '+UNIT_LABEL[tUnit(r.t,r.m)]+'<br><span style="font-size:11px;">'+fmtDate(r.t.lastDate)+'</span>')+'</td>'+
+      '<td class="mono cell-muted">'+capit(fmtFrec(r.t.intervalo, tUnit(r.t,r.m)))+'</td>'+
+      '<td class="mono cell-muted">'+txtUltimo(r.t, r.m, true)+'</td>'+
       '<td style="min-width:140px;"><div class="progress"><i style="width:'+(r.pr.pct*100).toFixed(0)+'%; background:'+meta.bar+';"></i></div></td>'+
       '<td><span class="pill '+meta.cls+'"><svg><use href="#'+meta.icon+'"/></svg>'+meta.label+'</span></td>'+
       '<td><div style="display:flex; gap:6px; justify-content:flex-end;">'+
@@ -1308,7 +1310,7 @@ function viewAlertas(){
   state.machines.forEach(function(m){
     m.tasks.forEach(function(t){
       var pr = taskProgress(t, m);
-      if(pr.status==="crit") vencidos.push(m.nombre+" — "+t.nombre+" (vencido hace "+fmtInt(-pr.remaining)+" "+UNIT_LABEL[tUnit(t,m)]+")");
+      if(pr.status==="crit") vencidos.push(m.nombre+" — "+t.nombre+" (vencido hace "+fmtCant(-pr.remaining, tUnit(t,m))+")");
     });
   });
   var critParts = state.parts.filter(function(p){ return partStatus(p)==="crit"; }).map(function(p){ return p.nombre+" ("+escapeHtml(p.codigo)+") — 0 en stock"; });
@@ -1678,13 +1680,13 @@ function viewOrden(solId){
     if(!m){ area.innerHTML = ""; return; }
     area.innerHTML = '<div class="field-row">'+
       '<div class="field"><label>Tarea del plan (opcional)</label><select id="ordTask"><option value="">Correctivo (fuera del plan)</option>'+
-        m.tasks.map(function(t){ return '<option value="'+t.id+'">'+escapeHtml(t.nombre)+' (cada '+fmtInt(t.intervalo)+' '+UNIT_LABEL[tUnit(t,m)]+')</option>'; }).join("")+
+        m.tasks.map(function(t){ return '<option value="'+t.id+'">'+escapeHtml(t.nombre)+' ('+fmtFrec(t.intervalo, tUnit(t,m))+')</option>'; }).join("")+
       '</select></div>'+
       '<div class="field"><label id="ordMeterLbl">Medidor actual ('+UNIT_LABEL[m.meterType]+')</label><input type="number" id="ordMeter" value="'+(hasMeter(m,m.meterType)?meterOf(m,m.meterType):"")+'" min="0" step="any" placeholder="Lectura del medidor" /></div>'+
     '</div>';
     document.getElementById("ordTask").onchange = function(){
       var t = getTask(m, this.value);
-      var u = t ? tUnit(t, m) : m.meterType;
+      var u = t ? unidadMedidor(tUnit(t, m), m) : m.meterType;
       document.getElementById("ordMeterLbl").textContent = "Medidor actual ("+UNIT_LABEL[u]+")";
       document.getElementById("ordMeter").value = hasMeter(m,u) ? meterOf(m,u) : "";
       if(t){
@@ -1732,11 +1734,11 @@ function viewOrden(solId){
         equipo: s.equipo, descripcion: s.descripcion, prioridad: s.prioridad, responsable: s.responsable, cargado_por: s.cargado_por }
     };
     state.maintenances.unshift(rec);
-    var unidadO = m ? (t ? tUnit(t, m) : m.meterType) : null;
+    var unidadO = m ? (t ? unidadMedidor(tUnit(t, m), m) : m.meterType) : null;
     rec.medidorUnidad = unidadO;
     if(m){
       if(meter!=null) setMeter(m, unidadO, meter, true);
-      if(t){ t.lastMeter = meter!=null ? meter : meterOf(m, unidadO); t.lastDate = fecha; }
+      if(t){ t.lastMeter = esTiempo(tUnit(t,m)) ? null : (meter!=null ? meter : meterOf(m, unidadO)); t.lastDate = fecha; }
     }
     btn.disabled = true;
     var cerrar = document.getElementById("ordCerrar");
@@ -1775,6 +1777,83 @@ function ensureMeters(m){
   return m.meters;
 }
 function tUnit(t, m){ return t.unidad || (m ? m.meterType : "horas"); }
+
+/* ================= PLANES POR PERÍODO (calendario) ================= */
+var PERIODOS = ["dia","semana","mes","anio"];
+var VENCE_LABEL = { horas:"Horas de motor", km:"Kilómetros", dia:"Por días (calendario)", semana:"Por semanas (calendario)", mes:"Por meses (calendario)", anio:"Por años (calendario)" };
+function esTiempo(u){ return PERIODOS.indexOf(u)>=0; }
+function opcionesVencePor(sel){
+  return '<optgroup label="Por uso">'+["horas","km"].map(function(u){ return '<option value="'+u+'" '+(sel===u?"selected":"")+'>'+VENCE_LABEL[u]+'</option>'; }).join("")+'</optgroup>'+
+    '<optgroup label="Por período (fecha)">'+
+      '<option value="dia" '+(sel==="dia"?"selected":"")+'>Días — diario o cada X días</option>'+
+      '<option value="semana" '+(sel==="semana"?"selected":"")+'>Semanas — semanal</option>'+
+      '<option value="mes" '+(sel==="mes"?"selected":"")+'>Meses — mensual</option>'+
+      '<option value="anio" '+(sel==="anio"?"selected":"")+'>Años — anual</option>'+
+    '</optgroup>';
+}
+function fmtFrec(intervalo, u){
+  var n = Math.round(intervalo);
+  if(!esTiempo(u)) return "cada "+fmtInt(n)+" "+UNIT_LABEL[u];
+  if(n===1) return { dia:"diario", semana:"semanal", mes:"mensual", anio:"anual" }[u];
+  return "cada "+n+" "+UNIT_LABEL[u];
+}
+function capit(s){ return s ? s.charAt(0).toUpperCase()+s.slice(1) : s; }
+function fmtCant(n, u){
+  if(esTiempo(u)){ var d = Math.round(n); return d+" "+(Math.abs(d)===1 ? "día" : "días"); }
+  return fmtInt(n)+" "+UNIT_LABEL[u];
+}
+function isoLocal(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function sumarPeriodo(iso, n, u){
+  var d = new Date(iso+"T12:00:00");
+  if(u==="dia") d.setDate(d.getDate()+n);
+  else if(u==="semana") d.setDate(d.getDate()+7*n);
+  else {
+    var meses = u==="anio" ? 12*n : n, dia = d.getDate();
+    d.setDate(1); d.setMonth(d.getMonth()+meses);
+    var fin = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+    d.setDate(Math.min(dia, fin));
+  }
+  return isoLocal(d);
+}
+function diasEntre(a, b){ return Math.round((new Date(b+"T12:00:00") - new Date(a+"T12:00:00"))/864e5); }
+function progresoTiempo(t, u){
+  if(!t.lastDate) return { pct: 0, status: "nodata", remaining: null, used: null };
+  var hoy = todayISO(), vence = sumarPeriodo(t.lastDate, Math.max(1, Math.round(t.intervalo)), u);
+  var total = Math.max(1, diasEntre(t.lastDate, vence));
+  var used = diasEntre(t.lastDate, hoy), remaining = diasEntre(hoy, vence);
+  var status = remaining<0 ? "crit" : (remaining <= Math.max(1, Math.ceil(total*0.15)) ? "warn" : "ok");
+  return { pct: clamp(used/total, 0, 1), status: status, remaining: remaining, used: used, vence: vence };
+}
+/* Texto del "último service / inicio" de un plan */
+function txtUltimo(t, m, corto){
+  var u = tUnit(t, m);
+  if(esTiempo(u)){
+    if(!t.lastDate) return corto ? 'Sin registrar' : 'último service: sin registrar';
+    var pr = progresoTiempo(t, u);
+    var futuro = t.lastDate > todayISO();
+    if(corto) return (futuro ? 'Arranca ' : '')+fmtDate(t.lastDate)+'<br><span style="font-size:11px;">próximo: '+fmtDate(pr.vence)+'</span>';
+    return (futuro ? 'empieza a contar el ' : 'desde ')+fmtDate(t.lastDate)+' · próximo: '+fmtDate(pr.vence);
+  }
+  if(t.lastMeter==null) return corto ? 'Sin registrar' : 'último service: sin registrar';
+  return corto ? fmtInt(t.lastMeter)+' '+UNIT_LABEL[u]+'<br><span style="font-size:11px;">'+fmtDate(t.lastDate)+'</span>'
+               : 'último service: '+fmtInt(t.lastMeter)+' '+UNIT_LABEL[u]+' ('+fmtDate(t.lastDate)+')';
+}
+/* Unidad del medidor que se registra en un service (los planes por período usan el medidor principal) */
+function unidadMedidor(u, m){ return esTiempo(u) ? m.meterType : u; }
+/* Al cambiar "Vence por" ajusta la frecuencia sugerida */
+function ajustarFrecuencia(selUnidad, inpIntervalo, txtId){
+  var prev = selUnidad.value;
+  function txt(){ var el = txtId && document.getElementById(txtId); if(el){ var n = Math.round(Number(inpIntervalo.value)||0); el.textContent = n>0 ? "→ "+capit(fmtFrec(n, selUnidad.value)) : ""; } }
+  selUnidad.addEventListener("change", function(){
+    var u = selUnidad.value;
+    if(esTiempo(u) && !esTiempo(prev)) inpIntervalo.value = 1;
+    else if(!esTiempo(u) && esTiempo(prev)) inpIntervalo.value = u==="horas" ? 250 : 10000;
+    prev = u; txt();
+  });
+  inpIntervalo.addEventListener("input", txt);
+  txt();
+}
+
 function meterOf(m, unidad){ ensureMeters(m); var v = m.meters[unidad]; return typeof v==="number" ? v : 0; }
 function hasMeter(m, unidad){ ensureMeters(m); return typeof m.meters[unidad]==="number"; }
 function setMeter(m, unidad, v, soloSubir){
@@ -1999,7 +2078,7 @@ function planesTipoOrdenados(){
   return (state.planesTipo||[]).slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre) || (a.unidad<b.unidad?-1:1) || a.intervalo-b.intervalo; });
 }
 function getPlanTipo(id){ return (state.planesTipo||[]).find(function(p){ return p.id===id; }); }
-function planTipoLabel(p){ return p.nombre+" (cada "+fmtInt(p.intervalo)+" "+UNIT_LABEL[p.unidad]+")"; }
+function planTipoLabel(p){ return p.nombre+" ("+fmtFrec(p.intervalo, p.unidad)+")"; }
 function existePlanTipo(nombre, intervalo, unidad){
   var c = (nombre+"|"+intervalo+"|"+unidad).toLowerCase();
   return (state.planesTipo||[]).some(function(p){ return (p.nombre+"|"+p.intervalo+"|"+p.unidad).toLowerCase()===c; });
@@ -2010,7 +2089,7 @@ function opcionesPlan(m, seleccionado, permitirCrear){
   var html = '';
   if(m.tasks.length){
     html += '<optgroup label="Planes de esta unidad">'+m.tasks.map(function(t){
-      return '<option value="'+t.id+'" '+(t.id===seleccionado?"selected":"")+'>'+escapeHtml(t.nombre)+' (cada '+fmtInt(t.intervalo)+' '+UNIT_LABEL[tUnit(t,m)]+')</option>';
+      return '<option value="'+t.id+'" '+(t.id===seleccionado?"selected":"")+'>'+escapeHtml(t.nombre)+' ('+fmtFrec(t.intervalo, tUnit(t,m))+')</option>';
     }).join("")+'</optgroup>';
   }
   if(permitirCrear){
@@ -2147,13 +2226,14 @@ function viewGenerar(preId, preTask){
         '<div class="cell-strong" style="margin-bottom:10px;">'+(pe.tipo==="nuevo" ? "Plan nuevo" : "Se agrega a la unidad el plan predeterminado")+'</div>'+
         '<div class="field"><label>Nombre del plan</label><input type="text" id="gpNombre" value="'+escapeHtml(p.nombre)+'" placeholder="Ej: Cambio de aceite y filtros" '+(pe.tipo==="tpl"?"readonly":"")+' /></div>'+
         '<div class="field-row">'+
-          '<div class="field"><label>Vence por</label><select id="gpUnidad"><option value="horas" '+(p.unidad==="horas"?"selected":"")+'>Horas de motor</option><option value="km" '+(p.unidad==="km"?"selected":"")+'>Kilómetros</option></select></div>'+
-          '<div class="field"><label>Frecuencia (cada cuántas)</label><input type="number" id="gpIntervalo" min="1" value="'+p.intervalo+'" /></div>'+
+          '<div class="field"><label>Vence por</label><select id="gpUnidad" '+(pe.tipo==="tpl"?"disabled":"")+'>'+opcionesVencePor(p.unidad)+'</select></div>'+
+          '<div class="field"><label>Frecuencia (cada cuántas)</label><input type="number" id="gpIntervalo" min="1" value="'+p.intervalo+'" '+(pe.tipo==="tpl"?"readonly":"")+' /><div class="help" id="gpFrecTxt"></div></div>'+
         '</div>'+
         (pe.tipo==="nuevo" ? '<label style="display:flex; gap:8px; align-items:center; font-weight:600; color:var(--ink); margin:0;"><input type="checkbox" id="gpGuardar" checked style="width:16px; height:16px;"> Guardarlo también como plan predeterminado (para usarlo en otras unidades)</label>' : '')+
-        '<div class="help" style="margin-top:8px;">El plan empieza a contar desde este service: el próximo vence al medidor de hoy + la frecuencia. Los repuestos que cargues abajo quedan como los de este plan para esta unidad.</div>'+
+        '<div class="help" style="margin-top:8px;">El plan empieza a contar desde este service: el próximo vence al medidor de hoy + la frecuencia (o, si es por período, en la fecha del service + el período). Los repuestos que cargues abajo quedan como los de este plan para esta unidad.</div>'+
       '</div>';
-      document.getElementById("gpUnidad").onchange = function(){ syncMeter(m); renderEstado(m); };
+      ajustarFrecuencia(document.getElementById("gpUnidad"), document.getElementById("gpIntervalo"), "gpFrecTxt");
+      document.getElementById("gpUnidad").addEventListener("change", function(){ syncMeter(m); renderEstado(m); });
     }
     syncMeter(m);
     if(recargarRepuestos){
@@ -2167,8 +2247,8 @@ function viewGenerar(preId, preTask){
     renderEstado(m);
   }
   function syncMeter(m){
-    var u = unidadElegida(m);
-    document.getElementById("genMeterLbl").textContent = "Medidor actual ("+UNIT_LABEL[u]+")";
+    var uP = unidadElegida(m), u = unidadMedidor(uP, m);
+    document.getElementById("genMeterLbl").textContent = "Medidor actual ("+UNIT_LABEL[u]+")"+(esTiempo(uP) ? " — opcional" : "");
     document.getElementById("genMeter").value = hasMeter(m,u) ? meterOf(m,u) : "";
   }
   function refreshShort(){
@@ -2182,16 +2262,16 @@ function viewGenerar(preId, preTask){
     var box = document.getElementById("genEstado");
     if(pe.tipo!=="tarea" || !pe.t){ box.innerHTML = ""; return; }
     var pr = taskProgress(pe.t, m), meta = statusMeta(pr.status);
-    box.innerHTML = '<div class="banner '+(pr.status==="crit"?"banner-crit":pr.status==="warn"?"banner-warn":"banner-info")+'"><svg><use href="#'+meta.icon+'"/></svg><div>Estado actual de este plan: <b>'+meta.label+'</b>'+(pr.status==="nodata" ? ' · todavía no hay un service registrado.' : ' · '+(pr.remaining>=0? "faltan "+fmtInt(pr.remaining) : "vencido hace "+fmtInt(-pr.remaining))+' '+UNIT_LABEL[tUnit(pe.t,m)]+'.')+'</div></div>';
+    box.innerHTML = '<div class="banner '+(pr.status==="crit"?"banner-crit":pr.status==="warn"?"banner-warn":"banner-info")+'"><svg><use href="#'+meta.icon+'"/></svg><div>Estado actual de este plan: <b>'+meta.label+'</b>'+(pr.status==="nodata" ? ' · todavía no hay un service registrado.' : ' · '+(pr.remaining>=0? "faltan "+fmtCant(pr.remaining, tUnit(pe.t,m)) : "vencido hace "+fmtCant(-pr.remaining, tUnit(pe.t,m)))+'.')+'</div></div>';
   }
 
   function submitMaintenance(m){
     var pe = planElegido(m);
     var t = pe.t;
     var meterRaw = document.getElementById("genMeter").value;
-    var unidadT = unidadElegida(m);
-    if(meterRaw===""){ toast("Cargá la lectura actual del medidor ("+UNIT_LABEL[unidadT]+")", "err"); return; }
-    var meter = Number(meterRaw);
+    var unidadT = unidadElegida(m), unidadMed = unidadMedidor(unidadT, m);
+    if(meterRaw==="" && !esTiempo(unidadT)){ toast("Cargá la lectura actual del medidor ("+UNIT_LABEL[unidadT]+")", "err"); return; }
+    var meter = meterRaw==="" ? null : Number(meterRaw);
     var partes = rep ? rep.valores() : [];
     if(pe.tipo!=="tarea"){
       var nombre = document.getElementById("gpNombre").value.trim();
@@ -2222,12 +2302,12 @@ function viewGenerar(preId, preTask){
     var u = currentUser();
     state.maintenances.unshift({
       id: uid("MT"), numero: numero, machineId: m.id, taskId: t.id, taskNombre: t.nombre,
-      fecha: date, medidor: meter, medidorUnidad: unidadT, tecnico: tech || "Sin asignar", notas: notes,
+      fecha: date, medidor: meter, medidorUnidad: unidadMed, tecnico: tech || "Sin asignar", notas: notes,
       partesUsadas: partesUsadas, estado: "completado", faltante: faltante, cargadoPor: u ? u.nombre : "—"
     });
-    t.lastMeter = meter;
+    t.lastMeter = esTiempo(unidadT) ? null : meter;
     t.lastDate = date;
-    setMeter(m, unidadT, meter, true);
+    if(meter!=null) setMeter(m, unidadMed, meter, true);
     saveState();
     toast(faltante ? "Mantenimiento "+numero+" generado con faltante de stock" : "Mantenimiento "+numero+" generado y stock actualizado", faltante?"err":"ok");
     navigate("flota", { id:m.id });
@@ -2250,7 +2330,7 @@ function htmlPlanesTipo(){
   if(!lista.length) return html + emptyState("i-clip","Todavía no hay planes predeterminados.");
   html += '<div class="table-wrap"><table style="min-width:520px;"><thead><tr><th>Plan</th><th>Vence por</th><th>Frecuencia</th><th>Unidades que lo usan</th><th></th></tr></thead><tbody>'+
     lista.map(function(p){
-      return '<tr><td class="cell-strong">'+escapeHtml(p.nombre)+'</td><td>'+(p.unidad==="horas"?"Horas de motor":"Kilómetros")+'</td><td class="mono">cada '+fmtInt(p.intervalo)+' '+UNIT_LABEL[p.unidad]+'</td><td class="mono">'+usos(p)+'</td>'+
+      return '<tr><td class="cell-strong">'+escapeHtml(p.nombre)+'</td><td>'+(esTiempo(p.unidad) ? "Período (fecha)" : VENCE_LABEL[p.unidad])+'</td><td class="mono">'+fmtFrec(p.intervalo, p.unidad)+'</td><td class="mono">'+usos(p)+'</td>'+
         '<td><div style="display:flex; gap:4px; justify-content:flex-end;">'+
           (isAdmin() ? '<button class="btn btn-ghost btn-sm" data-action="plantipo-asignar" data-id="'+p.id+'" title="Asignar a unidades"><svg><use href="#i-truck"/></svg>Asignar</button>'+
             '<button class="btn btn-ghost btn-sm" data-action="plantipo-edit" data-id="'+p.id+'" title="Editar"><svg><use href="#i-edit"/></svg></button>'+
@@ -2266,10 +2346,11 @@ function openPlanTipoModal(id){
   showModal('<div class="modal-body"><h3>'+(p?"Editar plan predeterminado":"Nuevo plan predeterminado")+'</h3>'+
     '<div class="field"><label>Nombre del plan</label><input type="text" id="ptNombre" value="'+escapeHtml(p?p.nombre:"")+'" placeholder="Ej: Cambio de aceite y filtros" /></div>'+
     '<div class="field-row">'+
-      '<div class="field"><label>Vence por</label><select id="ptUnidad"><option value="horas" '+(p&&p.unidad==="horas"?"selected":"")+'>Horas de motor</option><option value="km" '+(!p||p.unidad==="km"?"selected":"")+'>Kilómetros</option></select></div>'+
-      '<div class="field"><label>Frecuencia (cada cuántas)</label><input type="number" id="ptIntervalo" min="1" value="'+(p?p.intervalo:10000)+'" /></div>'+
+      '<div class="field"><label>Vence por</label><select id="ptUnidad">'+opcionesVencePor(p ? p.unidad : "km")+'</select></div>'+
+      '<div class="field"><label>Frecuencia (cada cuántas)</label><input type="number" id="ptIntervalo" min="1" value="'+(p?p.intervalo:10000)+'" /><div class="help" id="ptFrecTxt"></div></div>'+
     '</div></div>'+
     '<div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cancelar</button><button class="btn btn-primary" id="mSave">Guardar</button></div>');
+  ajustarFrecuencia(document.getElementById("ptUnidad"), document.getElementById("ptIntervalo"), "ptFrecTxt");
   document.getElementById("mCancel").onclick = closeModal;
   document.getElementById("mSave").onclick = function(){
     var nombre = document.getElementById("ptNombre").value.trim();
@@ -2301,7 +2382,9 @@ function openAsignarPlanModal(id){
       var ya = tiene(m);
       return '<label class="part-pick-row"><input type="checkbox" data-asig="'+m.id+'" '+(ya?"checked disabled":"")+' /><span class="ppr-name">'+escapeHtml(m.nombre)+(ya?' <span class="ppr-code">ya lo tiene</span>':'')+'</span><span class="ppr-code">'+meterSummary(m)+'</span></label>';
     }).join("")+'</div>'+
-    '<div class="help">El plan empieza a contar desde el medidor actual de cada unidad. Si una unidad todavía no tiene medidor cargado, queda "Sin datos" hasta su primer service.</div></div>'+
+    (esTiempo(p.unidad)
+      ? '<div class="field" style="margin-top:12px;"><label>Comienza a correr desde (fecha)</label><input type="date" id="asigFecha" value="'+todayISO()+'" /><div class="help">El primer vencimiento es esta fecha + '+escapeHtml(fmtFrec(p.intervalo, p.unidad))+'. Puede ser una fecha pasada (último service hecho) o futura.</div></div>'
+      : '<div class="help">El plan empieza a contar desde el medidor actual de cada unidad. Si una unidad todavía no tiene medidor cargado, queda "Sin datos" hasta su primer service.</div>')+'</div>'+
     '<div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cancelar</button><button class="btn btn-primary" id="mSave">Asignar</button></div>');
   document.querySelector("#modalRoot .modal").style.maxWidth = "560px";
   document.getElementById("mCancel").onclick = closeModal;
@@ -2309,6 +2392,11 @@ function openAsignarPlanModal(id){
     var n = 0;
     document.querySelectorAll("[data-asig]:checked:not(:disabled)").forEach(function(cb){
       var m = getMachine(cb.dataset.asig); if(!m) return;
+      if(esTiempo(p.unidad)){
+        var f = (document.getElementById("asigFecha")||{}).value || null;
+        m.tasks.push({ id: uid("T"), nombre: p.nombre, intervalo: p.intervalo, unidad: p.unidad, parts: [], lastMeter: null, lastDate: f });
+        n++; return;
+      }
       var arranca = hasMeter(m, p.unidad) ? meterOf(m, p.unidad) : null;
       m.tasks.push({ id: uid("T"), nombre: p.nombre, intervalo: p.intervalo, unidad: p.unidad, parts: [], lastMeter: arranca, lastDate: arranca!=null ? todayISO() : null });
       n++;
@@ -2691,11 +2779,11 @@ function openTaskModal(machineId, taskId){
       '</select><div class="help">Elegí uno del catálogo o dejá "Plan nuevo" y completá los datos.</div></div>' : '')+
       '<div class="field"><label>Nombre del plan</label><input type="text" id="tNombre" value="'+(editing?escapeHtml(editing.nombre):"")+'" placeholder="Ej: Cambio de aceite y filtros" /></div>'+
       '<div class="field-row">'+
-        '<div class="field"><label>Vence por</label><select id="tUnidad"><option value="km" '+(((editing?tUnit(editing,m):m.meterType))==="km"?"selected":"")+'>Kilómetros</option><option value="horas" '+(((editing?tUnit(editing,m):m.meterType))==="horas"?"selected":"")+'>Horas de motor</option></select></div>'+
-        '<div class="field"><label>Frecuencia (cada cuántas)</label><input type="number" id="tIntervalo" value="'+(editing?editing.intervalo:(m.meterType==="horas"?250:10000))+'" min="1" /></div>'+
+        '<div class="field"><label>Vence por</label><select id="tUnidad">'+opcionesVencePor(editing?tUnit(editing,m):m.meterType)+'</select></div>'+
+        '<div class="field"><label>Frecuencia (cada cuántas)</label><input type="number" id="tIntervalo" value="'+(editing?editing.intervalo:(m.meterType==="horas"?250:10000))+'" min="1" /><div class="help" id="tFrecTxt"></div></div>'+
       '</div>'+
-      '<div class="field"><label id="tInicioLbl">Comienza a contar desde</label><input type="number" id="tInicio" step="any" min="0" placeholder="Medidor del último service o de inicio" />'+
-        '<div class="help">Medidor desde el que se cuenta la frecuencia (por ejemplo, el del último service hecho). El próximo vence en este valor + la frecuencia. Si lo dejás vacío queda "Sin datos" hasta el primer mantenimiento.</div></div>'+
+      '<div class="field"><label id="tInicioLbl">Comienza a contar desde</label><input type="number" id="tInicio" step="any" min="0" placeholder="Medidor del último service o de inicio" /><input type="date" id="tInicioFecha" style="display:none;" />'+
+        '<div class="help" id="tInicioHelp"></div></div>'+
       (!editing ? '<label style="display:flex; gap:8px; align-items:center; font-weight:600; color:var(--ink); margin:0 0 14px;"><input type="checkbox" id="tGuardarTipo" checked style="width:16px; height:16px;"> Guardar también como plan predeterminado</label>' : '')+
       '<div class="field"><label>Repuestos que consume esta tarea</label>'+
         '<div style="display:flex; gap:8px; margin-bottom:8px;">'+
@@ -2725,6 +2813,17 @@ function openTaskModal(machineId, taskId){
 
   function syncInicio(forzar){
     var u = document.getElementById("tUnidad").value;
+    var tiempo = esTiempo(u), fInp = document.getElementById("tInicioFecha");
+    document.getElementById("tInicio").style.display = tiempo ? "none" : "";
+    fInp.style.display = tiempo ? "" : "none";
+    document.getElementById("tInicioHelp").textContent = tiempo
+      ? "Fecha desde la que empieza a correr el plan (por ejemplo, la del último service hecho, o una fecha futura). El primer vencimiento es esta fecha + la frecuencia. Si la dejás vacía queda \"Sin datos\" hasta el primer mantenimiento."
+      : "Medidor desde el que se cuenta la frecuencia (por ejemplo, el del último service hecho). El próximo vence en este valor + la frecuencia. Si lo dejás vacío queda \"Sin datos\" hasta el primer mantenimiento.";
+    if(tiempo){
+      document.getElementById("tInicioLbl").textContent = "Comienza a correr desde (fecha)";
+      if(forzar) fInp.value = (editing && esTiempo(tUnit(editing, m)) && editing.lastDate) ? editing.lastDate : (editing && esTiempo(tUnit(editing, m)) ? "" : todayISO());
+      return;
+    }
     document.getElementById("tInicioLbl").textContent = "Comienza a contar desde ("+UNIT_LABEL[u]+")";
     var inp = document.getElementById("tInicio");
     if(forzar){
@@ -2732,6 +2831,7 @@ function openTaskModal(machineId, taskId){
       else inp.value = hasMeter(m, u) ? meterOf(m, u) : "";
     }
   }
+  ajustarFrecuencia(document.getElementById("tUnidad"), document.getElementById("tIntervalo"), "tFrecTxt");
   document.getElementById("tUnidad").addEventListener("change", function(){ syncInicio(true); });
   syncInicio(true);
   var tTipo = document.getElementById("tTipo");
@@ -2742,6 +2842,7 @@ function openTaskModal(machineId, taskId){
       document.getElementById("tNombre").value = pt.nombre;
       document.getElementById("tUnidad").value = pt.unidad;
       document.getElementById("tIntervalo").value = pt.intervalo;
+      document.getElementById("tIntervalo").dispatchEvent(new Event("input"));
       syncInicio(true);
       if(g){ g.checked = false; g.parentNode.style.display = "none"; }
     } else if(g){ g.parentNode.style.display = ""; g.checked = true; }
@@ -2806,6 +2907,22 @@ function openTaskModal(machineId, taskId){
     var unidadSel = document.getElementById("tUnidad").value;
     var iniRaw = document.getElementById("tInicio").value;
     var inicio = iniRaw==="" ? null : Math.max(0, Number(iniRaw));
+    if(esTiempo(unidadSel)){
+      var fIni = document.getElementById("tInicioFecha").value || null;
+      if(editing){
+        editing.nombre = nombre; editing.intervalo = intervalo; editing.parts = parts; editing.unidad = unidadSel;
+        editing.lastMeter = null; editing.lastDate = fIni;
+        toast("Plan actualizado");
+      } else {
+        m.tasks.push({ id: uid("T"), nombre: nombre, intervalo: intervalo, unidad: unidadSel, parts: parts, lastMeter: null, lastDate: fIni });
+        var g2 = document.getElementById("tGuardarTipo");
+        if(g2 && g2.checked && g2.parentNode.style.display!=="none" && !existePlanTipo(nombre, intervalo, unidadSel)){
+          state.planesTipo.push({ id: uid("PL"), nombre: nombre, intervalo: intervalo, unidad: unidadSel });
+        }
+        toast("Plan agregado a la unidad");
+      }
+      saveState(); closeModal(); render(); return;
+    }
     if(editing){
       var cambioInicio = inicio !== editing.lastMeter || tUnit(editing, m)!==unidadSel;
       editing.nombre = nombre; editing.intervalo = intervalo; editing.parts = parts; editing.unidad = unidadSel;
