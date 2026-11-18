@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Inicio · Plataforma COSESA{% endblock %}
+{% block content %}
+<style>
+  .plat-head { margin-bottom: 22px; }
+  .plat-head .kicker { font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--cosesa-gold-deep); }
+  .plat-head h1 { margin: 4px 0 6px; font-size: 28px; }
+  .mod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+  .mod {
+    position: relative; display: flex; flex-direction: column; gap: 10px;
+    background: var(--cosesa-card); border: 1px solid var(--cosesa-border); border-radius: 14px;
+    padding: 20px 20px 18px; min-height: 178px; color: var(--cosesa-text);
+    box-shadow: 0 1px 2px rgba(31,44,71,.06);
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  }
+  a.mod:hover { text-decoration: none; transform: translateY(-2px); border-color: var(--cosesa-gold);
+    box-shadow: 0 10px 26px rgba(31,44,71,.13); }
+  a.mod:focus-visible { outline: 3px solid var(--cosesa-gold); outline-offset: 2px; }
+  .mod-icon {
+    width: 46px; height: 46px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+    background: var(--cosesa-navy-deep); color: var(--cosesa-gold);
+  }
+  .mod-icon svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .mod-title { margin: 2px 0 0; font-size: 18px; font-weight: 800; color: var(--cosesa-navy-deep); }
+  .mod p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--cosesa-text-muted); flex: 1; }
+  .mod-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
+  .mod-tag { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; }
+  .tag-activo { background: #e3f4ec; color: var(--cosesa-success); }
+  .tag-externo { background: #fdf3d6; color: #8a6a0a; }
+  .tag-proximamente, .tag-sin { background: #eceef1; color: var(--cosesa-text-muted); }
+  .mod-go { font-size: 13px; font-weight: 800; color: var(--cosesa-navy); }
+  .mod.off { background: #f7f8f9; box-shadow: none; cursor: default; }
+  .mod.off .mod-icon { background: #d9dde3; color: #8a929b; }
+  .mod.off .mod-title { color: #6b737c; }
+</style>
+
+<div class="plat-head">
+  <div class="kicker">Plataforma COSESA</div>
+  <h1>Hola, {{ current_user['nombre'] or current_user['username'] }}</h1>
+  <p class="subtitle">Elegí el módulo con el que vas a trabajar.</p>
+</div>
+
+<div class="mod-grid">
+  {% for m in modulos %}
+    {% if m.href %}
+    <a class="mod" href="{{ m.href }}" {% if m.estado == 'externo' %}target="_blank" rel="noopener"{% endif %}>
+    {% else %}
+    <div class="mod off" aria-disabled="true">
+    {% endif %}
+      <div class="mod-icon"><svg viewBox="0 0 24 24" aria-hidden="true">{{ m.icono|safe }}</svg></div>
+      <div class="mod-title">{{ m.nombre }}</div>
+      <p>{{ m.descripcion }}</p>
+      <div class="mod-foot">
+        {% if not m.con_acceso %}
+          <span class="mod-tag tag-sin">Sin acceso</span>
+        {% elif m.estado == 'activo' %}
+          <span class="mod-tag tag-activo">Disponible</span><span class="mod-go">Entrar →</span>
+        {% elif m.estado == 'externo' %}
+          <span class="mod-tag tag-externo">App aparte</span><span class="mod-go">Abrir ↗</span>
+        {% else %}
+          <span class="mod-tag tag-proximamente">Próximamente</span>
+        {% endif %}
+      </div>
+    {% if m.href %}</a>{% else %}</div>{% endif %}
+  {% endfor %}
+</div>
+{% endblock %}

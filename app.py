@@ -1080,7 +1080,7 @@ def index():
     user = get_current_user()
     if user is None:
         return redirect(url_for("login"))
-    return redirect(url_for("cosesa_dashboard") if user["rol"] in COSESA_ROLES else url_for("cliente_dashboard"))
+    return redirect(url_for("plataforma_inicio") if user["rol"] in COSESA_ROLES else url_for("cliente_dashboard"))
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -1094,7 +1094,7 @@ def login():
         if user and check_password_hash(user["password_hash"], password):
             session.clear()
             session["user_id"] = user["id"]
-            return redirect(url_for("cosesa_dashboard") if user["rol"] in COSESA_ROLES else url_for("cliente_dashboard"))
+            return redirect(url_for("plataforma_inicio") if user["rol"] in COSESA_ROLES else url_for("cliente_dashboard"))
         flash("Usuario o contraseña incorrectos.", "error")
     return render_template("login.html")
 
@@ -3837,6 +3837,12 @@ _preparacion.init_app(app, _types.SimpleNamespace(
     get_db=get_db, get_current_user=get_current_user, cosesa_required=cosesa_required,
     admin_required=admin_required, puede=puede, obras_visibles_ids=obras_visibles_ids,
     ve_todas_las_obras=ve_todas_las_obras, is_admin=is_admin,
+))
+
+# Pantalla de inicio de la Plataforma COSESA (módulos)
+import plataforma as _plataforma
+_plataforma.init_app(app, _types.SimpleNamespace(
+    cosesa_required=cosesa_required, get_current_user=get_current_user, puede=puede,
 ))
 
 restore_latest()

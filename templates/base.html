@@ -29,11 +29,12 @@
   {% block body %}
   {% if current_user %}
   <nav class="navbar no-print">
-    <a class="brand" href="{{ url_for('cosesa_dashboard') if current_user['rol'] in ('cosesa','cosesa_admin') else url_for('cliente_dashboard') }}">
+    <a class="brand" href="{{ url_for('plataforma_inicio') if current_user['rol'] in ('cosesa','cosesa_admin') else url_for('cliente_dashboard') }}">
       <img src="{{ url_for('static', filename='img/logo.png') }}" alt="COSESA">
     </a>
     <div class="nav-links">
       {% if current_user['rol'] in ('cosesa','cosesa_admin') %}
+      <a href="{{ url_for('plataforma_inicio') }}">Inicio</a>
       <a href="{{ url_for('cosesa_dashboard') }}">Avance de obras</a>
       {% if puede('preparacion') %}<a href="{{ url_for('preparacion_panel') }}">Preparación de obras</a>{% endif %}
       {% endif %}
@@ -53,7 +54,7 @@
 
   <div class="{% block container_class %}container{% endblock %}">
     {% block back_link %}
-    {% if current_user and request.endpoint not in ('cosesa_dashboard', 'cliente_dashboard') %}
+    {% if current_user and request.endpoint not in ('cosesa_dashboard', 'cliente_dashboard', 'plataforma_inicio') %}
       <a class="btn btn-outline btn-sm btn-back no-print" href="javascript:history.back()">&larr; Volver</a>
     {% endif %}
     {% endblock %}
