@@ -311,6 +311,61 @@ def init_app(app, h):
         db.close()
         return jsonify({"ok": True, "eliminada": borrar_obra})
 
+    # ------------------------------------- vincular con una obra que ya existe
+    # Tablas de Avance de obras con datos propios de cada obra. Si la obra de
+    # preparación tiene algo cargado en alguna, no se borra al vincular.
+    TABLAS_CON_DATOS = ("items", "certificados", "aprendizajes", "bitacora", "mantenimientos")
+
+    @app.route("/cosesa/preparacion/api/obras/<int:obra_id>/vincular", methods=["POST"])
+    @h.cosesa_required
+    def preparacion_vincular_obra(obra_id):
+        """Pasa la preparación (checklist, equipos y personal) de esta obra a una
+        obra que ya existe en Avance de obras y elimina la obra duplicada."""
+        user = h.get_current_user()
+        if not (_puede_editar(user) and h.puede("editar_obra", user)):
+            return _err("No tenés permiso para vincular obras.", 403)
+        body = request.get_json(silent=True) or {}
+        try:
+            destino_id = int(body.get("destino_obra_id"))
+        except (TypeError, ValueError):
+            return _err("Elegí la obra con la que se vincula.")
+        if destino_id == obra_id:
+            return _err("Elegí una obra distinta.")
+        db = get_db()
+        origen = db.execute("SELECT * FROM obras WHERE id = ?", (obra_id,)).fetchone()
+        destino = db.execute("SELECT * FROM obras WHERE id = ?", (destino_id,)).fetchone()
+        visibles = h.obras_visibles_ids(db, user)
+        if origen is None or destino is None or (visibles is not None and destino_id not in visibles):
+            db.close()
+            return _err("No se encontró la obra.", 404)
+        for tabla in TABLAS_CON_DATOS:
+            if db.execute(f"SELECT 1 FROM {tabla} WHERE obra_id = ? LIMIT 1", (obra_id,)).fetchone():
+                db.close()
+                return _err("Esta obra ya tiene información cargada en Avance de obras (tareas, bitácora, "
+                            "certificados, etc.), así que no se puede fusionar con otra.")
+        if db.execute("SELECT 1 FROM preparacion WHERE obra_id = ?", (destino_id,)).fetchone():
+            if not body.get("reemplazar"):
+                db.close()
+                return _err("La obra elegida ya tiene su propia preparación.", 409, ya_tiene_preparacion=True)
+            db.execute("DELETE FROM preparacion WHERE obra_id = ?", (destino_id,))
+            db.execute("DELETE FROM obra_equipos WHERE obra_id = ?", (destino_id,))
+        db.execute(
+            "UPDATE preparacion SET obra_id = ?, version = version + 1, actualizado_en = datetime('now'), "
+            "actualizado_por = ? WHERE obra_id = ?", (destino_id, _usuario_txt(user), obra_id))
+        db.execute("UPDATE OR IGNORE obra_equipos SET obra_id = ? WHERE obra_id = ?", (destino_id, obra_id))
+        # Completa en la obra existente lo que le falte (no pisa nada)
+        if not destino["codigo"] and origen["codigo"]:
+            db.execute("UPDATE obras SET codigo = ? WHERE id = ?", (origen["codigo"], destino_id))
+        if not destino["fecha_inicio"] and origen["fecha_inicio"]:
+            db.execute("UPDATE obras SET fecha_inicio = ? WHERE id = ?", (origen["fecha_inicio"], destino_id))
+        db.execute("DELETE FROM obra_equipos WHERE obra_id = ?", (obra_id,))
+        db.execute("DELETE FROM usuario_obras WHERE obra_id = ?", (obra_id,))
+        db.execute("DELETE FROM obras WHERE id = ?", (obra_id,))
+        db.commit()
+        obra = _obra_completa(db, destino_id)
+        db.close()
+        return jsonify({"ok": True, "obra": obra, "eliminada_obra_id": obra_id})
+
     # ------------------------------------------------------ pasar a ejecución
     @app.route("/cosesa/preparacion/api/obras/<int:obra_id>/ejecutar", methods=["POST"])
     @h.cosesa_required

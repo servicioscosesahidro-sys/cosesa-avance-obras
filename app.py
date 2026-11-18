@@ -573,7 +573,7 @@ ENDPOINT_PERMISO = {
     "preparacion_panel": "preparacion", "preparacion_api_estado": "preparacion",
     "preparacion_guardar_obra": "preparacion", "preparacion_crear_obra": "preparacion",
     "preparacion_quitar_obra": "preparacion", "preparacion_guardar_equipos": "preparacion",
-    "preparacion_pasar_a_ejecucion": "editar_obra",
+    "preparacion_pasar_a_ejecucion": "editar_obra", "preparacion_vincular_obra": "editar_obra",
 }
 
 # Cómo encontrar la obra a partir del parámetro de la URL.
