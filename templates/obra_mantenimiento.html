@@ -13,6 +13,11 @@
 <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
   <div>
     <h1>Mantenimientos de planta</h1>
+    {% if puede('modulo_mantenimiento') %}
+    <p class="subtitle">Cada registro (pendiente o realizado) llega al módulo <a href="{{ url_for('mantenimiento_app') }}#/solicitudes">Mantenimiento → Solicitudes de obras</a>, donde se generan las órdenes.</p>
+    {% else %}
+    <p class="subtitle">Cada registro (pendiente o realizado) llega al módulo Mantenimiento → Solicitudes de obras.</p>
+    {% endif %}
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
     <a class="btn" href="{{ url_for('reporte_mantenimiento_pdf', obra_id=obra['id']) }}">Descargar reporte (PDF)</a>

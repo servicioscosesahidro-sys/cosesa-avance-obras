@@ -528,6 +528,10 @@ PERMISOS = [
     ("mantenimiento", "Cargar, editar y eliminar mantenimientos", "Registros de obra", True),
     ("reportes", "Generar reportes y PDF (cliente, obra, demoras, informe interno, mantenimiento, checklist)", "Reportes", True),
     ("preparacion", "Ver y editar la preparación de obra (checklist, equipos y personal)", "Preparación de obra", True),
+    ("modulo_mantenimiento", "Usar el módulo Mantenimiento: ver solicitudes, generar órdenes y mover stock de repuestos",
+     "Módulo Mantenimiento", True),
+    ("modulo_mantenimiento_admin", "Administrar el módulo Mantenimiento: equipos, planes, repuestos, importar horas, anular órdenes",
+     "Módulo Mantenimiento", False),
 ]
 PERMISOS_KEYS = [k for k, _l, _g, _d in PERMISOS]
 PERMISOS_DEFAULT = {k for k, _l, _g, d in PERMISOS if d}
@@ -574,6 +578,10 @@ ENDPOINT_PERMISO = {
     "preparacion_guardar_obra": "preparacion", "preparacion_crear_obra": "preparacion",
     "preparacion_quitar_obra": "preparacion", "preparacion_guardar_equipos": "preparacion",
     "preparacion_pasar_a_ejecucion": "editar_obra", "preparacion_vincular_obra": "editar_obra",
+    # Módulo Mantenimiento (mantenimiento_app.py)
+    "mantenimiento_app": "modulo_mantenimiento", "mantenimiento_api_estado": "modulo_mantenimiento",
+    "mantenimiento_api_guardar": "modulo_mantenimiento", "mantenimiento_api_solicitudes": "modulo_mantenimiento",
+    "mantenimiento_api_solicitud_estado": "modulo_mantenimiento",
 }
 
 # Cómo encontrar la obra a partir del parámetro de la URL.
@@ -3837,6 +3845,13 @@ _preparacion.init_app(app, _types.SimpleNamespace(
     get_db=get_db, get_current_user=get_current_user, cosesa_required=cosesa_required,
     admin_required=admin_required, puede=puede, obras_visibles_ids=obras_visibles_ids,
     ve_todas_las_obras=ve_todas_las_obras, is_admin=is_admin,
+))
+
+# Módulo Mantenimiento (ex "Mantenimiento, App 02")
+import mantenimiento_app as _mant_app
+_mant_app.init_app(app, _types.SimpleNamespace(
+    get_db=get_db, get_current_user=get_current_user, cosesa_required=cosesa_required,
+    puede=puede, is_admin=is_admin,
 ))
 
 # Pantalla de inicio de la Plataforma COSESA (módulos)

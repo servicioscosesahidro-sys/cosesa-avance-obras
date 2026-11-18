@@ -154,6 +154,8 @@ def _migrate_schema(conn):
     )
     changed = True
     _migrate_preparacion(conn)
+    import mantenimiento_app
+    mantenimiento_app.migrate(conn)
 
     if changed:
         conn.commit()
