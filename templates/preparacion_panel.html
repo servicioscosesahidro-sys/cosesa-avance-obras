@@ -1040,9 +1040,73 @@ function accionEjecucionHtml(obra){
     return `<a class="btn-ejecutar ver" href="${escapeHtml(obra.url_avance)}">Ver avance de obra →</a>`;
   }
   if(currentUser && currentUser.puede_ejecutar){
-    return `<button class="btn-ejecutar" id="ejecutarBtn">Pasar a ejecución →</button>`;
+    const vinc = !obra.n_items ? `<button class="btn-ghost" id="vincularBtn" title="Si esta obra ya existe en Avance de obras, pasá la preparación a esa obra">Vincular con obra existente</button>` : "";
+    return `<button class="btn-ejecutar" id="ejecutarBtn">Pasar a ejecución →</button>${vinc}`;
   }
   return "";
+}
+
+/* ---------- Vincular con una obra que ya existe en Avance de obras ---------- */
+function openVincularModal(obra){
+  const estadoTxt = e => e==="en_curso" ? "en curso" : (e==="finalizada" ? "finalizada" : "planificada");
+  const sinPrep = (SERVER.obras_disponibles||[]).map(o=>({obra_id:o.obra_id, nombre:o.nombre, cliente:o.cliente, codigo:o.codigo, estado_obra:o.estado_obra, prep:false}));
+  const conPrep = DATA.obras.filter(o=>o.uid!==obra.uid).map(o=>({obra_id:o.obra_id, nombre:o.nombre, cliente:o.cliente, codigo:o.id, estado_obra:o.estado_obra, prep:true}));
+  const ordenar = l => l.sort((a,b)=>(a.cliente+a.nombre).localeCompare(b.cliente+b.nombre));
+  const opt = o => `<option value="${o.obra_id}" data-prep="${o.prep?1:0}">${escapeHtml(o.cliente)} — ${escapeHtml(o.nombre)}${o.codigo?` (N° ${escapeHtml(o.codigo)})`:""} · ${estadoTxt(o.estado_obra)}</option>`;
+  openModal(`
+    <div class="modal-head">
+      <div><h3>Vincular con obra existente</h3><p>Para cuando esta obra ya está cargada en Avance de obras.</p></div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-msg">La checklist, los equipos y el personal de <b>${escapeHtml(obra.nombre)}</b> pasan a la obra que elijas, y esta obra duplicada se elimina. En la obra elegida no se toca nada de lo que ya tiene (tareas, avance, bitácora, reportes).</p>
+      <div class="field">
+        <label for="f-vinc">Obra de Avance de obras *</label>
+        <select id="f-vinc" class="wide">
+          <option value="">Elegí la obra…</option>
+          ${sinPrep.length ? `<optgroup label="Sin preparación">${ordenar(sinPrep).map(opt).join("")}</optgroup>` : ""}
+          ${conPrep.length ? `<optgroup label="Ya tienen preparación (se reemplaza)">${ordenar(conPrep).map(opt).join("")}</optgroup>` : ""}
+        </select>
+        <div class="hint" id="vinc-aviso"></div>
+        <div class="field-error" id="err-vinc"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn-primary" id="vincConfirm">Vincular</button>
+      </div>
+    </div>
+  `);
+  const sel = document.getElementById("f-vinc");
+  const aviso = document.getElementById("vinc-aviso");
+  sel.onchange = ()=>{
+    const o = sel.options[sel.selectedIndex];
+    aviso.innerHTML = o && o.dataset.prep==="1" ? "<b>Atención:</b> esa obra ya tiene su propia preparación; se va a reemplazar por la de esta obra." : "";
+  };
+  const btn = document.getElementById("vincConfirm");
+  btn.onclick = async ()=>{
+    const err = document.getElementById("err-vinc");
+    err.textContent = "";
+    if(!sel.value){ err.textContent = "Elegí la obra."; return; }
+    const reemplazar = sel.options[sel.selectedIndex].dataset.prep==="1";
+    btn.disabled = true; btn.textContent = "Vinculando…";
+    if(saveTimer || hayCambios()){ clearTimeout(saveTimer); saveTimer = null; await doSave(); }
+    const res = await api("POST", `${API}/obras/${obra.obra_id}/vincular`, {destino_obra_id:Number(sel.value), reemplazar});
+    if(!res.ok){
+      err.textContent = res.error || "No se pudo vincular.";
+      btn.disabled = false; btn.textContent = "Vincular";
+      return;
+    }
+    const nueva = normalizarObra(res.obra);
+    DATA.obras = DATA.obras.filter(o=>o.uid!==obra.uid && o.uid!==nueva.uid);
+    delete SNAP.obras[obra.uid];
+    DATA.obras.push(nueva);
+    snapshot(nueva);
+    SERVER.obras_disponibles = (SERVER.obras_disponibles||[]).filter(o=>String(o.obra_id)!==String(nueva.obra_id));
+    closeModal();
+    state.year = yearOf(nueva);
+    openDetail(nueva.uid);
+    toast(`Listo: la preparación quedó en "${nueva.nombre}" (${nueva.cliente}).`);
+  };
 }
 
 function confirmEjecutar(obra){
@@ -1982,6 +2046,8 @@ function renderDetail(obraUid, opts){
   document.getElementById("deleteObraDetailBtn").onclick = ()=> confirmQuitar(obra, true);
   const ejBtn = document.getElementById("ejecutarBtn");
   if(ejBtn) ejBtn.onclick = ()=> confirmEjecutar(obra);
+  const vBtn = document.getElementById("vincularBtn");
+  if(vBtn) vBtn.onclick = ()=> openVincularModal(obra);
 
   renderResources(obra);
   renderRespFilterOptions(obra);
