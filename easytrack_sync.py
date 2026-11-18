@@ -142,6 +142,22 @@ def a_fecha(v):
     return None
 
 
+def a_fecha_ar(v):
+    """Fecha de Easytrack ('2026-11-11T03:00:00.000Z' = 00:00 de Argentina) -> día en Argentina."""
+    s = str(v or "").strip()
+    m = re.match(r"^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2})?)(?:\.\d+)?(Z|[+-]\d{2}:?\d{2})?$", s)
+    if m and m.group(3):
+        try:
+            tz = m.group(3).replace("Z", "+00:00")
+            if len(tz) == 5:
+                tz = tz[:3] + ":" + tz[3:]
+            dt = datetime.fromisoformat(f"{m.group(1)}T{m.group(2)}{tz}")
+            return dt.astimezone(TZ_AR).date().isoformat()
+        except ValueError:
+            pass
+    return a_fecha(v)
+
+
 # ------------------------------------------------------- leer archivo exportado
 def _norm_txt(t):
     t = unicodedata.normalize("NFKD", str(t or "")).encode("ascii", "ignore").decode("ascii").lower()
@@ -255,7 +271,7 @@ def descargar(cfg, desde, hasta):
     registros = []
     for x in datos:
         pat = norm_patente(x.get("domain_veh"))
-        fecha = a_fecha(x.get("date"))
+        fecha = a_fecha_ar(x.get("date_kmr") or x.get("date") or x.get("fecha"))
         if not pat or not fecha:
             continue
         registros.append({"patente": pat, "fecha": fecha, "horas": round(a_horas(x.get("time_er")), 4),
