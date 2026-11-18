@@ -2795,6 +2795,15 @@ def reporte_obra(obra_id):
     p = _secciones_reporte(user)
     items = db.execute("SELECT * FROM items WHERE obra_id = ? ORDER BY orden, creado_en, id", (obra_id,)).fetchall()
     gantt_html, curve_html, carga_plan_html, carga_real_html = build_obra_charts(db, items)
+    # Tareas a incluir: todas, o solo las finalizadas (marcadas como finalizadas
+    # o con 100% de avance; las canceladas no cuentan). La curva y la carga
+    # diaria siguen siendo de toda la obra.
+    tareas_filtro = "finalizadas" if request.args.get("tareas") == "finalizadas" else "todas"
+    items_total = len(items)
+    if tareas_filtro == "finalizadas":
+        items = [it for it in items
+                 if not _item_cancelada(it) and (it["estado"] == "finalizado" or (it["avance_pct"] or 0) >= 100)]
+        gantt_html = build_obra_charts(db, items)[0] if items else ""
     items_data = []
     for item in items:
         fotos = db.execute(
@@ -2832,7 +2841,8 @@ def reporte_obra(obra_id):
         gantt_html=gantt_html, curve_html=curve_html, carga_plan_html=carga_plan_html,
         carga_real_html=carga_real_html,
         generado_en=datetime.now().strftime("%d/%m/%Y %H:%M"),
-        certificados=certificados, p=p, inc_list=[k for k in SECCIONES_KEYS if k in p], **extra,
+        certificados=certificados, p=p, inc_list=[k for k in SECCIONES_KEYS if k in p],
+        tareas_filtro=tareas_filtro, items_total=items_total, **extra,
     )
 
 
@@ -2851,6 +2861,8 @@ def reporte_obra_pdf(obra_id):
     extra_args = {}
     if request.args.get("elegido"):
         extra_args = {"elegido": 1, "inc": request.args.getlist("inc")}
+    if request.args.get("tareas") == "finalizadas":
+        extra_args["tareas"] = "finalizadas"
     url = url_for("reporte_obra", obra_id=obra_id, pdf_token=token, _external=True, **extra_args)
     out_path = os.path.join(tempfile.gettempdir(), f"reporte_obra_{obra_id}.pdf")
     render_pdf(url, out_path)

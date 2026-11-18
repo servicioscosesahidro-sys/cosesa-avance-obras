@@ -10,6 +10,12 @@
 <div class="card" style="max-width:700px;">
   <form method="get" action="{{ url_for('reporte_obra', obra_id=obra['id']) }}" target="_blank">
     <input type="hidden" name="elegido" value="1">
+    <fieldset style="border:1px solid var(--cosesa-border);border-radius:10px;padding:12px 14px;margin:0 0 16px;">
+      <legend style="font-weight:700;padding:0 6px;">Tareas a incluir</legend>
+      <label style="display:flex;gap:8px;align-items:center;margin:4px 0;font-weight:500;"><input type="radio" name="tareas" value="todas" checked style="width:auto;"> Todas las tareas</label>
+      <label style="display:flex;gap:8px;align-items:center;margin:4px 0;font-weight:500;"><input type="radio" name="tareas" value="finalizadas" style="width:auto;"> Solo las tareas finalizadas</label>
+      <p class="subtitle" style="margin:6px 0 0;font-size:12.5px;">Finalizadas = marcadas como finalizadas o con 100% de avance (las canceladas no se incluyen). Con "solo finalizadas", el cronograma y el detalle por tarea muestran únicamente esas tareas; la curva de avance y la carga diaria siguen siendo de toda la obra.</p>
+    </fieldset>
     {% set chk_id = 'chk-reporte' %}{% set chk_name = 'inc' %}
     {% include "_permisos_checklist.html" %}
     <div style="display:flex;gap:10px;margin-top:16px;">

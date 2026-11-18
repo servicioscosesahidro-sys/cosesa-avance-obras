@@ -28,7 +28,7 @@
 <body style="background:white;">
 <div class="container">
   <div class="print-btn-bar no-print" style="text-align:right;">
-    <a class="btn" href="{{ url_for('reporte_obra_pdf', obra_id=obra['id'], elegido=1, inc=inc_list) }}">Descargar PDF</a>
+    <a class="btn" href="{{ url_for('reporte_obra_pdf', obra_id=obra['id'], elegido=1, inc=inc_list, tareas=(tareas_filtro if tareas_filtro == 'finalizadas' else None)) }}">Descargar PDF</a>
     <button class="btn btn-outline" onclick="window.print()">Imprimir</button>
   </div>
 
@@ -43,6 +43,11 @@
   <h1 style="margin-bottom:2px;">{{ obra['nombre'] }}</h1>
   <p class="subtitle">Cliente: {{ obra['cliente_nombre'] }}{% if obra['ubicacion'] %} · {{ obra['ubicacion'] }}{% endif %}</p>
   <p>{{ obra['descripcion'] or '' }}</p>
+  {% if tareas_filtro == 'finalizadas' %}
+  <p style="display:inline-block;background:#e3f4ec;color:#14683d;border-radius:8px;padding:6px 12px;font-weight:700;font-size:13px;">
+    Este reporte incluye solo las tareas finalizadas: {{ items_data|length }} de {{ items_total }}.
+  </p>
+  {% endif %}
 
   <div class="grid grid-3" style="margin:20px 0;">
     <div class="card stat">
