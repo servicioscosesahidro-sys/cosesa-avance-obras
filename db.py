@@ -153,9 +153,76 @@ def _migrate_schema(conn):
         """
     )
     changed = True
+    _migrate_preparacion(conn)
 
     if changed:
         conn.commit()
+
+
+# Catálogo inicial de equipos (el mismo listado de la app Tareas de Taller).
+# Es una sola lista para toda la plataforma: la usa Preparación de obra y la
+# podrán usar los demás módulos que se sumen.
+EQUIPOS_INICIALES = [
+    ("Camión chasis", ["1723", "DAI", "TEC", "ATEGO"]),
+    ("Compresor de aire", ["COMPRESOR"]),
+    ("Dispositivo de limpieza", ["FL1", "FL2", "JEC-TEC", "POLI", "PUSHER 3 M", "PUSHER 3 R", "TWIN"]),
+    ("Furgón compacto", ["B1", "B2", "B3", "K1", "K2"]),
+    ("Furgón pasajeros", ["SPRINTER"]),
+    ("Hidrolavadora en caliente", ["KAR1", "KAR2"]),
+    ("Motobomba", ["FIAT", "GM", "H1", "H2", "H3", "H4", "H5", "H6", "H7", "H8", "H9", "SCA"]),
+    ("Sacamazo 25T / Hatz", ["SACAM1"]),
+    ("Sacamazo 45T / Hatz", ["SACAM2"]),
+    ("Trailer 10T", ["COM", "MAN1"]),
+    ("Trailer 5T", ["MANQUE"]),
+]
+
+
+def equipo_id_de(nombre):
+    import re
+    return "eq_" + re.sub(r"[^a-z0-9]+", "_", nombre.lower()).strip("_")
+
+
+def _migrate_preparacion(conn):
+    """Tablas del módulo Preparación de obra. Se guardan en la misma base de
+    datos que el resto de la app, así entran solas en los backups."""
+    if not _column_exists(conn, "obras", "codigo"):
+        # Código / número interno de la obra (ej. 413, B001).
+        conn.execute("ALTER TABLE obras ADD COLUMN codigo TEXT")
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS preparacion (
+            obra_id INTEGER PRIMARY KEY REFERENCES obras(id) ON DELETE CASCADE,
+            responsable TEXT,
+            fases TEXT NOT NULL DEFAULT '[]',
+            recursos TEXT NOT NULL DEFAULT '{}',
+            version INTEGER NOT NULL DEFAULT 1,
+            actualizado_en TEXT DEFAULT (datetime('now')),
+            actualizado_por TEXT,
+            creado_en TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE IF NOT EXISTS catalogo_equipos (
+            id TEXT PRIMARY KEY,
+            nombre TEXT NOT NULL,
+            tipo TEXT,
+            orden INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS obra_equipos (
+            obra_id INTEGER NOT NULL REFERENCES obras(id) ON DELETE CASCADE,
+            equipo_id TEXT NOT NULL REFERENCES catalogo_equipos(id) ON DELETE CASCADE,
+            PRIMARY KEY (obra_id, equipo_id)
+        );
+        """
+    )
+    if conn.execute("SELECT COUNT(*) FROM catalogo_equipos").fetchone()[0] == 0:
+        orden = 0
+        for tipo, nombres in EQUIPOS_INICIALES:
+            for nombre in nombres:
+                orden += 1
+                conn.execute(
+                    "INSERT OR IGNORE INTO catalogo_equipos (id, nombre, tipo, orden) VALUES (?, ?, ?, ?)",
+                    (equipo_id_de(nombre), nombre, tipo, orden),
+                )
+    conn.commit()
 
 
 def init_db():

@@ -33,6 +33,10 @@
       <img src="{{ url_for('static', filename='img/logo.png') }}" alt="COSESA">
     </a>
     <div class="nav-links">
+      {% if current_user['rol'] in ('cosesa','cosesa_admin') %}
+      <a href="{{ url_for('cosesa_dashboard') }}">Avance de obras</a>
+      {% if puede('preparacion') %}<a href="{{ url_for('preparacion_panel') }}">Preparación de obras</a>{% endif %}
+      {% endif %}
       {% if is_admin(current_user) %}
       <a href="{{ url_for('cosesa_usuarios') }}">Usuarios</a>
       {% endif %}

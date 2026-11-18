@@ -527,6 +527,7 @@ PERMISOS = [
     ("aprendizajes", "Cargar, editar y eliminar aprendizajes", "Registros de obra", True),
     ("mantenimiento", "Cargar, editar y eliminar mantenimientos", "Registros de obra", True),
     ("reportes", "Generar reportes y PDF (cliente, obra, demoras, informe interno, mantenimiento, checklist)", "Reportes", True),
+    ("preparacion", "Ver y editar la preparación de obra (checklist, equipos y personal)", "Preparación de obra", True),
 ]
 PERMISOS_KEYS = [k for k, _l, _g, _d in PERMISOS]
 PERMISOS_DEFAULT = {k for k, _l, _g, d in PERMISOS if d}
@@ -568,6 +569,11 @@ ENDPOINT_PERMISO = {
     "reporte_mantenimiento": "reportes", "reporte_mantenimiento_pdf": "reportes",
     "reporte_aprendizajes": "reportes", "reporte_aprendizajes_pdf": "reportes",
     "checklist_item_html": "reportes", "checklist_item_pdf": "reportes",
+    # Preparación de obra (preparacion.py)
+    "preparacion_panel": "preparacion", "preparacion_api_estado": "preparacion",
+    "preparacion_guardar_obra": "preparacion", "preparacion_crear_obra": "preparacion",
+    "preparacion_quitar_obra": "preparacion", "preparacion_guardar_equipos": "preparacion",
+    "preparacion_pasar_a_ejecucion": "editar_obra",
 }
 
 # Cómo encontrar la obra a partir del parámetro de la URL.
@@ -3824,6 +3830,15 @@ app.jinja_env.globals["partir_en_filas"] = partir_en_filas
 # si no hay nada que restaurar se crea una base de datos vacía. init_db() ya
 # es segura para llamar siempre: si la base ya existe no hace nada, y si
 # varios workers arrancan a la vez, un lock de archivo evita que choquen.
+# Módulo Preparación de obra (ex Panel de Obras COSESA): mismas obras y clientes.
+import types as _types
+import preparacion as _preparacion
+_preparacion.init_app(app, _types.SimpleNamespace(
+    get_db=get_db, get_current_user=get_current_user, cosesa_required=cosesa_required,
+    admin_required=admin_required, puede=puede, obras_visibles_ids=obras_visibles_ids,
+    ve_todas_las_obras=ve_todas_las_obras, is_admin=is_admin,
+))
+
 restore_latest()
 init_db()
 iniciar_backup_periodico()

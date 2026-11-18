@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Importar Panel de Obras · COSESA{% endblock %}
+{% block content %}
+<div class="breadcrumb">
+  <a href="{{ url_for('cosesa_dashboard') }}">Panel COSESA</a> /
+  <a href="{{ url_for('preparacion_panel') }}">Preparación de obras</a> /
+  Importar
+</div>
+<h1>Importar obras del Panel de Obras anterior</h1>
+<p class="subtitle">Se pasan las 12 etapas con sus tareas, los equipos y el personal de cada obra. Las contraseñas del panel anterior no se importan: cada uno entra con su usuario de esta app.</p>
+
+{% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
+
+{% if listo %}
+<div class="card">
+  <h2>Listo</h2>
+  <p class="subtitle">Las obras ya están en Preparación de obras.</p>
+  <a class="btn" href="{{ url_for('preparacion_panel') }}">Ir a Preparación de obras</a>
+</div>
+{% elif not propuestas %}
+<div class="card">
+  <h2>1. Elegí el archivo</h2>
+  <p class="subtitle">Es el archivo <b>panel_obras_datos.json</b> que te pasó Claude con los datos del panel.</p>
+  <form method="post" enctype="multipart/form-data">
+    <input type="file" name="archivo" accept=".json,application/json" required>
+    <button class="btn" type="submit">Revisar obras</button>
+  </form>
+</div>
+{% else %}
+<form method="post" class="card">
+  <h2>2. Revisá con qué obra se vincula cada una</h2>
+  <p class="subtitle">
+    Si la obra ya existe en Avance de obras, elegila para no duplicarla: la preparación se suma a esa obra.
+    Si no existe, dejá <b>Crear obra nueva</b> (se crea como <i>planificada</i>).
+    Las que ya proponemos vincular coinciden en número de obra o en nombre y cliente; revisalas igual.
+  </p>
+  <input type="hidden" name="paso" value="confirmar">
+  <textarea name="datos" hidden>{{ datos_txt }}</textarea>
+  <div style="overflow-x:auto;">
+  <table class="table">
+    <thead>
+      <tr><th>Obra del panel</th><th>Cliente</th><th>N°</th><th>Fecha</th><th>Avance</th><th>Equipos</th><th>Destino</th></tr>
+    </thead>
+    <tbody>
+      {% for p in propuestas %}
+      <tr>
+        <td><b>{{ p.nombre }}</b></td>
+        <td>{{ p.cliente }}</td>
+        <td>{{ p.codigo or '—' }}</td>
+        <td>{{ p.fecha or '—' }}</td>
+        <td>{{ p.avance }}%</td>
+        <td>{{ p.n_equipos }}</td>
+        <td>
+          <select name="destino_{{ loop.index0 }}" style="min-width:260px;">
+            <option value="nueva" {% if not p.sugerida %}selected{% endif %}>Crear obra nueva (planificada)</option>
+            <option value="saltear">No importar</option>
+            <optgroup label="Vincular con obra existente">
+              {% for o in obras_existentes %}
+              <option value="{{ o['id'] }}" {% if p.sugerida == o['id'] %}selected{% endif %}>
+                {{ o['cliente_nombre'] }} — {{ o['nombre'] }}{% if o['codigo'] %} (N° {{ o['codigo'] }}){% endif %} · {{ o['estado'].replace('_',' ') }}{% if o['tiene_prep'] %} · ya tiene preparación{% endif %}
+              </option>
+              {% endfor %}
+            </optgroup>
+          </select>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="subtitle">Si elegís una obra que ya tiene preparación, se reemplaza por la del archivo.</p>
+  <div style="display:flex;gap:8px;justify-content:flex-end;">
+    <a class="btn btn-outline" href="{{ url_for('preparacion_importar') }}">Cancelar</a>
+    <button class="btn" type="submit" onclick="return confirm('¿Importar las obras con los destinos elegidos?');">Importar</button>
+  </div>
+</form>
+{% endif %}
+{% endblock %}
