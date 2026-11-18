@@ -594,7 +594,9 @@ function normalizeState(st){
   if(typeof st.ordenSeq !== "number") st.ordenSeq = 0;
   delete st.users;
   st.machines.forEach(function(m){ ensureMeters(m); (m.tasks||[]).forEach(function(t){ if(!t.unidad) t.unidad = m.meterType; if(!Array.isArray(t.parts)) t.parts = []; }); });
-  st.__sembrado = sembrarUnidadesEasytrack(st);
+  var semU = sembrarUnidadesEasytrack(st);
+  var semP = sembrarPlanesTipo(st);
+  st.__sembrado = semU || semP;
   return st;
 }
 function apiJSON(method, url, body){
@@ -1034,7 +1036,7 @@ function viewMachineDetail(id){
   '</div>';
 
   html += '<div class="section-head"><h2>Plan de mantenimiento</h2><div style="display:flex; gap:8px;">'+
-    (isAdmin() ? '<button class="btn btn-secondary btn-sm" data-action="task-new" data-id="'+m.id+'"><svg><use href="#i-plus"/></svg>Agregar tarea</button>' : '')+
+    (isAdmin() ? '<button class="btn btn-secondary btn-sm" data-action="task-new" data-id="'+m.id+'"><svg><use href="#i-plus"/></svg>Agregar plan</button>' : '')+
     '<button class="btn btn-primary btn-sm" data-nav="generar" data-id="'+m.id+'"><svg><use href="#i-wrench"/></svg>Generar mantenimiento</button>'+
   '</div></div>';
   html += '<div style="display:flex; flex-direction:column; gap:12px; margin-bottom:24px;">';
@@ -1093,7 +1095,7 @@ function viewPlanes(){
         return '<button class="tab-btn'+(filter===k?" active":"")+'" data-action="plan-filter" data-key="'+k+'">'+labels[k]+' ('+(k==="todos"?rows.length:rows.filter(function(r){return r.pr.status===k;}).length)+')</button>';
       }).join("")+
     '</div>'+
-    (isAdmin() ? '<button class="btn btn-secondary btn-sm" data-action="plan-task-new"><svg><use href="#i-plus"/></svg>Nueva tarea de plan</button>' : '')+
+    (isAdmin() ? '<button class="btn btn-secondary btn-sm" data-action="plan-task-new"><svg><use href="#i-plus"/></svg>Agregar plan a una unidad</button>' : '')+
   '</div>';
 
   html += '<div class="table-wrap"><table><thead><tr><th>Máquina</th><th>Tarea</th><th>Intervalo</th><th>Último service</th><th>Avance</th><th>Estado</th><th></th></tr></thead><tbody>';
@@ -1116,6 +1118,7 @@ function viewPlanes(){
     '</tr>';
   });
   html += '</tbody></table></div>';
+  html += htmlPlanesTipo();
 
   document.getElementById("view").innerHTML = html;
 }
@@ -1123,8 +1126,8 @@ function openPlanMachinePicker(){
   if(!isAdmin()){ toast("Solo un administrador puede editar el plan de mantenimiento", "err"); return; }
   if(state.machines.length===0){ toast("Primero creá una máquina o vehículo", "err"); return; }
   showModal(
-    '<div class="modal-body"><h3>Nueva tarea de plan</h3>'+
-    '<p>Elegí la máquina o vehículo al que se le va a agregar la tarea.</p>'+
+    '<div class="modal-body"><h3>Agregar plan a una unidad</h3>'+
+    '<p>Elegí la máquina o vehículo al que se le va a agregar el plan.</p>'+
     '<div class="field"><label>Máquina o vehículo</label><select id="ppMachine">'+
       state.machines.slice().sort(function(a,b){return a.nombre.localeCompare(b.nombre);}).map(function(m){ return '<option value="'+m.id+'">'+escapeHtml(m.nombre)+' — '+TYPE_LABEL[m.tipo]+'</option>'; }).join("")+
     '</select></div></div>'+
@@ -1136,137 +1139,6 @@ function openPlanMachinePicker(){
     closeModal();
     openTaskModal(mid, null);
   };
-}
-
-function viewGenerar(preId, preTask){
-  setHeader("Generar mantenimiento");
-  var machine = preId ? getMachine(preId) : null;
-  var html = '<div class="card card-pad" style="max-width:720px;">';
-
-  html += '<div class="field"><label>Máquina o vehículo</label><select id="genMachine">'+
-    '<option value="">Seleccioná una unidad…</option>'+
-    state.machines.map(function(m){ return '<option value="'+m.id+'" '+(machine&&machine.id===m.id?"selected":"")+'>'+escapeHtml(m.nombre)+' — '+TYPE_LABEL[m.tipo]+'</option>'; }).join("")+
-  '</select></div>';
-
-  html += '<div id="genTaskWrap"></div>';
-  html += '</div>';
-
-  document.getElementById("view").innerHTML = html;
-
-  function renderTaskArea(){
-    var mid = document.getElementById("genMachine").value;
-    var m = getMachine(mid);
-    var wrap = document.getElementById("genTaskWrap");
-    if(!m){ wrap.innerHTML = ""; return; }
-    var tid = preTask && m.id===preId ? preTask : (m.tasks[0] && m.tasks[0].id);
-    wrap.innerHTML =
-      '<div class="field"><label>Tarea del plan</label><select id="genTask">'+
-        m.tasks.map(function(t){ return '<option value="'+t.id+'" '+(t.id===tid?"selected":"")+'>'+escapeHtml(t.nombre)+' (cada '+fmtInt(t.intervalo)+' '+UNIT_LABEL[tUnit(t,m)]+')</option>'; }).join("")+
-      '</select></div>'+
-      '<div class="field-row">'+
-        '<div class="field"><label id="genMeterLbl">Medidor actual</label><input type="number" id="genMeter" value="" min="0" step="any" /></div>'+
-        '<div class="field"><label>Fecha</label><input type="date" id="genDate" value="'+todayISO()+'" /></div>'+
-      '</div>'+
-      '<div class="field-row">'+
-        '<div class="field"><label>Técnico responsable</label><input type="text" id="genTech" placeholder="Nombre y apellido" /></div>'+
-        '<div class="field"><label>Notas (opcional)</label><input type="text" id="genNotes" placeholder="Observaciones del service" /></div>'+
-      '</div>'+
-      '<div id="genPartsArea"></div>'+
-      '<div id="genFooter"></div>';
-    function syncMeterField(){
-      var tt = getTask(m, document.getElementById("genTask").value);
-      var u = tt ? tUnit(tt, m) : m.meterType;
-      document.getElementById("genMeterLbl").textContent = "Medidor actual ("+UNIT_LABEL[u]+")";
-      document.getElementById("genMeter").value = hasMeter(m,u) ? meterOf(m,u) : "";
-    }
-    document.getElementById("genTask").onchange = function(){ syncMeterField(); renderParts(); };
-    document.getElementById("genMeter").oninput = renderParts;
-    syncMeterField();
-    renderParts();
-  }
-
-  function renderParts(){
-    var m = getMachine(document.getElementById("genMachine").value);
-    if(!m) return;
-    var t = getTask(m, document.getElementById("genTask").value);
-    var area = document.getElementById("genPartsArea");
-    if(!t){ area.innerHTML=""; return; }
-    var rowsHtml = t.parts.map(function(tp){
-      var p = getPart(tp.partId);
-      if(!p) return "";
-      return '<div class="part-row" data-cq-row data-part="'+p.id+'">'+
-        '<div class="pi"><div class="nm">'+escapeHtml(p.nombre)+'</div><div class="cd">'+escapeHtml(p.codigo)+' · '+escapeHtml(p.marca)+' · disponible: '+p.stock+'</div></div>'+
-        '<div class="qty" style="display:flex; align-items:center; gap:5px;">-<input type="number" class="cq-input" data-cq-part="'+p.id+'" data-cq-stock="'+p.stock+'" value="'+tp.qty+'" min="0" style="width:60px; text-align:right; padding:4px 6px; font-family:var(--font-mono); font-weight:700; border:1px solid var(--border); border-radius:6px;" /></div>'+
-      '</div>';
-    }).join("");
-    var pr = taskProgress(t, m);
-    var meta = statusMeta(pr.status);
-    area.innerHTML =
-      '<div class="field"><label>Repuestos que se van a descontar del stock</label><div class="help">Podés ajustar la cantidad real que se va a usar en este service.</div><div class="parts-check">'+rowsHtml+'</div></div>'+
-      '<div id="genShortBanner"></div>'+
-      '<div class="banner '+(pr.status==="crit"?"banner-crit":pr.status==="warn"?"banner-warn":"banner-info")+'"><svg><use href="#'+meta.icon+'"/></svg><div>Estado actual de esta tarea: <b>'+meta.label+'</b>'+(pr.status==="nodata" ? ' · todavía no hay un service registrado.' : ' · '+(pr.remaining>=0? "faltan "+fmtInt(pr.remaining) : "vencido hace "+fmtInt(-pr.remaining))+' '+UNIT_LABEL[m.meterType]+'.')+'</div></div>';
-
-    function refreshShortBanner(){
-      var shortList = [];
-      document.querySelectorAll("[data-cq-row]").forEach(function(row){
-        var input = row.querySelector("[data-cq-part]");
-        var qty = Math.max(0, Math.round(Number(input.value)||0));
-        var stock = Number(input.dataset.cqStock);
-        var short = qty > stock;
-        row.classList.toggle("short", short);
-        if(short){ var p = getPart(row.dataset.part); if(p) shortList.push(p.nombre); }
-      });
-      document.getElementById("genShortBanner").innerHTML = shortList.length ?
-        '<div class="banner banner-crit"><svg><use href="#i-alert-circle"/></svg><div><b>Stock insuficiente</b> para: '+escapeHtml(shortList.join(", "))+'. Podés generar igual: el stock quedará en 0 para esos ítems y se marcará el mantenimiento como "con faltante".</div></div>' : "";
-    }
-    refreshShortBanner();
-    document.querySelectorAll("[data-cq-part]").forEach(function(inp){ inp.addEventListener("input", refreshShortBanner); });
-
-    document.getElementById("genFooter").innerHTML =
-      '<button class="btn btn-primary btn-block" id="genSubmit"><svg><use href="#i-check"/></svg>Generar mantenimiento y actualizar stock</button>';
-    document.getElementById("genSubmit").onclick = function(){ submitMaintenance(m, t); };
-  }
-
-  function submitMaintenance(m, t){
-    var unidadT = tUnit(t, m);
-    var meterRaw = document.getElementById("genMeter").value;
-    if(meterRaw===""){ toast("Cargá la lectura actual del medidor ("+UNIT_LABEL[unidadT]+")", "err"); return; }
-    var meter = Number(meterRaw);
-    var date = document.getElementById("genDate").value || todayISO();
-    var tech = document.getElementById("genTech").value.trim();
-    var notes = document.getElementById("genNotes").value.trim();
-
-    var faltante = false;
-    var partesUsadas = t.parts.map(function(tp){
-      var p = getPart(tp.partId);
-      var qtyInput = document.querySelector('[data-cq-part="'+tp.partId+'"]');
-      var qty = qtyInput ? Math.max(0, Math.round(Number(qtyInput.value)||0)) : tp.qty;
-      var applied = Math.min(qty, p.stock);
-      if(applied < qty) faltante = true;
-      if(applied>0) applyMovement(tp.partId, -applied, "consumo", "Mantenimiento "+m.nombre+" · "+t.nombre);
-      return { partId: tp.partId, qty: qty, aplicado: applied };
-    }).filter(function(pu){ return pu.qty>0 || pu.aplicado>0; });
-
-    var u = currentUser();
-    var rec = {
-      id: uid("MT"), numero: proximoNumeroOrden(), machineId: m.id, taskId: t.id, taskNombre: t.nombre,
-      fecha: date, medidor: meter, medidorUnidad: unidadT, tecnico: tech || "Sin asignar", notas: notes,
-      partesUsadas: partesUsadas, estado: "completado", faltante: faltante,
-      cargadoPor: u ? u.nombre : "—"
-    };
-    state.maintenances.unshift(rec);
-
-    t.lastMeter = meter;
-    t.lastDate = date;
-    setMeter(m, unidadT, meter, true);
-
-    saveState();
-    toast(faltante ? "Mantenimiento generado con faltante de stock" : "Mantenimiento generado y stock actualizado", faltante?"err":"ok");
-    navigate("flota", { id:m.id });
-  }
-
-  document.getElementById("genMachine").onchange = renderTaskArea;
-  if(machine) renderTaskArea();
 }
 
 function viewHistorial(){
@@ -2103,6 +1975,349 @@ function sincronizarEasytrackAhora(btn){
   });
 }
 
+/* ================= PLANES PREDETERMINADOS ================= */
+/* state.planesTipo: catálogo de planes (nombre, frecuencia y si vence por
+   horas o km) que se pueden asignar a cualquier unidad. Los repuestos son
+   propios de cada unidad, por eso el catálogo no los lleva. */
+function sembrarPlanesTipo(st){
+  if(Array.isArray(st.planesTipo) && st.planesTiposV1) return false;
+  var lista = Array.isArray(st.planesTipo) ? st.planesTipo : [];
+  function agregar(nombre, intervalo, unidad){
+    var clave = (nombre+"|"+intervalo+"|"+unidad).toLowerCase();
+    if(lista.some(function(p){ return (p.nombre+"|"+p.intervalo+"|"+p.unidad).toLowerCase()===clave; })) return;
+    lista.push({ id: uid("PL"), nombre: nombre, intervalo: intervalo, unidad: unidad });
+  }
+  agregar("Service Motor", 250, "horas");
+  agregar("Service Motor", 10000, "km");
+  agregar("Service general", 10000, "km");
+  (st.machines||[]).forEach(function(m){ (m.tasks||[]).forEach(function(t){ agregar(t.nombre, t.intervalo, t.unidad || m.meterType); }); });
+  st.planesTipo = lista;
+  st.planesTiposV1 = true;
+  return true;
+}
+function planesTipoOrdenados(){
+  return (state.planesTipo||[]).slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre) || (a.unidad<b.unidad?-1:1) || a.intervalo-b.intervalo; });
+}
+function getPlanTipo(id){ return (state.planesTipo||[]).find(function(p){ return p.id===id; }); }
+function planTipoLabel(p){ return p.nombre+" (cada "+fmtInt(p.intervalo)+" "+UNIT_LABEL[p.unidad]+")"; }
+function existePlanTipo(nombre, intervalo, unidad){
+  var c = (nombre+"|"+intervalo+"|"+unidad).toLowerCase();
+  return (state.planesTipo||[]).some(function(p){ return (p.nombre+"|"+p.intervalo+"|"+p.unidad).toLowerCase()===c; });
+}
+
+/* Opciones del desplegable de planes para una unidad. */
+function opcionesPlan(m, seleccionado, permitirCrear){
+  var html = '';
+  if(m.tasks.length){
+    html += '<optgroup label="Planes de esta unidad">'+m.tasks.map(function(t){
+      return '<option value="'+t.id+'" '+(t.id===seleccionado?"selected":"")+'>'+escapeHtml(t.nombre)+' (cada '+fmtInt(t.intervalo)+' '+UNIT_LABEL[tUnit(t,m)]+')</option>';
+    }).join("")+'</optgroup>';
+  }
+  if(permitirCrear){
+    var ya = {};
+    m.tasks.forEach(function(t){ ya[(t.nombre+"|"+t.intervalo+"|"+tUnit(t,m)).toLowerCase()] = 1; });
+    var tipos = planesTipoOrdenados().filter(function(p){ return !ya[(p.nombre+"|"+p.intervalo+"|"+p.unidad).toLowerCase()]; });
+    if(tipos.length){
+      html += '<optgroup label="Agregar un plan predeterminado">'+tipos.map(function(p){
+        return '<option value="tpl:'+p.id+'" '+("tpl:"+p.id===seleccionado?"selected":"")+'>'+escapeHtml(planTipoLabel(p))+'</option>';
+      }).join("")+'</optgroup>';
+    }
+    html += '<option value="new" '+(seleccionado==="new"?"selected":"")+'>➕ Crear plan nuevo…</option>';
+  }
+  return html;
+}
+
+/* ---------- Editor de repuestos (filas: repuesto + cantidad) ---------- */
+function editorRepuestos(contenedorId, filas, onChange){
+  var cont = document.getElementById(contenedorId);
+  var partsSorted = state.parts.slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
+  cont.innerHTML = '<div class="parts-check" data-rep-list></div>'+
+    '<button type="button" class="btn btn-secondary btn-sm" data-rep-add style="margin-top:8px;"><svg><use href="#i-plus"/></svg>Agregar repuesto</button>';
+  var list = cont.querySelector("[data-rep-list]");
+  function fila(partId, qty){
+    var div = document.createElement("div");
+    div.className = "part-row"; div.setAttribute("data-rep-row",""); div.style.alignItems = "center";
+    div.innerHTML = '<div style="flex:1; min-width:0;"><select class="rep-part" style="width:100%;">'+
+        partsSorted.map(function(p){ return '<option value="'+p.id+'" '+(p.id===partId?"selected":"")+'>'+escapeHtml(p.nombre)+' — '+escapeHtml(p.codigo)+' (stock: '+p.stock+')</option>'; }).join("")+
+      '</select></div>'+
+      '<input type="number" class="rep-qty" value="'+(qty||1)+'" min="0" style="width:74px;" />'+
+      '<button type="button" class="btn btn-ghost btn-sm" data-rep-del title="Quitar"><svg><use href="#i-x"/></svg></button>';
+    div.querySelector("[data-rep-del]").onclick = function(){ div.remove(); if(onChange) onChange(); };
+    div.querySelector(".rep-part").onchange = function(){ if(onChange) onChange(); };
+    div.querySelector(".rep-qty").oninput = function(){ if(onChange) onChange(); };
+    list.appendChild(div);
+  }
+  (filas||[]).forEach(function(f){ fila(f.partId, f.qty); });
+  cont.querySelector("[data-rep-add]").onclick = function(){
+    if(!partsSorted.length){ toast("No hay repuestos en el catálogo", "err"); return; }
+    fila(partsSorted[0].id, 1); if(onChange) onChange();
+  };
+  return {
+    valores: function(){
+      var acc = {}, orden = [];
+      list.querySelectorAll("[data-rep-row]").forEach(function(row){
+        var pid = row.querySelector(".rep-part").value;
+        var q = Math.max(0, Math.round(Number(row.querySelector(".rep-qty").value)||0));
+        if(!pid || q<=0) return;
+        if(!(pid in acc)) orden.push(pid);
+        acc[pid] = (acc[pid]||0) + q;
+      });
+      return orden.map(function(pid){ return { partId: pid, qty: acc[pid] }; });
+    },
+    marcarFaltantes: function(){
+      var cortos = [];
+      list.querySelectorAll("[data-rep-row]").forEach(function(row){
+        var p = getPart(row.querySelector(".rep-part").value);
+        var q = Math.max(0, Math.round(Number(row.querySelector(".rep-qty").value)||0));
+        var corto = !!p && q > p.stock;
+        row.classList.toggle("short", corto);
+        if(corto) cortos.push(p.nombre);
+      });
+      return cortos;
+    }
+  };
+}
+
+/* ---------- Generar mantenimiento ---------- */
+function viewGenerar(preId, preTask){
+  setHeader("Generar mantenimiento");
+  var machine = preId ? getMachine(preId) : null;
+  var html = '<div class="card card-pad" style="max-width:760px;">';
+  html += '<div class="field"><label>Máquina o vehículo</label><select id="genMachine">'+
+    '<option value="">Seleccioná una unidad…</option>'+
+    state.machines.slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre); }).map(function(m){ return '<option value="'+m.id+'" '+(machine&&machine.id===m.id?"selected":"")+'>'+escapeHtml(m.nombre)+' — '+TYPE_LABEL[m.tipo]+'</option>'; }).join("")+
+  '</select></div>';
+  html += '<div id="genTaskWrap"></div>';
+  html += '</div>';
+  document.getElementById("view").innerHTML = html;
+  var rep = null;
+
+  function renderTaskArea(){
+    var m = getMachine(document.getElementById("genMachine").value);
+    var wrap = document.getElementById("genTaskWrap");
+    if(!m){ wrap.innerHTML = ""; return; }
+    var admin = isAdmin();
+    var sel = (preTask && m.id===preId) ? preTask : (m.tasks[0] ? m.tasks[0].id : (admin ? (planesTipoOrdenados()[0] ? "tpl:"+planesTipoOrdenados()[0].id : "new") : ""));
+    if(!m.tasks.length && !admin){
+      wrap.innerHTML = '<div class="banner banner-warn"><svg><use href="#i-alert"/></svg><div>Esta unidad todavía no tiene planes de mantenimiento. Pedile a quien administra Mantenimiento que le asigne uno.</div></div>';
+      return;
+    }
+    wrap.innerHTML =
+      '<div class="field"><label>Plan de mantenimiento</label><select id="genTask">'+opcionesPlan(m, sel, admin)+'</select>'+
+        (admin ? '<div class="help">Elegí un plan de la unidad, agregale uno predeterminado o creá uno nuevo.</div>' : '')+'</div>'+
+      '<div id="genPlanForm"></div>'+
+      '<div class="field-row">'+
+        '<div class="field"><label id="genMeterLbl">Medidor actual</label><input type="number" id="genMeter" value="" min="0" step="any" /></div>'+
+        '<div class="field"><label>Fecha</label><input type="date" id="genDate" value="'+todayISO()+'" /></div>'+
+      '</div>'+
+      '<div class="field-row">'+
+        '<div class="field"><label>Técnico responsable</label><input type="text" id="genTech" placeholder="Nombre y apellido" /></div>'+
+        '<div class="field"><label>Notas (opcional)</label><input type="text" id="genNotes" placeholder="Observaciones del service" /></div>'+
+      '</div>'+
+      '<div class="field"><label>Repuestos que se van a descontar del stock</label><div class="help" id="genRepHelp"></div><div id="genReps" style="margin-top:8px;"></div></div>'+
+      '<div id="genShortBanner"></div>'+
+      '<div id="genEstado"></div>'+
+      '<button class="btn btn-primary btn-block" id="genSubmit"><svg><use href="#i-check"/></svg>Generar mantenimiento y actualizar stock</button>';
+    document.getElementById("genTask").onchange = function(){ cambiarPlan(m, true); };
+    document.getElementById("genMeter").oninput = function(){ renderEstado(m); };
+    document.getElementById("genSubmit").onclick = function(){ submitMaintenance(m); };
+    cambiarPlan(m, true);
+  }
+
+  function planElegido(m){
+    var v = document.getElementById("genTask").value;
+    if(v==="new") return { tipo:"nuevo" };
+    if(v.indexOf("tpl:")===0) return { tipo:"tpl", plan:getPlanTipo(v.slice(4)) };
+    return { tipo:"tarea", t:getTask(m, v) };
+  }
+  function unidadElegida(m){
+    var pe = planElegido(m);
+    if(pe.tipo==="tarea") return pe.t ? tUnit(pe.t, m) : m.meterType;
+    var s = document.getElementById("gpUnidad");
+    return s ? s.value : (pe.plan ? pe.plan.unidad : m.meterType);
+  }
+  function cambiarPlan(m, recargarRepuestos){
+    var pe = planElegido(m);
+    var form = document.getElementById("genPlanForm");
+    if(pe.tipo==="tarea"){
+      form.innerHTML = "";
+    } else {
+      var p = pe.plan || { nombre:"", intervalo: m.meterType==="horas"?250:10000, unidad: m.meterType };
+      form.innerHTML = '<div class="card card-pad" style="background:var(--surface-2); margin-bottom:16px;">'+
+        '<div class="cell-strong" style="margin-bottom:10px;">'+(pe.tipo==="nuevo" ? "Plan nuevo" : "Se agrega a la unidad el plan predeterminado")+'</div>'+
+        '<div class="field"><label>Nombre del plan</label><input type="text" id="gpNombre" value="'+escapeHtml(p.nombre)+'" placeholder="Ej: Cambio de aceite y filtros" '+(pe.tipo==="tpl"?"readonly":"")+' /></div>'+
+        '<div class="field-row">'+
+          '<div class="field"><label>Vence por</label><select id="gpUnidad"><option value="horas" '+(p.unidad==="horas"?"selected":"")+'>Horas de motor</option><option value="km" '+(p.unidad==="km"?"selected":"")+'>Kilómetros</option></select></div>'+
+          '<div class="field"><label>Frecuencia (cada cuántas)</label><input type="number" id="gpIntervalo" min="1" value="'+p.intervalo+'" /></div>'+
+        '</div>'+
+        (pe.tipo==="nuevo" ? '<label style="display:flex; gap:8px; align-items:center; font-weight:600; color:var(--ink); margin:0;"><input type="checkbox" id="gpGuardar" checked style="width:16px; height:16px;"> Guardarlo también como plan predeterminado (para usarlo en otras unidades)</label>' : '')+
+        '<div class="help" style="margin-top:8px;">El plan empieza a contar desde este service: el próximo vence al medidor de hoy + la frecuencia. Los repuestos que cargues abajo quedan como los de este plan para esta unidad.</div>'+
+      '</div>';
+      document.getElementById("gpUnidad").onchange = function(){ syncMeter(m); renderEstado(m); };
+    }
+    syncMeter(m);
+    if(recargarRepuestos){
+      var filas = pe.tipo==="tarea" && pe.t ? pe.t.parts.map(function(tp){ return { partId: tp.partId, qty: tp.qty }; }) : [];
+      rep = editorRepuestos("genReps", filas, refreshShort);
+      document.getElementById("genRepHelp").textContent = pe.tipo==="tarea"
+        ? "Vienen los repuestos del plan. Podés ajustar cantidades, quitar o agregar solo para este service."
+        : "Agregá los repuestos que lleva este plan (opcional).";
+    }
+    refreshShort();
+    renderEstado(m);
+  }
+  function syncMeter(m){
+    var u = unidadElegida(m);
+    document.getElementById("genMeterLbl").textContent = "Medidor actual ("+UNIT_LABEL[u]+")";
+    document.getElementById("genMeter").value = hasMeter(m,u) ? meterOf(m,u) : "";
+  }
+  function refreshShort(){
+    if(!rep) return;
+    var cortos = rep.marcarFaltantes();
+    document.getElementById("genShortBanner").innerHTML = cortos.length ?
+      '<div class="banner banner-crit"><svg><use href="#i-alert-circle"/></svg><div><b>Stock insuficiente</b> para: '+escapeHtml(cortos.join(", "))+'. Podés generar igual: el stock quedará en 0 para esos ítems y se marcará el mantenimiento como "con faltante".</div></div>' : "";
+  }
+  function renderEstado(m){
+    var pe = planElegido(m);
+    var box = document.getElementById("genEstado");
+    if(pe.tipo!=="tarea" || !pe.t){ box.innerHTML = ""; return; }
+    var pr = taskProgress(pe.t, m), meta = statusMeta(pr.status);
+    box.innerHTML = '<div class="banner '+(pr.status==="crit"?"banner-crit":pr.status==="warn"?"banner-warn":"banner-info")+'"><svg><use href="#'+meta.icon+'"/></svg><div>Estado actual de este plan: <b>'+meta.label+'</b>'+(pr.status==="nodata" ? ' · todavía no hay un service registrado.' : ' · '+(pr.remaining>=0? "faltan "+fmtInt(pr.remaining) : "vencido hace "+fmtInt(-pr.remaining))+' '+UNIT_LABEL[tUnit(pe.t,m)]+'.')+'</div></div>';
+  }
+
+  function submitMaintenance(m){
+    var pe = planElegido(m);
+    var t = pe.t;
+    var meterRaw = document.getElementById("genMeter").value;
+    var unidadT = unidadElegida(m);
+    if(meterRaw===""){ toast("Cargá la lectura actual del medidor ("+UNIT_LABEL[unidadT]+")", "err"); return; }
+    var meter = Number(meterRaw);
+    var partes = rep ? rep.valores() : [];
+    if(pe.tipo!=="tarea"){
+      var nombre = document.getElementById("gpNombre").value.trim();
+      var intervalo = Math.round(Number(document.getElementById("gpIntervalo").value)||0);
+      if(!nombre){ toast("Poné un nombre para el plan", "err"); return; }
+      if(intervalo<1){ toast("Indicá cada cuántas "+UNIT_LABEL[unidadT]+" se hace el plan", "err"); return; }
+      t = { id: uid("T"), nombre: nombre, intervalo: intervalo, unidad: unidadT,
+            parts: partes.map(function(x){ return { partId:x.partId, qty:x.qty }; }), lastMeter: null, lastDate: null };
+      m.tasks.push(t);
+      var guardar = document.getElementById("gpGuardar");
+      if(pe.tipo==="nuevo" && guardar && guardar.checked && !existePlanTipo(nombre, intervalo, unidadT)){
+        state.planesTipo.push({ id: uid("PL"), nombre: nombre, intervalo: intervalo, unidad: unidadT });
+      }
+    }
+    if(!t){ toast("Elegí un plan", "err"); return; }
+    var date = document.getElementById("genDate").value || todayISO();
+    var tech = document.getElementById("genTech").value.trim();
+    var notes = document.getElementById("genNotes").value.trim();
+    var numero = proximoNumeroOrden();
+    var faltante = false;
+    var partesUsadas = partes.map(function(x){
+      var p = getPart(x.partId);
+      var applied = Math.min(x.qty, p ? p.stock : 0);
+      if(applied < x.qty) faltante = true;
+      if(applied>0) applyMovement(x.partId, -applied, "consumo", "Orden "+numero+" · "+m.nombre+" · "+t.nombre);
+      return { partId: x.partId, qty: x.qty, aplicado: applied };
+    });
+    var u = currentUser();
+    state.maintenances.unshift({
+      id: uid("MT"), numero: numero, machineId: m.id, taskId: t.id, taskNombre: t.nombre,
+      fecha: date, medidor: meter, medidorUnidad: unidadT, tecnico: tech || "Sin asignar", notas: notes,
+      partesUsadas: partesUsadas, estado: "completado", faltante: faltante, cargadoPor: u ? u.nombre : "—"
+    });
+    t.lastMeter = meter;
+    t.lastDate = date;
+    setMeter(m, unidadT, meter, true);
+    saveState();
+    toast(faltante ? "Mantenimiento "+numero+" generado con faltante de stock" : "Mantenimiento "+numero+" generado y stock actualizado", faltante?"err":"ok");
+    navigate("flota", { id:m.id });
+  }
+
+  document.getElementById("genMachine").onchange = renderTaskArea;
+  if(machine) renderTaskArea();
+}
+
+/* ---------- Catálogo de planes predeterminados (vista Planes) ---------- */
+function htmlPlanesTipo(){
+  var lista = planesTipoOrdenados();
+  var usos = function(p){
+    var n = 0;
+    state.machines.forEach(function(m){ m.tasks.forEach(function(t){ if((t.nombre+"|"+t.intervalo+"|"+tUnit(t,m)).toLowerCase()===(p.nombre+"|"+p.intervalo+"|"+p.unidad).toLowerCase()) n++; }); });
+    return n;
+  };
+  var html = '<div class="section-head" style="margin-top:26px;"><h2>Planes predeterminados</h2><div style="display:flex; gap:8px; align-items:center;"><span class="hint">Se pueden asignar a cualquier unidad</span>'+
+    (isAdmin() ? '<button class="btn btn-primary btn-sm" data-action="plantipo-new"><svg><use href="#i-plus"/></svg>Nuevo plan predeterminado</button>' : '')+'</div></div>';
+  if(!lista.length) return html + emptyState("i-clip","Todavía no hay planes predeterminados.");
+  html += '<div class="table-wrap"><table style="min-width:520px;"><thead><tr><th>Plan</th><th>Vence por</th><th>Frecuencia</th><th>Unidades que lo usan</th><th></th></tr></thead><tbody>'+
+    lista.map(function(p){
+      return '<tr><td class="cell-strong">'+escapeHtml(p.nombre)+'</td><td>'+(p.unidad==="horas"?"Horas de motor":"Kilómetros")+'</td><td class="mono">cada '+fmtInt(p.intervalo)+' '+UNIT_LABEL[p.unidad]+'</td><td class="mono">'+usos(p)+'</td>'+
+        '<td><div style="display:flex; gap:4px; justify-content:flex-end;">'+
+          (isAdmin() ? '<button class="btn btn-ghost btn-sm" data-action="plantipo-asignar" data-id="'+p.id+'" title="Asignar a unidades"><svg><use href="#i-truck"/></svg>Asignar</button>'+
+            '<button class="btn btn-ghost btn-sm" data-action="plantipo-edit" data-id="'+p.id+'" title="Editar"><svg><use href="#i-edit"/></svg></button>'+
+            '<button class="btn btn-ghost btn-sm" data-action="plantipo-del" data-id="'+p.id+'" title="Eliminar del catálogo"><svg><use href="#i-x"/></svg></button>' : '')+
+        '</div></td></tr>';
+    }).join("")+'</tbody></table></div>'+
+    '<div class="help" style="margin-top:8px;">Editar o borrar un plan predeterminado no cambia los planes que ya tienen asignados las unidades.</div>';
+  return html;
+}
+function openPlanTipoModal(id){
+  if(!isAdmin()){ toast("Solo quien administra Mantenimiento puede editar los planes", "err"); return; }
+  var p = id ? getPlanTipo(id) : null;
+  showModal('<div class="modal-body"><h3>'+(p?"Editar plan predeterminado":"Nuevo plan predeterminado")+'</h3>'+
+    '<div class="field"><label>Nombre del plan</label><input type="text" id="ptNombre" value="'+escapeHtml(p?p.nombre:"")+'" placeholder="Ej: Cambio de aceite y filtros" /></div>'+
+    '<div class="field-row">'+
+      '<div class="field"><label>Vence por</label><select id="ptUnidad"><option value="horas" '+(p&&p.unidad==="horas"?"selected":"")+'>Horas de motor</option><option value="km" '+(!p||p.unidad==="km"?"selected":"")+'>Kilómetros</option></select></div>'+
+      '<div class="field"><label>Frecuencia (cada cuántas)</label><input type="number" id="ptIntervalo" min="1" value="'+(p?p.intervalo:10000)+'" /></div>'+
+    '</div></div>'+
+    '<div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cancelar</button><button class="btn btn-primary" id="mSave">Guardar</button></div>');
+  document.getElementById("mCancel").onclick = closeModal;
+  document.getElementById("mSave").onclick = function(){
+    var nombre = document.getElementById("ptNombre").value.trim();
+    var unidad = document.getElementById("ptUnidad").value;
+    var intervalo = Math.round(Number(document.getElementById("ptIntervalo").value)||0);
+    if(!nombre){ toast("Poné un nombre para el plan", "err"); return; }
+    if(intervalo<1){ toast("Indicá la frecuencia", "err"); return; }
+    var dup = (state.planesTipo||[]).find(function(x){ return x.id!==(p&&p.id) && (x.nombre+"|"+x.intervalo+"|"+x.unidad).toLowerCase()===(nombre+"|"+intervalo+"|"+unidad).toLowerCase(); });
+    if(dup){ toast("Ya existe ese plan predeterminado", "err"); return; }
+    if(p){ p.nombre = nombre; p.unidad = unidad; p.intervalo = intervalo; }
+    else state.planesTipo.push({ id: uid("PL"), nombre: nombre, intervalo: intervalo, unidad: unidad });
+    saveState(); closeModal(); toast("Plan guardado"); render();
+  };
+}
+function borrarPlanTipo(id){
+  var p = getPlanTipo(id); if(!p) return;
+  confirmModal({ title:"¿Eliminar este plan predeterminado?", body:"Se quita <b>"+escapeHtml(planTipoLabel(p))+"</b> del catálogo. Las unidades que ya lo tienen asignado lo conservan.",
+    confirmLabel:"Eliminar", danger:true, onConfirm:function(){
+      state.planesTipo = state.planesTipo.filter(function(x){ return x.id!==id; });
+      saveState(); toast("Plan eliminado del catálogo"); render();
+    } });
+}
+function openAsignarPlanModal(id){
+  var p = getPlanTipo(id); if(!p) return;
+  var tiene = function(m){ return m.tasks.some(function(t){ return (t.nombre+"|"+t.intervalo+"|"+tUnit(t,m)).toLowerCase()===(p.nombre+"|"+p.intervalo+"|"+p.unidad).toLowerCase(); }); };
+  var lista = state.machines.slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
+  showModal('<div class="modal-body" style="max-height:82vh; overflow-y:auto;"><h3>Asignar plan a unidades</h3><p><b>'+escapeHtml(planTipoLabel(p))+'</b></p>'+
+    '<div class="parts-picker" style="max-height:340px;">'+lista.map(function(m){
+      var ya = tiene(m);
+      return '<label class="part-pick-row"><input type="checkbox" data-asig="'+m.id+'" '+(ya?"checked disabled":"")+' /><span class="ppr-name">'+escapeHtml(m.nombre)+(ya?' <span class="ppr-code">ya lo tiene</span>':'')+'</span><span class="ppr-code">'+meterSummary(m)+'</span></label>';
+    }).join("")+'</div>'+
+    '<div class="help">El plan empieza a contar desde el medidor actual de cada unidad. Si una unidad todavía no tiene medidor cargado, queda "Sin datos" hasta su primer service.</div></div>'+
+    '<div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cancelar</button><button class="btn btn-primary" id="mSave">Asignar</button></div>');
+  document.querySelector("#modalRoot .modal").style.maxWidth = "560px";
+  document.getElementById("mCancel").onclick = closeModal;
+  document.getElementById("mSave").onclick = function(){
+    var n = 0;
+    document.querySelectorAll("[data-asig]:checked:not(:disabled)").forEach(function(cb){
+      var m = getMachine(cb.dataset.asig); if(!m) return;
+      var arranca = hasMeter(m, p.unidad) ? meterOf(m, p.unidad) : null;
+      m.tasks.push({ id: uid("T"), nombre: p.nombre, intervalo: p.intervalo, unidad: p.unidad, parts: [], lastMeter: arranca, lastDate: arranca!=null ? todayISO() : null });
+      n++;
+    });
+    if(!n){ toast("No elegiste ninguna unidad", "err"); return; }
+    saveState(); closeModal(); toast("Plan asignado a "+n+" unidad(es)"); render();
+  };
+}
+
 /* ================= RENDER DISPATCH ================= */
 function render(){
   renderSidebarNav();
@@ -2149,6 +2364,10 @@ document.addEventListener("click", function(e){
   else if(action==="sol-refresh"){ cargarSolicitudes().then(function(){ render(); toast("Solicitudes actualizadas"); }); }
   else if(action==="plan-filter"){ window.__planFilter = act.dataset.key; viewPlanes(); }
   else if(action==="plan-task-new"){ openPlanMachinePicker(); }
+  else if(action==="plantipo-new"){ openPlanTipoModal(null); }
+  else if(action==="plantipo-edit"){ openPlanTipoModal(act.dataset.id); }
+  else if(action==="plantipo-del"){ borrarPlanTipo(act.dataset.id); }
+  else if(action==="plantipo-asignar"){ openAsignarPlanModal(act.dataset.id); }
   else if(action==="flota-filter"){ window.__flotaTipo = act.dataset.key; viewFlota(); }
   else if(action==="hist-filter"){ window.__histEstado = act.dataset.key; viewHistorial(); }
   else if(action==="mov-filter"){ window.__movTipo = act.dataset.key; viewMovimientos(); }
@@ -2465,13 +2684,19 @@ function openTaskModal(machineId, taskId){
 
   showModal(
     '<div class="modal-body" style="max-height:82vh; overflow-y:auto;">'+
-      '<h3>'+(editing?"Editar tarea":"Nueva tarea del plan")+'</h3>'+
-      '<p>'+escapeHtml(m.nombre)+'</p>'+
-      '<div class="field"><label>Nombre de la tarea</label><input type="text" id="tNombre" value="'+(editing?escapeHtml(editing.nombre):"Service Motor")+'" /></div>'+
+      '<h3>'+(editing?"Editar plan de mantenimiento":"Nuevo plan de mantenimiento")+'</h3>'+
+      '<p>'+escapeHtml(m.nombre)+' · '+meterSummary(m)+'</p>'+
+      (!editing ? '<div class="field"><label>Plan predeterminado</label><select id="tTipo"><option value="">— Plan nuevo —</option>'+
+        planesTipoOrdenados().map(function(pt){ return '<option value="'+pt.id+'">'+escapeHtml(planTipoLabel(pt))+'</option>'; }).join("")+
+      '</select><div class="help">Elegí uno del catálogo o dejá "Plan nuevo" y completá los datos.</div></div>' : '')+
+      '<div class="field"><label>Nombre del plan</label><input type="text" id="tNombre" value="'+(editing?escapeHtml(editing.nombre):"")+'" placeholder="Ej: Cambio de aceite y filtros" /></div>'+
       '<div class="field-row">'+
         '<div class="field"><label>Vence por</label><select id="tUnidad"><option value="km" '+(((editing?tUnit(editing,m):m.meterType))==="km"?"selected":"")+'>Kilómetros</option><option value="horas" '+(((editing?tUnit(editing,m):m.meterType))==="horas"?"selected":"")+'>Horas de motor</option></select></div>'+
-        '<div class="field"><label>Intervalo</label><input type="number" id="tIntervalo" value="'+(editing?editing.intervalo:(m.meterType==="horas"?250:10000))+'" min="1" /></div>'+
+        '<div class="field"><label>Frecuencia (cada cuántas)</label><input type="number" id="tIntervalo" value="'+(editing?editing.intervalo:(m.meterType==="horas"?250:10000))+'" min="1" /></div>'+
       '</div>'+
+      '<div class="field"><label id="tInicioLbl">Comienza a contar desde</label><input type="number" id="tInicio" step="any" min="0" placeholder="Medidor del último service o de inicio" />'+
+        '<div class="help">Medidor desde el que se cuenta la frecuencia (por ejemplo, el del último service hecho). El próximo vence en este valor + la frecuencia. Si lo dejás vacío queda "Sin datos" hasta el primer mantenimiento.</div></div>'+
+      (!editing ? '<label style="display:flex; gap:8px; align-items:center; font-weight:600; color:var(--ink); margin:0 0 14px;"><input type="checkbox" id="tGuardarTipo" checked style="width:16px; height:16px;"> Guardar también como plan predeterminado</label>' : '')+
       '<div class="field"><label>Repuestos que consume esta tarea</label>'+
         '<div style="display:flex; gap:8px; margin-bottom:8px;">'+
           '<input type="search" id="tPartFilter" placeholder="Filtrar repuestos por nombre o código…" style="flex:1;" />'+
@@ -2498,6 +2723,29 @@ function openTaskModal(machineId, taskId){
     '<div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cancelar</button><button class="btn btn-primary" id="mSave">Guardar</button></div>'
   );
 
+  function syncInicio(forzar){
+    var u = document.getElementById("tUnidad").value;
+    document.getElementById("tInicioLbl").textContent = "Comienza a contar desde ("+UNIT_LABEL[u]+")";
+    var inp = document.getElementById("tInicio");
+    if(forzar){
+      if(editing && tUnit(editing, m)===u) inp.value = editing.lastMeter!=null ? editing.lastMeter : "";
+      else inp.value = hasMeter(m, u) ? meterOf(m, u) : "";
+    }
+  }
+  document.getElementById("tUnidad").addEventListener("change", function(){ syncInicio(true); });
+  syncInicio(true);
+  var tTipo = document.getElementById("tTipo");
+  if(tTipo) tTipo.onchange = function(){
+    var pt = getPlanTipo(this.value);
+    var g = document.getElementById("tGuardarTipo");
+    if(pt){
+      document.getElementById("tNombre").value = pt.nombre;
+      document.getElementById("tUnidad").value = pt.unidad;
+      document.getElementById("tIntervalo").value = pt.intervalo;
+      syncInicio(true);
+      if(g){ g.checked = false; g.parentNode.style.display = "none"; }
+    } else if(g){ g.parentNode.style.display = ""; g.checked = true; }
+  };
   document.querySelectorAll('[data-part-check]').forEach(function(cb){
     cb.addEventListener("change", function(){
       var qtyInput = document.querySelector('[data-part-qty][data-for="'+cb.value+'"]');
@@ -2548,7 +2796,7 @@ function openTaskModal(machineId, taskId){
   document.getElementById("mSave").onclick = function(){
     var nombre = document.getElementById("tNombre").value.trim();
     var intervalo = Math.max(1, Math.round(Number(document.getElementById("tIntervalo").value)||0));
-    if(!nombre){ toast("Ingresá un nombre para la tarea", "err"); return; }
+    if(!nombre){ toast("Ingresá un nombre para el plan", "err"); return; }
     var parts = [];
     document.querySelectorAll('[data-part-check]:checked').forEach(function(cb){
       var qtyInput = document.querySelector('[data-part-qty][data-for="'+cb.value+'"]');
@@ -2556,13 +2804,20 @@ function openTaskModal(machineId, taskId){
       parts.push({ partId: cb.value, qty: qty });
     });
     var unidadSel = document.getElementById("tUnidad").value;
+    var iniRaw = document.getElementById("tInicio").value;
+    var inicio = iniRaw==="" ? null : Math.max(0, Number(iniRaw));
     if(editing){
-      if(tUnit(editing, m)!==unidadSel){ editing.lastMeter = null; editing.lastDate = null; }
+      var cambioInicio = inicio !== editing.lastMeter || tUnit(editing, m)!==unidadSel;
       editing.nombre = nombre; editing.intervalo = intervalo; editing.parts = parts; editing.unidad = unidadSel;
-      toast("Tarea actualizada");
+      if(cambioInicio){ editing.lastMeter = inicio; editing.lastDate = inicio!=null ? (editing.lastDate || todayISO()) : null; }
+      toast("Plan actualizado");
     } else {
-      m.tasks.push({ id: uid("T"), nombre: nombre, intervalo: intervalo, unidad: unidadSel, parts: parts, lastMeter: hasMeter(m, unidadSel) ? meterOf(m, unidadSel) : null, lastDate: hasMeter(m, unidadSel) ? todayISO() : null });
-      toast("Tarea agregada al plan");
+      m.tasks.push({ id: uid("T"), nombre: nombre, intervalo: intervalo, unidad: unidadSel, parts: parts, lastMeter: inicio, lastDate: inicio!=null ? todayISO() : null });
+      var g = document.getElementById("tGuardarTipo");
+      if(g && g.checked && g.parentNode.style.display!=="none" && !existePlanTipo(nombre, intervalo, unidadSel)){
+        state.planesTipo.push({ id: uid("PL"), nombre: nombre, intervalo: intervalo, unidad: unidadSel });
+      }
+      toast("Plan agregado a la unidad");
     }
     saveState(); closeModal(); render();
   };
