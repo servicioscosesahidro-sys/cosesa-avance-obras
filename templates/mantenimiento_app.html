@@ -593,6 +593,8 @@ function normalizeState(st){
   if(!st.alertSettings) st.alertSettings = { enabled:false, emails:["taller@cosesaservicios.com"] };
   if(typeof st.ordenSeq !== "number") st.ordenSeq = 0;
   delete st.users;
+  st.machines.forEach(function(m){ ensureMeters(m); (m.tasks||[]).forEach(function(t){ if(!t.unidad) t.unidad = m.meterType; if(!Array.isArray(t.parts)) t.parts = []; }); });
+  st.__sembrado = sembrarUnidadesEasytrack(st);
   return st;
 }
 function apiJSON(method, url, body){
@@ -625,7 +627,7 @@ function saveState(){
       if(res.status===409){
         saveGen++; pendingSaves = 0;
         serverVersion = res.d.version;
-        state = normalizeState(res.d.doc);
+        state = normalizeState(res.d.doc); delete state.__sembrado;
         setSync("", "Guardado");
         closeModal();
         showModal('<div class="modal-body"><h3>Otro usuario hizo cambios</h3><p><b>'+escapeHtml(res.d.actualizado_por||"Otro usuario")+'</b> guardó cambios mientras trabajabas. Se cargó la versión más nueva y <b>tu último cambio no se guardó</b>: revisalo y volvé a hacerlo.</p></div><div class="modal-actions"><button class="btn btn-primary" id="mCancel">Entendido</button></div>');
@@ -646,7 +648,8 @@ function loadState(){
     PLATFORM.usuario = res.d.usuario; PLATFORM.urls = res.d.urls || {};
     serverVersion = res.d.version;
     state = normalizeState(res.d.doc);
-    if(!res.d.doc){ return saveState(); }
+    var sembrado = state.__sembrado; delete state.__sembrado;
+    if(!res.d.doc || sembrado){ return saveState(); }
   });
 }
 function refrescarDesdeServidor(){
@@ -656,7 +659,7 @@ function refrescarDesdeServidor(){
   apiJSON("GET", API+"/estado").then(function(res){
     if(!res.d.ok || pendingSaves>0) return;
     var cambio = res.d.version !== serverVersion;
-    if(cambio){ serverVersion = res.d.version; state = normalizeState(res.d.doc); }
+    if(cambio){ serverVersion = res.d.version; state = normalizeState(res.d.doc); delete state.__sembrado; }
     cargarSolicitudes().then(function(){ if(route.view!=="generar" && route.view!=="orden") render(); });
   });
 }
@@ -671,7 +674,8 @@ function partStatus(p){
   if(p.stock<p.min) return "warn";
   return "ok";
 }
-function taskProgress(t, currentMeter){
+function taskProgress(t, mOrMeter){
+  var currentMeter = (mOrMeter && typeof mOrMeter==="object") ? meterOf(mOrMeter, tUnit(t, mOrMeter)) : mOrMeter;
   if(t.lastMeter==null) return { pct: 0, status: "nodata", remaining: null, used: null };
   var used = currentMeter - t.lastMeter;
   var pct = clamp(used / t.intervalo, 0, 1.4);
@@ -682,7 +686,7 @@ function taskProgress(t, currentMeter){
 function machineOverallStatus(m){
   var worst = "ok";
   m.tasks.forEach(function(t){
-    var s = taskProgress(t, m.currentMeter).status;
+    var s = taskProgress(t, m).status;
     if(s==="crit") worst="crit"; else if(s==="warn" && worst!=="crit") worst="warn";
     else if(s==="nodata" && worst==="ok") worst="nodata";
   });
@@ -704,7 +708,7 @@ function counts(){
   var vencidos=0, proximos=0, critStock=0, warnStock=0;
   state.machines.forEach(function(m){
     m.tasks.forEach(function(t){
-      var s = taskProgress(t, m.currentMeter).status;
+      var s = taskProgress(t, m).status;
       if(s==="crit") vencidos++; else if(s==="warn") proximos++;
     });
   });
@@ -838,7 +842,7 @@ function viewDashboard(){
   var soonList = [];
   state.machines.forEach(function(m){
     m.tasks.forEach(function(t){
-      var pr = taskProgress(t, m.currentMeter);
+      var pr = taskProgress(t, m);
       if(pr.status==="crit" || pr.status==="warn") soonList.push({ m:m, t:t, pr:pr });
     });
   });
@@ -852,7 +856,7 @@ function viewDashboard(){
   }
   var sinDatos = state.machines.filter(function(m){ return machineOverallStatus(m)==="nodata"; }).length;
   if(sinDatos>0){
-    html += '<div class="banner banner-info"><svg><use href="#i-gauge"/></svg><div><b>'+sinDatos+' unidad(es) sin datos de medidor o de último service.</b> Cargá las horas/km actuales con "Importar horas" en Máquinas y vehículos; el plan empieza a calcularse con el primer mantenimiento que se genere en cada una.</div></div>';
+    html += '<div class="banner banner-info"><svg><use href="#i-gauge"/></svg><div><b>'+sinDatos+' unidad(es) sin datos de medidor o de último service.</b> Cargá los km y horas actuales con "Cargar medidores" (o "Importar Easytrack" para los vehículos) en Máquinas y vehículos; el plan empieza a calcularse con el primer mantenimiento que se genere en cada una.</div></div>';
   }
   html += '<div class="kpi-grid">'+
     kpiCard("i-truck","Flota total", state.machines.length, (state.machines.filter(function(m){return m.tipo==="motobomba";}).length)+" motobombas · "+(state.machines.filter(function(m){return m.tipo==="vehiculo";}).length)+" vehículos", "brand")+
@@ -873,7 +877,7 @@ function viewDashboard(){
       var meta = statusMeta(row.pr.status);
       html += '<div class="row-link" data-nav="flota" data-id="'+row.m.id+'" style="display:flex; align-items:center; gap:12px; padding:11px 12px; border:1px solid var(--border-soft); border-radius:10px;">'+
         '<div class="mach-ic" style="width:32px;height:32px;"><svg><use href="#'+machineIcon(row.m.tipo)+'"/></svg></div>'+
-        '<div style="flex:1; min-width:0;"><div class="cell-strong">'+escapeHtml(row.m.nombre)+'</div><div class="cell-muted" style="font-size:12px;">'+escapeHtml(row.t.nombre)+' · '+(row.pr.remaining>0 ? 'vence en '+fmtInt(row.pr.remaining)+' '+UNIT_LABEL[row.m.meterType] : 'vencido hace '+fmtInt(-row.pr.remaining)+' '+UNIT_LABEL[row.m.meterType])+'</div></div>'+
+        '<div style="flex:1; min-width:0;"><div class="cell-strong">'+escapeHtml(row.m.nombre)+'</div><div class="cell-muted" style="font-size:12px;">'+escapeHtml(row.t.nombre)+' · '+(row.pr.remaining>0 ? 'vence en '+fmtInt(row.pr.remaining)+' '+UNIT_LABEL[tUnit(row.t,row.m)] : 'vencido hace '+fmtInt(-row.pr.remaining)+' '+UNIT_LABEL[tUnit(row.t,row.m)])+'</div></div>'+
         '<span class="pill '+meta.cls+'"><svg><use href="#'+meta.icon+'"/></svg>'+meta.label+'</span>'+
       '</div>';
     });
@@ -934,7 +938,7 @@ function renderMaintTable(list, showMachineFilterNote){
       '<td class="cell-muted mono" style="white-space:nowrap;">'+fmtDate(rec.fecha)+(rec.numero?'<div style="font-size:11px; font-weight:700; color:var(--ink-soft);">'+escapeHtml(rec.numero)+'</div>':'')+'</td>'+
       (m ? '<td class="cell-strong row-link" data-nav="flota" data-id="'+rec.machineId+'">'+escapeHtml(nombreUnidad)+origen+'</td>' : '<td class="cell-strong">'+escapeHtml(nombreUnidad)+origen+'</td>')+
       '<td>'+escapeHtml(rec.taskNombre)+(rec.trabajo?'<div class="cell-muted" style="font-size:11.5px; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="'+escapeHtml(rec.trabajo)+'">'+escapeHtml(rec.trabajo)+'</div>':'')+'</td>'+
-      '<td class="mono">'+(rec.medidor!=null ? fmtInt(rec.medidor)+' '+(m?UNIT_LABEL[m.meterType]:"") : "—")+'</td>'+
+      '<td class="mono">'+(rec.medidor!=null ? fmtInt(rec.medidor)+' '+(m?UNIT_LABEL[rec.medidorUnidad||m.meterType]:"") : "—")+'</td>'+
       '<td>'+escapeHtml(rec.tecnico||"—")+'</td>'+
       '<td style="max-width:260px;"><div style="display:flex; flex-wrap:wrap; gap:5px;">'+partsChips+'</div></td>'+
       '<td>'+estadoPill+'</td>'+
@@ -957,7 +961,7 @@ function viewFlota(){
     { key:"motobomba", label:"Motobombas" },
     { key:"vehiculo", label:"Vehículos" }
   ];
-  var html = '<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-bottom:16px;">'+
+  var html = '<div id="etEstado"></div><div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-bottom:16px;">'+
     '<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">'+
       '<div class="topbar-search" style="width:260px;"><svg><use href="#i-search"/></svg><input type="search" id="flotaSearch" placeholder="Buscar máquina o vehículo…" value="'+escapeHtml(window.__flotaQuery||"")+'"></div>'+
       '<div class="tabs" style="border-bottom:none; margin-bottom:0;">'+
@@ -966,7 +970,7 @@ function viewFlota(){
         }).join("")+
       '</div>'+
     '</div>'+
-    (isAdmin() ? '<div style="display:flex; gap:8px;"><button class="btn btn-secondary btn-sm" data-action="import-meters"><svg><use href="#i-upload"/></svg>Importar horas</button><button class="btn btn-primary btn-sm" data-action="machine-new"><svg><use href="#i-plus"/></svg>Nueva máquina</button></div>' : '')+
+    (isAdmin() ? '<div style="display:flex; gap:8px; flex-wrap:wrap;"><button class="btn btn-secondary btn-sm" data-action="import-easytrack"><svg><use href="#i-upload"/></svg>Importar Easytrack</button><button class="btn btn-secondary btn-sm" data-action="import-meters"><svg><use href="#i-gauge"/></svg>Cargar medidores</button><button class="btn btn-primary btn-sm" data-action="machine-new"><svg><use href="#i-plus"/></svg>Nueva máquina</button></div>' : '')+
   '</div>';
 
   var any = false;
@@ -975,7 +979,7 @@ function viewFlota(){
     var list = state.machines.filter(function(m){
       if(m.tipo!==g.key) return false;
       if(!q) return true;
-      return (m.nombre+" "+(m.motor||"")+" "+(m.serie||"")).toLowerCase().indexOf(q)>=0;
+      return (m.nombre+" "+(m.motor||"")+" "+(m.serie||"")+" "+(m.patente||"")).toLowerCase().indexOf(q)>=0;
     });
     if(!list.length) return;
     any = true;
@@ -988,7 +992,8 @@ function viewFlota(){
         '<div class="mach-card-top"><div class="mach-ic"><svg><use href="#'+machineIcon(m.tipo)+'"/></svg></div><span class="pill '+meta.cls+'"><svg><use href="#'+meta.icon+'"/></svg>'+meta.label+'</span></div>'+
         '<h3>'+escapeHtml(m.nombre)+'</h3>'+
         '<div class="mach-meta">'+escapeHtml(m.motor||"—")+'</div>'+
-        '<div class="mach-meter"><span>Medidor actual</span><span class="mono cell-strong">'+fmtInt(m.currentMeter)+' '+UNIT_LABEL[m.meterType]+'</span></div>'+
+        (m.patente ? '<div class="mach-meta mono">Patente '+escapeHtml(m.patente)+'</div>' : '')+
+        '<div class="mach-meter"><span>Medidores</span><span class="mono cell-strong">'+meterSummary(m)+'</span></div>'+
       '</div>';
     });
     html += '</div>';
@@ -996,6 +1001,7 @@ function viewFlota(){
   if(!any){ html += emptyState("i-search","No se encontraron máquinas ni vehículos con ese criterio."); }
 
   document.getElementById("view").innerHTML = html;
+  cargarEstadoEasytrack();
   var fi = document.getElementById("flotaSearch");
   if(fi){ fi.oninput = function(){ window.__flotaQuery = fi.value; render(); var el=document.getElementById("flotaSearch"); if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }; }
 }
@@ -1013,15 +1019,16 @@ function viewMachineDetail(id){
       '<div style="display:flex; gap:14px;">'+
         '<div class="mach-ic" style="width:52px; height:52px; border-radius:14px;"><svg style="width:26px;height:26px;"><use href="#'+machineIcon(m.tipo)+'"/></svg></div>'+
         '<div>'+
-          '<div class="badge-type"><svg><use href="#'+(m.tipo==="vehiculo"?"i-truck":"i-gauge")+'"/></svg>'+TYPE_LABEL[m.tipo]+(m.serie?(' · Serie '+escapeHtml(m.serie)):"")+'</div>'+
+          '<div class="badge-type"><svg><use href="#'+(m.tipo==="vehiculo"?"i-truck":"i-gauge")+'"/></svg>'+TYPE_LABEL[m.tipo]+(m.patente?(' · Patente '+escapeHtml(m.patente)):"")+(m.serie?(' · Serie '+escapeHtml(m.serie)):"")+'</div>'+
           '<h2 style="font-size:24px; margin-top:2px;">'+escapeHtml(m.nombre)+'</h2>'+
           '<div class="cell-muted" style="font-size:13px; max-width:520px;">'+escapeHtml(m.motor||"Motor no especificado")+'</div>'+
         '</div>'+
       '</div>'+
       '<div style="text-align:right;">'+
         '<span class="pill '+meta0.cls+'" style="margin-bottom:8px;"><svg><use href="#'+meta0.icon+'"/></svg>'+meta0.label+'</span>'+
-        '<div style="font-family:var(--font-display); font-size:30px; font-weight:700;">'+fmtInt(m.currentMeter)+' <span style="font-size:15px; color:var(--ink-faint); font-family:var(--font-body); font-weight:600;">'+UNIT_LABEL[m.meterType]+'</span></div>'+
-        (isAdmin() ? '<div style="display:flex; gap:6px; justify-content:flex-end; margin-top:4px;"><button class="btn btn-ghost btn-sm" data-action="edit-meter" data-id="'+m.id+'"><svg><use href="#i-edit"/></svg>Medidor</button><button class="btn btn-ghost btn-sm" data-action="machine-delete" data-id="'+m.id+'"><svg><use href="#i-x"/></svg>Eliminar</button></div>' : '<div class="cell-muted" style="font-size:11.5px;">El medidor se actualiza al generar un mantenimiento</div>')+
+        '<div style="font-family:var(--font-display); font-size:26px; font-weight:700;">'+meterSummary(m)+'</div>'+
+        (m.easytrack && m.easytrack.ultimaImportacion ? '<div class="cell-muted" style="font-size:11.5px;">Easytrack: última importación '+fmtDate(m.easytrack.ultimaImportacion)+'</div>' : '')+
+        (isAdmin() ? '<div style="display:flex; gap:6px; justify-content:flex-end; margin-top:4px; flex-wrap:wrap;"><button class="btn btn-ghost btn-sm" data-action="machine-edit" data-id="'+m.id+'"><svg><use href="#i-edit"/></svg>Datos</button><button class="btn btn-ghost btn-sm" data-action="edit-meter" data-id="'+m.id+'"><svg><use href="#i-gauge"/></svg>Medidores</button><button class="btn btn-ghost btn-sm" data-action="machine-delete" data-id="'+m.id+'"><svg><use href="#i-x"/></svg>Eliminar</button></div>' : '<div class="cell-muted" style="font-size:11.5px;">El medidor se actualiza al generar un mantenimiento</div>')+
       '</div>'+
     '</div>'+
   '</div>';
@@ -1033,12 +1040,12 @@ function viewMachineDetail(id){
   html += '<div style="display:flex; flex-direction:column; gap:12px; margin-bottom:24px;">';
   if(m.tasks.length===0){ html += emptyState("i-clip","Esta unidad todavía no tiene tareas en su plan de mantenimiento."); }
   m.tasks.forEach(function(t){
-    var pr = taskProgress(t, m.currentMeter);
+    var pr = taskProgress(t, m);
     var meta = statusMeta(pr.status);
     html += '<div class="card card-pad">'+
       '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">'+
         '<div><div class="cell-strong" style="font-size:15.5px;">'+escapeHtml(t.nombre)+'</div>'+
-        '<div class="cell-muted" style="font-size:12.5px;">Cada '+fmtInt(t.intervalo)+' '+UNIT_LABEL[m.meterType]+' · último service: '+(t.lastMeter==null ? 'sin registrar' : fmtInt(t.lastMeter)+' '+UNIT_LABEL[m.meterType]+' ('+fmtDate(t.lastDate)+')')+'</div></div>'+
+        '<div class="cell-muted" style="font-size:12.5px;">Cada '+fmtInt(t.intervalo)+' '+UNIT_LABEL[tUnit(t,m)]+' · último service: '+(t.lastMeter==null ? 'sin registrar' : fmtInt(t.lastMeter)+' '+UNIT_LABEL[tUnit(t,m)]+' ('+fmtDate(t.lastDate)+')')+'</div></div>'+
         '<div style="display:flex; align-items:center; gap:8px;">'+
           '<span class="pill '+meta.cls+'"><svg><use href="#'+meta.icon+'"/></svg>'+meta.label+'</span>'+
           (isAdmin() ? '<button class="btn btn-ghost btn-sm" data-action="task-edit" data-mid="'+m.id+'" data-id="'+t.id+'" title="Editar tarea"><svg><use href="#i-edit"/></svg></button><button class="btn btn-ghost btn-sm" data-action="task-delete" data-mid="'+m.id+'" data-id="'+t.id+'" title="Eliminar tarea"><svg><use href="#i-x"/></svg></button>' : '')+
@@ -1047,8 +1054,8 @@ function viewMachineDetail(id){
       '<div class="progress" style="margin:12px 0 6px;"><i style="width:'+(pr.pct*100).toFixed(0)+'%; background:'+meta.bar+';"></i></div>'+
       '<div style="display:flex; justify-content:space-between; font-size:12px; color:var(--ink-faint);">'+
         (pr.status==="nodata" ? '<span>Sin último service registrado: se calcula a partir del primer mantenimiento que se genere.</span>' :
-        '<span>'+fmtInt(pr.used)+' '+UNIT_LABEL[m.meterType]+' desde el último service</span>'+
-        '<span>'+(pr.remaining>=0 ? "Faltan "+fmtInt(pr.remaining) : "Vencido hace "+fmtInt(-pr.remaining))+' '+UNIT_LABEL[m.meterType]+'</span>')+
+        '<span>'+fmtInt(pr.used)+' '+UNIT_LABEL[tUnit(t,m)]+' desde el último service</span>'+
+        '<span>'+(pr.remaining>=0 ? "Faltan "+fmtInt(pr.remaining) : "Vencido hace "+fmtInt(-pr.remaining))+' '+UNIT_LABEL[tUnit(t,m)]+'</span>')+
       '</div>'+
       '<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:12px;">'+
         t.parts.map(function(tp){ var p=getPart(tp.partId); if(!p) return ""; var sm=stockMeta(partStatus(p));
@@ -1072,7 +1079,7 @@ function viewPlanes(){
   var rows = [];
   state.machines.forEach(function(m){
     m.tasks.forEach(function(t){
-      rows.push({ m:m, t:t, pr: taskProgress(t, m.currentMeter) });
+      rows.push({ m:m, t:t, pr: taskProgress(t, m) });
     });
   });
   var filter = (window.__planFilter||"todos");
@@ -1098,8 +1105,8 @@ function viewPlanes(){
     html += '<tr>'+
       '<td class="cell-strong row-link" data-nav="flota" data-id="'+r.m.id+'">'+escapeHtml(r.m.nombre)+'</td>'+
       '<td>'+escapeHtml(r.t.nombre)+'</td>'+
-      '<td class="mono cell-muted">'+fmtInt(r.t.intervalo)+' '+UNIT_LABEL[r.m.meterType]+'</td>'+
-      '<td class="mono cell-muted">'+(r.t.lastMeter==null ? 'Sin registrar' : fmtInt(r.t.lastMeter)+' '+UNIT_LABEL[r.m.meterType]+'<br><span style="font-size:11px;">'+fmtDate(r.t.lastDate)+'</span>')+'</td>'+
+      '<td class="mono cell-muted">'+fmtInt(r.t.intervalo)+' '+UNIT_LABEL[tUnit(r.t,r.m)]+'</td>'+
+      '<td class="mono cell-muted">'+(r.t.lastMeter==null ? 'Sin registrar' : fmtInt(r.t.lastMeter)+' '+UNIT_LABEL[tUnit(r.t,r.m)]+'<br><span style="font-size:11px;">'+fmtDate(r.t.lastDate)+'</span>')+'</td>'+
       '<td style="min-width:140px;"><div class="progress"><i style="width:'+(r.pr.pct*100).toFixed(0)+'%; background:'+meta.bar+';"></i></div></td>'+
       '<td><span class="pill '+meta.cls+'"><svg><use href="#'+meta.icon+'"/></svg>'+meta.label+'</span></td>'+
       '<td><div style="display:flex; gap:6px; justify-content:flex-end;">'+
@@ -1154,10 +1161,10 @@ function viewGenerar(preId, preTask){
     var tid = preTask && m.id===preId ? preTask : (m.tasks[0] && m.tasks[0].id);
     wrap.innerHTML =
       '<div class="field"><label>Tarea del plan</label><select id="genTask">'+
-        m.tasks.map(function(t){ return '<option value="'+t.id+'" '+(t.id===tid?"selected":"")+'>'+escapeHtml(t.nombre)+' (cada '+fmtInt(t.intervalo)+' '+UNIT_LABEL[m.meterType]+')</option>'; }).join("")+
+        m.tasks.map(function(t){ return '<option value="'+t.id+'" '+(t.id===tid?"selected":"")+'>'+escapeHtml(t.nombre)+' (cada '+fmtInt(t.intervalo)+' '+UNIT_LABEL[tUnit(t,m)]+')</option>'; }).join("")+
       '</select></div>'+
       '<div class="field-row">'+
-        '<div class="field"><label>Medidor actual ('+UNIT_LABEL[m.meterType]+')</label><input type="number" id="genMeter" value="'+m.currentMeter+'" min="0" /></div>'+
+        '<div class="field"><label id="genMeterLbl">Medidor actual</label><input type="number" id="genMeter" value="" min="0" step="any" /></div>'+
         '<div class="field"><label>Fecha</label><input type="date" id="genDate" value="'+todayISO()+'" /></div>'+
       '</div>'+
       '<div class="field-row">'+
@@ -1166,8 +1173,15 @@ function viewGenerar(preId, preTask){
       '</div>'+
       '<div id="genPartsArea"></div>'+
       '<div id="genFooter"></div>';
-    document.getElementById("genTask").onchange = renderParts;
+    function syncMeterField(){
+      var tt = getTask(m, document.getElementById("genTask").value);
+      var u = tt ? tUnit(tt, m) : m.meterType;
+      document.getElementById("genMeterLbl").textContent = "Medidor actual ("+UNIT_LABEL[u]+")";
+      document.getElementById("genMeter").value = hasMeter(m,u) ? meterOf(m,u) : "";
+    }
+    document.getElementById("genTask").onchange = function(){ syncMeterField(); renderParts(); };
     document.getElementById("genMeter").oninput = renderParts;
+    syncMeterField();
     renderParts();
   }
 
@@ -1185,7 +1199,7 @@ function viewGenerar(preId, preTask){
         '<div class="qty" style="display:flex; align-items:center; gap:5px;">-<input type="number" class="cq-input" data-cq-part="'+p.id+'" data-cq-stock="'+p.stock+'" value="'+tp.qty+'" min="0" style="width:60px; text-align:right; padding:4px 6px; font-family:var(--font-mono); font-weight:700; border:1px solid var(--border); border-radius:6px;" /></div>'+
       '</div>';
     }).join("");
-    var pr = taskProgress(t, m.currentMeter);
+    var pr = taskProgress(t, m);
     var meta = statusMeta(pr.status);
     area.innerHTML =
       '<div class="field"><label>Repuestos que se van a descontar del stock</label><div class="help">Podés ajustar la cantidad real que se va a usar en este service.</div><div class="parts-check">'+rowsHtml+'</div></div>'+
@@ -1214,7 +1228,10 @@ function viewGenerar(preId, preTask){
   }
 
   function submitMaintenance(m, t){
-    var meter = Number(document.getElementById("genMeter").value)||m.currentMeter;
+    var unidadT = tUnit(t, m);
+    var meterRaw = document.getElementById("genMeter").value;
+    if(meterRaw===""){ toast("Cargá la lectura actual del medidor ("+UNIT_LABEL[unidadT]+")", "err"); return; }
+    var meter = Number(meterRaw);
     var date = document.getElementById("genDate").value || todayISO();
     var tech = document.getElementById("genTech").value.trim();
     var notes = document.getElementById("genNotes").value.trim();
@@ -1233,7 +1250,7 @@ function viewGenerar(preId, preTask){
     var u = currentUser();
     var rec = {
       id: uid("MT"), numero: proximoNumeroOrden(), machineId: m.id, taskId: t.id, taskNombre: t.nombre,
-      fecha: date, medidor: meter, tecnico: tech || "Sin asignar", notas: notes,
+      fecha: date, medidor: meter, medidorUnidad: unidadT, tecnico: tech || "Sin asignar", notas: notes,
       partesUsadas: partesUsadas, estado: "completado", faltante: faltante,
       cargadoPor: u ? u.nombre : "—"
     };
@@ -1241,7 +1258,7 @@ function viewGenerar(preId, preTask){
 
     t.lastMeter = meter;
     t.lastDate = date;
-    if(meter > m.currentMeter) m.currentMeter = meter;
+    setMeter(m, unidadT, meter, true);
 
     saveState();
     toast(faltante ? "Mantenimiento generado con faltante de stock" : "Mantenimiento generado y stock actualizado", faltante?"err":"ok");
@@ -1418,8 +1435,8 @@ function viewAlertas(){
   var vencidos = [];
   state.machines.forEach(function(m){
     m.tasks.forEach(function(t){
-      var pr = taskProgress(t, m.currentMeter);
-      if(pr.status==="crit") vencidos.push(m.nombre+" — "+t.nombre+" (vencido hace "+fmtInt(-pr.remaining)+" "+UNIT_LABEL[m.meterType]+")");
+      var pr = taskProgress(t, m);
+      if(pr.status==="crit") vencidos.push(m.nombre+" — "+t.nombre+" (vencido hace "+fmtInt(-pr.remaining)+" "+UNIT_LABEL[tUnit(t,m)]+")");
     });
   });
   var critParts = state.parts.filter(function(p){ return partStatus(p)==="crit"; }).map(function(p){ return p.nombre+" ("+escapeHtml(p.codigo)+") — 0 en stock"; });
@@ -1477,7 +1494,7 @@ function saveAlertSettings(){
 function simulateAlertSend(){
   if(!isAdmin()){ toast("Solo un administrador puede simular el envío", "err"); return; }
   var vencidos=0, critStock=0;
-  state.machines.forEach(function(m){ m.tasks.forEach(function(t){ if(taskProgress(t, m.currentMeter).status==="crit") vencidos++; }); });
+  state.machines.forEach(function(m){ m.tasks.forEach(function(t){ if(taskProgress(t, m).status==="crit") vencidos++; }); });
   state.parts.forEach(function(p){ if(partStatus(p)==="crit") critStock++; });
   var total = vencidos + critStock;
   if(total===0){ toast("No hay alertas pendientes para enviar", "err"); return; }
@@ -1789,12 +1806,15 @@ function viewOrden(solId){
     if(!m){ area.innerHTML = ""; return; }
     area.innerHTML = '<div class="field-row">'+
       '<div class="field"><label>Tarea del plan (opcional)</label><select id="ordTask"><option value="">Correctivo (fuera del plan)</option>'+
-        m.tasks.map(function(t){ return '<option value="'+t.id+'">'+escapeHtml(t.nombre)+' (cada '+fmtInt(t.intervalo)+' '+UNIT_LABEL[m.meterType]+')</option>'; }).join("")+
+        m.tasks.map(function(t){ return '<option value="'+t.id+'">'+escapeHtml(t.nombre)+' (cada '+fmtInt(t.intervalo)+' '+UNIT_LABEL[tUnit(t,m)]+')</option>'; }).join("")+
       '</select></div>'+
-      '<div class="field"><label>Medidor actual ('+UNIT_LABEL[m.meterType]+')</label><input type="number" id="ordMeter" value="'+(m.currentMeter||"")+'" min="0" placeholder="Lectura del medidor" /></div>'+
+      '<div class="field"><label id="ordMeterLbl">Medidor actual ('+UNIT_LABEL[m.meterType]+')</label><input type="number" id="ordMeter" value="'+(hasMeter(m,m.meterType)?meterOf(m,m.meterType):"")+'" min="0" step="any" placeholder="Lectura del medidor" /></div>'+
     '</div>';
     document.getElementById("ordTask").onchange = function(){
       var t = getTask(m, this.value);
+      var u = t ? tUnit(t, m) : m.meterType;
+      document.getElementById("ordMeterLbl").textContent = "Medidor actual ("+UNIT_LABEL[u]+")";
+      document.getElementById("ordMeter").value = hasMeter(m,u) ? meterOf(m,u) : "";
       if(t){
         document.getElementById("ordParts").innerHTML = "";
         t.parts.forEach(function(tp){ partRow(tp.partId, tp.qty); });
@@ -1840,9 +1860,11 @@ function viewOrden(solId){
         equipo: s.equipo, descripcion: s.descripcion, prioridad: s.prioridad, responsable: s.responsable, cargado_por: s.cargado_por }
     };
     state.maintenances.unshift(rec);
+    var unidadO = m ? (t ? tUnit(t, m) : m.meterType) : null;
+    rec.medidorUnidad = unidadO;
     if(m){
-      if(meter!=null && meter > m.currentMeter) m.currentMeter = meter;
-      if(t){ t.lastMeter = meter!=null ? meter : m.currentMeter; t.lastDate = fecha; }
+      if(meter!=null) setMeter(m, unidadO, meter, true);
+      if(t){ t.lastMeter = meter!=null ? meter : meterOf(m, unidadO); t.lastDate = fecha; }
     }
     btn.disabled = true;
     var cerrar = document.getElementById("ordCerrar");
@@ -1870,6 +1892,216 @@ function ofrecerImprimir(recId, numero){
   var c = document.getElementById("mCancel"); if(c) c.textContent = "Más tarde";
 }
 
+
+/* ================= DOS CONTADORES POR UNIDAD (km y horas de motor) ================= */
+/* m.meters = { km: número|null, horas: número|null }. m.currentMeter queda
+   sincronizado con el contador principal (m.meterType) para lo que ya lo usa. */
+function ensureMeters(m){
+  if(!m.meters || typeof m.meters!=="object") m.meters = { km:null, horas:null };
+  if(m.meters[m.meterType]==null && typeof m.currentMeter==="number" && m.currentMeter>0) m.meters[m.meterType] = m.currentMeter;
+  m.currentMeter = m.meters[m.meterType] || 0;
+  return m.meters;
+}
+function tUnit(t, m){ return t.unidad || (m ? m.meterType : "horas"); }
+function meterOf(m, unidad){ ensureMeters(m); var v = m.meters[unidad]; return typeof v==="number" ? v : 0; }
+function hasMeter(m, unidad){ ensureMeters(m); return typeof m.meters[unidad]==="number"; }
+function setMeter(m, unidad, v, soloSubir){
+  ensureMeters(m);
+  if(v==null || isNaN(v)) return false;
+  var cur = m.meters[unidad];
+  if(soloSubir && typeof cur==="number" && v <= cur) return false;
+  m.meters[unidad] = Math.round(v*10)/10;
+  if(unidad===m.meterType) m.currentMeter = m.meters[unidad];
+  return true;
+}
+function fmtMeter(v, unidad){
+  if(v==null) return "—";
+  return (unidad==="horas" ? (Math.round(v*10)/10).toLocaleString("es-AR") : fmtInt(v)) + " " + UNIT_LABEL[unidad];
+}
+function meterSummary(m){
+  ensureMeters(m);
+  var partes = [];
+  ["km","horas"].forEach(function(u){ if(hasMeter(m,u) || u===m.meterType) partes.push(hasMeter(m,u) ? fmtMeter(m.meters[u], u) : "— "+UNIT_LABEL[u]); });
+  return partes.join(" · ");
+}
+
+/* ================= UNIDADES DE EASYTRACK ================= */
+var EASYTRACK_UNIDADES = [
+  ["AA953OH","Berlingo Uno"], ["AF134IJ","Berlingo Dos"], ["AF799IF","Berlingo Tres"], ["AG899RR","Kangoo RR"],
+  ["MZF033","Mercedes Sprinter"], ["AC285LK","Diecisiete Veintiuno"], ["AD441ZA",""], ["AF465JO",""],
+  ["AG899RP",""], ["AH033TE",""], ["MMR266",""]
+];
+function normPatente(p){ return String(p||"").toUpperCase().replace(/[^A-Z0-9]/g,""); }
+function findByPatente(p){ var n = normPatente(p); return n ? state.machines.find(function(m){ return normPatente(m.patente)===n; }) : null; }
+function nuevaUnidadEasytrack(patente, alias){
+  var p = normPatente(patente);
+  return { id: "ET_"+p, nombre: alias ? alias+" ("+p+")" : p, patente: p, tipo:"vehiculo", motor:"", serie:"",
+    meterType:"km", currentMeter:0, meters:{ km:null, horas:null },
+    tasks:[{ id:"ET_"+p+"_T1", nombre:"Service general", intervalo:10000, unidad:"km", parts:[], lastMeter:null, lastDate:null }],
+    notes:"", easytrack:{ dias:{} } };
+}
+function sembrarUnidadesEasytrack(st){
+  if(st.easytrackUnidadesV1) return false;
+  EASYTRACK_UNIDADES.forEach(function(u){
+    var p = normPatente(u[0]);
+    if(!st.machines.some(function(m){ return normPatente(m.patente)===p; })) st.machines.push(nuevaUnidadEasytrack(p, u[1]));
+  });
+  st.easytrackUnidadesV1 = true;
+  return true;
+}
+
+/* ================= IMPORTAR REPORTE DE EASYTRACK ================= */
+function openEasytrackModal(){
+  if(!isAdmin()){ toast("Solo quien administra Mantenimiento puede importar el reporte de Easytrack", "err"); return; }
+  showModal(
+    '<div class="modal-body" style="max-height:84vh; overflow-y:auto;">'+
+      '<h3>Importar reporte de Easytrack</h3>'+
+      '<p>En Easytrack: <b>Reportes → Reporte Kilómetros/Horas</b>, elegí el período, después <b>clic derecho sobre la tabla → Exportar → Excel (.xlsx)</b> (o CSV) y subí ese archivo acá.</p>'+
+      '<div class="field"><label>Archivo exportado de Easytrack</label><input type="file" id="etFile" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" /></div>'+
+      '<div class="help">Se suman los km y las horas de motor de cada día a la unidad con esa patente. Los días que ya se importaron no se vuelven a sumar, y el día de hoy se saltea porque todavía no terminó.</div>'+
+      '<div id="etPreview" style="margin-top:14px;"></div>'+
+    '</div>'+
+    '<div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cancelar</button><button class="btn btn-primary" id="mSave" disabled>Importar</button></div>'
+  );
+  document.querySelector("#modalRoot .modal").style.maxWidth = "720px";
+  document.getElementById("mCancel").onclick = closeModal;
+  var plan = null;
+  document.getElementById("etFile").onchange = function(){
+    var f = this.files[0];
+    if(!f) return;
+    var prev = document.getElementById("etPreview");
+    prev.innerHTML = '<div class="help">Leyendo el archivo…</div>';
+    document.getElementById("mSave").disabled = true;
+    var fd = new FormData(); fd.append("archivo", f);
+    fetch(API+"/easytrack/leer", { method:"POST", body: fd, credentials:"same-origin", headers:{ "Accept":"application/json" } })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d.ok){ prev.innerHTML = '<div class="banner banner-crit"><svg><use href="#i-alert-circle"/></svg><div>'+escapeHtml(d.error||"No se pudo leer el archivo")+'</div></div>'; return; }
+        plan = armarPlanEasytrack(d.registros);
+        prev.innerHTML = renderPlanEasytrack(plan, d.advertencias||[]);
+        document.getElementById("mSave").disabled = !plan.hayCambios;
+      })
+      .catch(function(){ prev.innerHTML = '<div class="banner banner-crit"><svg><use href="#i-alert-circle"/></svg><div>Sin conexión con el servidor.</div></div>'; });
+  };
+  document.getElementById("mSave").onclick = function(){
+    if(!plan) return;
+    var crear = {};
+    document.querySelectorAll("[data-et-crear]").forEach(function(cb){ crear[cb.dataset.etCrear] = cb.checked; });
+    var res = aplicarPlanEasytrack(plan, crear);
+    saveState();
+    closeModal();
+    toast("Easytrack: "+res.dias+" día(s) importado(s) en "+res.unidades+" unidad(es)"+(res.creadas?" · "+res.creadas+" unidad(es) nueva(s)":""));
+    render();
+  };
+}
+function armarPlanEasytrack(registros){
+  var hoy = todayISO();
+  var porPat = {};
+  registros.forEach(function(r){
+    if(!r.fecha || r.fecha >= hoy) return;
+    var p = normPatente(r.patente); if(!p) return;
+    (porPat[p] = porPat[p] || {}); porPat[p][r.fecha] = { h: +r.horas||0, km: +r.km||0 };   /* último valor por día */
+  });
+  var filas = Object.keys(porPat).sort().map(function(p){
+    var m = findByPatente(p);
+    var dias = porPat[p], nuevos = 0, cambiados = 0, dKm = 0, dH = 0;
+    var previos = (m && m.easytrack && m.easytrack.dias) || {};
+    Object.keys(dias).forEach(function(f){
+      var a = previos[f], b = dias[f];
+      if(!a){ nuevos++; dKm += b.km; dH += b.h; }
+      else if(Math.abs(a.km-b.km)>0.05 || Math.abs(a.h-b.h)>0.005){ cambiados++; dKm += b.km-a.km; dH += b.h-a.h; }
+    });
+    var fechas = Object.keys(dias).sort();
+    return { patente:p, m:m, dias:dias, nuevos:nuevos, cambiados:cambiados, dKm:dKm, dH:dH, desde:fechas[0], hasta:fechas[fechas.length-1] };
+  });
+  return { filas: filas, hayCambios: filas.some(function(f){ return f.nuevos+f.cambiados>0; }) };
+}
+function renderPlanEasytrack(plan, adv){
+  if(!plan.filas.length) return '<div class="banner banner-warn"><svg><use href="#i-alert"/></svg><div>El archivo no tiene días completos para importar (el día de hoy se saltea).</div></div>';
+  var html = adv.length ? '<div class="banner banner-warn"><svg><use href="#i-alert"/></svg><div>'+adv.map(escapeHtml).join("<br>")+'</div></div>' : '';
+  html += '<div class="table-wrap"><table style="min-width:560px;"><thead><tr><th>Patente</th><th>Unidad</th><th>Período</th><th>Días nuevos</th><th class="td-num">+ km</th><th class="td-num">+ horas</th></tr></thead><tbody>'+
+    plan.filas.map(function(f){
+      var unidad = f.m ? escapeHtml(f.m.nombre)
+        : '<label style="display:flex; gap:6px; align-items:center; margin:0; font-weight:600; color:var(--ink);"><input type="checkbox" data-et-crear="'+f.patente+'" checked style="width:15px; height:15px;"> Crear unidad nueva</label>';
+      var dias = f.nuevos + (f.cambiados ? ' <span class="cell-muted">(+'+f.cambiados+' corregido/s)</span>' : '');
+      return '<tr><td class="mono cell-strong">'+f.patente+'</td><td>'+unidad+'</td><td class="mono cell-muted" style="font-size:12px;">'+fmtDate(f.desde)+(f.hasta!==f.desde?' → '+fmtDate(f.hasta):'')+'</td><td>'+dias+'</td>'+
+        '<td class="td-num">'+(Math.round(f.dKm*10)/10).toLocaleString("es-AR")+'</td><td class="td-num">'+(Math.round(f.dH*10)/10).toLocaleString("es-AR")+'</td></tr>';
+    }).join("")+'</tbody></table></div>';
+  if(!plan.hayCambios) html += '<div class="help" style="margin-top:10px;">Todos esos días ya estaban importados: no hay nada nuevo para sumar.</div>';
+  return html;
+}
+function aplicarPlanEasytrack(plan, crear){
+  var res = { dias:0, unidades:0, creadas:0 };
+  plan.filas.forEach(function(f){
+    var m = f.m || findByPatente(f.patente);
+    if(!m){
+      if(!crear[f.patente]) return;
+      m = nuevaUnidadEasytrack(f.patente, "");
+      state.machines.push(m); res.creadas++;
+    }
+    ensureMeters(m);
+    m.easytrack = m.easytrack || { dias:{} };
+    m.easytrack.dias = m.easytrack.dias || {};
+    var dKm = 0, dH = 0, n = 0;
+    Object.keys(f.dias).forEach(function(fecha){
+      var a = m.easytrack.dias[fecha], b = f.dias[fecha];
+      if(a && Math.abs(a.km-b.km)<=0.05 && Math.abs(a.h-b.h)<=0.005) return;
+      dKm += b.km - (a ? a.km : 0); dH += b.h - (a ? a.h : 0); n++;
+      m.easytrack.dias[fecha] = b;
+    });
+    if(!n) return;
+    setMeter(m, "km", (m.meters.km||0) + dKm, false);
+    setMeter(m, "horas", (m.meters.horas||0) + dH, false);
+    m.easytrack.ultimaImportacion = todayISO();
+    res.dias += n; res.unidades++;
+  });
+  return res;
+}
+
+/* ---------- Estado de la sincronización automática con Easytrack ---------- */
+function cargarEstadoEasytrack(){
+  var box = document.getElementById("etEstado");
+  if(!box) return;
+  apiJSON("GET", API+"/easytrack/estado").then(function(res){
+    box = document.getElementById("etEstado");
+    if(!box || !res.d.ok) return;
+    var d = res.d, ult = (d.corridas||[])[0];
+    var txt, cls;
+    if(!d.configurado){
+      cls = "banner-info";
+      txt = '<b>Sincronización automática con Easytrack: sin configurar.</b> Falta cargar el usuario y la contraseña de Easytrack en el servidor. Mientras tanto podés usar "Importar Easytrack" con el Excel del reporte.';
+    } else if(!ult){
+      cls = "banner-info";
+      txt = '<b>Easytrack conectado.</b> Los km y horas de motor se cargan solos todos los días a las '+String(d.hora).padStart(2,"0")+':00. Todavía no corrió ninguna sincronización.';
+    } else if(ult.ok===1){
+      cls = "banner-info";
+      txt = '<b>Easytrack conectado</b> · se sincroniza solo todos los días a las '+String(d.hora).padStart(2,"0")+':00. Última: '+escapeHtml(fmtFechaHoraUTC(ult.fin||ult.inicio))+' — '+escapeHtml((ult.detalle||"").split("\n")[0]);
+    } else if(ult.ok===0){
+      cls = "banner-crit";
+      txt = '<b>La última sincronización con Easytrack falló</b> ('+escapeHtml(fmtFechaHoraUTC(ult.fin||ult.inicio))+'): '+escapeHtml(ult.detalle||"")+'. Se vuelve a intentar en la próxima corrida.';
+    } else {
+      cls = "banner-info"; txt = '<b>Sincronizando con Easytrack…</b>';
+    }
+    box.innerHTML = '<div class="banner '+cls+'" style="align-items:center;"><svg><use href="#i-refresh"/></svg><div style="flex:1;">'+txt+'</div>'+
+      (d.configurado && isAdmin() ? '<button class="btn btn-secondary btn-sm" data-action="sync-easytrack"><svg><use href="#i-refresh"/></svg>Sincronizar ahora</button>' : '')+'</div>';
+  });
+}
+function fmtFechaHoraUTC(s){
+  if(!s) return "—";
+  var d = new Date(String(s).replace(" ","T")+"Z");
+  if(isNaN(d)) return s;
+  return d.toLocaleString("es-AR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" });
+}
+function sincronizarEasytrackAhora(btn){
+  if(btn){ btn.disabled = true; btn.textContent = "Sincronizando…"; }
+  apiJSON("POST", API+"/easytrack/sincronizar", {}).then(function(res){
+    toast(res.d.mensaje || res.d.error || "Listo", res.d.ok ? "ok" : "err");
+    return apiJSON("GET", API+"/estado").then(function(r2){
+      if(r2.d.ok && pendingSaves===0){ serverVersion = r2.d.version; state = normalizeState(r2.d.doc); delete state.__sembrado; }
+      render();
+    });
+  });
+}
 
 /* ================= RENDER DISPATCH ================= */
 function render(){
@@ -1923,6 +2155,8 @@ document.addEventListener("click", function(e){
   else if(action==="stock-filter"){ window.__stockFilter = act.dataset.key; viewStock(); }
   else if(action==="edit-meter"){ openMeterModal(act.dataset.id); }
   else if(action==="import-meters"){ openImportMetersModal(); }
+  else if(action==="import-easytrack"){ openEasytrackModal(); }
+  else if(action==="sync-easytrack"){ sincronizarEasytrackAhora(act); }
   else if(action==="alert-save-settings"){ saveAlertSettings(); }
   else if(action==="alert-simulate-send"){ simulateAlertSend(); }
   else if(action==="stock-adjust"){ openStockModal(act.dataset.id, act.dataset.dir); }
@@ -1937,6 +2171,7 @@ document.addEventListener("click", function(e){
   else if(action==="export-historial"){ exportHistorialCSV(); }
   else if(action==="export-movimientos"){ exportMovimientosCSV(); }
   else if(action==="machine-new"){ openMachineModal(null); }
+  else if(action==="machine-edit"){ openMachineModal(act.dataset.id); }
   else if(action==="machine-delete"){ deleteMachine(act.dataset.id); }
   else if(action==="task-new"){ openTaskModal(act.dataset.id, null); }
   else if(action==="task-edit"){ openTaskModal(act.dataset.mid, act.dataset.id); }
@@ -1946,15 +2181,21 @@ document.addEventListener("click", function(e){
 function openMeterModal(machineId){
   if(!isAdmin()){ toast("Solo un administrador puede editar el medidor manualmente", "err"); return; }
   var m = getMachine(machineId);
+  ensureMeters(m);
   showModal(
-    '<div class="modal-body"><h3>Actualizar medidor</h3><p>'+escapeHtml(m.nombre)+' — medidor actual: <b class="mono">'+fmtInt(m.currentMeter)+' '+UNIT_LABEL[m.meterType]+'</b></p>'+
-    '<div class="field"><label>Nueva lectura ('+UNIT_LABEL[m.meterType]+')</label><input type="number" id="newMeter" value="'+m.currentMeter+'" min="'+m.currentMeter+'" /></div></div>'+
+    '<div class="modal-body"><h3>Actualizar medidores</h3><p>'+escapeHtml(m.nombre)+' — '+meterSummary(m)+'</p>'+
+    '<div class="field-row">'+
+      '<div class="field"><label>Kilómetros</label><input type="number" id="newKm" step="any" value="'+(hasMeter(m,"km")?m.meters.km:"")+'" min="0" /></div>'+
+      '<div class="field"><label>Horas de motor</label><input type="number" id="newHs" step="any" value="'+(hasMeter(m,"horas")?m.meters.horas:"")+'" min="0" /></div>'+
+    '</div><div class="help">Para corregir una lectura cargada por error se puede bajar el valor desde acá.</div></div>'+
     '<div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cancelar</button><button class="btn btn-primary" id="mSave">Guardar</button></div>'
   );
   document.getElementById("mCancel").onclick = closeModal;
   document.getElementById("mSave").onclick = function(){
-    var v = Number(document.getElementById("newMeter").value);
-    if(!isNaN(v) && v>=0){ m.currentMeter = Math.max(m.currentMeter, v); saveState(); toast("Medidor actualizado"); }
+    var k = document.getElementById("newKm").value, hh = document.getElementById("newHs").value;
+    if(k!=="") setMeter(m, "km", Number(k), false);
+    if(hh!=="") setMeter(m, "horas", Number(hh), false);
+    saveState(); toast("Medidores actualizados");
     closeModal(); render();
   };
 }
@@ -1962,18 +2203,20 @@ function openMeterModal(machineId){
 function openImportMetersModal(){
   if(!isAdmin()){ toast("Solo un administrador puede importar lecturas de medidor", "err"); return; }
   var list = state.machines.slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
+  setTimeout(function(){ var md = document.querySelector("#modalRoot .modal"); if(md) md.style.maxWidth = "640px"; }, 0);
   var rows = list.map(function(m){
     return '<tr>'+
-      '<td class="cell-strong">'+escapeHtml(m.nombre)+'<div class="cell-muted" style="font-size:11.5px;">'+TYPE_LABEL[m.tipo]+'</div></td>'+
-      '<td class="mono cell-muted">'+fmtInt(m.currentMeter)+' '+UNIT_LABEL[m.meterType]+'</td>'+
-      '<td><input type="number" class="im-input" data-im-machine="'+m.id+'" value="'+m.currentMeter+'" min="'+m.currentMeter+'" style="width:130px;" /></td>'+
+      '<td class="cell-strong">'+escapeHtml(m.nombre)+'<div class="cell-muted" style="font-size:11.5px;">'+TYPE_LABEL[m.tipo]+(m.patente?' · '+escapeHtml(m.patente):'')+'</div></td>'+
+      '<td class="mono cell-muted" style="font-size:12px;">'+meterSummary(m)+'</td>'+
+      '<td><input type="number" class="im-input" step="any" data-im-machine="'+m.id+'" data-im-unit="km" value="'+(hasMeter(m,"km")?m.meters.km:"")+'" placeholder="km" style="width:120px;" /></td>'+
+      '<td><input type="number" class="im-input" step="any" data-im-machine="'+m.id+'" data-im-unit="horas" value="'+(hasMeter(m,"horas")?m.meters.horas:"")+'" placeholder="horas" style="width:110px;" /></td>'+
     '</tr>';
   }).join("");
   showModal(
     '<div class="modal-body" style="max-height:82vh; overflow-y:auto;">'+
       '<h3>Importar horas / km</h3>'+
-      '<p class="help">Simula la importación de lecturas desde un sistema de rastreo o planilla externa. Cargá el valor actualizado de cada unidad — se dejan sin cambios las que no modifiques.</p>'+
-      '<div class="table-wrap"><table><thead><tr><th>Unidad</th><th>Medidor actual</th><th>Nueva lectura</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+      '<p class="help">Cargá la lectura actual de cada unidad (km y/o horas de motor). Solo se toman los valores que suben; para corregir uno a la baja usá "Medidores" en la ficha de la unidad. Los vehículos de Easytrack se actualizan solos con "Importar Easytrack".</p>'+
+      '<div class="table-wrap"><table><thead><tr><th>Unidad</th><th>Actual</th><th>Km</th><th>Horas motor</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
     '</div>'+
     '<div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cancelar</button><button class="btn btn-primary" id="mSave">Importar lecturas</button></div>'
   );
@@ -1982,12 +2225,12 @@ function openImportMetersModal(){
     var updated = 0;
     document.querySelectorAll("[data-im-machine]").forEach(function(inp){
       var m = getMachine(inp.dataset.imMachine);
-      var v = Number(inp.value);
-      if(m && !isNaN(v) && v > m.currentMeter){ m.currentMeter = v; updated++; }
+      if(!m || inp.value==="") return;
+      if(setMeter(m, inp.dataset.imUnit, Number(inp.value), true)) updated++;
     });
     if(updated===0){ toast("No se cargaron lecturas nuevas", "err"); return; }
     saveState();
-    toast(updated+" unidad(es) actualizada(s) desde la importación");
+    toast(updated+" lectura(s) actualizada(s)");
     closeModal(); render();
   };
 }
@@ -2147,14 +2390,15 @@ function openMachineModal(machineId){
     '<div class="modal-body"><h3>'+(editing?"Editar máquina":"Nueva máquina o vehículo")+'</h3>'+
     '<div class="field"><label>Nombre</label><input type="text" id="mmNombre" value="'+(editing?escapeHtml(editing.nombre):"")+'" placeholder="Ej: Hammelmann 3" /></div>'+
     '<div class="field"><label>Tipo</label><select id="mmTipo" '+(editing?"disabled":"")+'>'+
-      '<option value="motobomba" '+((editing?editing.tipo:"motobomba")==="motobomba"?"selected":"")+'>Motobomba (medidor en horas)</option>'+
-      '<option value="vehiculo" '+((editing?editing.tipo:"")==="vehiculo"?"selected":"")+'>Vehículo (medidor en km)</option>'+
+      '<option value="motobomba" '+((editing?editing.tipo:"motobomba")==="motobomba"?"selected":"")+'>Motobomba (plan por horas)</option>'+
+      '<option value="vehiculo" '+((editing?editing.tipo:"")==="vehiculo"?"selected":"")+'>Vehículo (plan por km)</option>'+
     '</select>'+(editing?'<div class="help">El tipo no se puede cambiar una vez creada la unidad.</div>':'')+'</div>'+
     '<div class="field-row">'+
       '<div class="field"><label>Motor</label><input type="text" id="mmMotor" value="'+(editing?escapeHtml(editing.motor||""):"")+'" placeholder="Ej: Cummins Serie C" /></div>'+
       '<div class="field"><label>Serie / chasis</label><input type="text" id="mmSerie" value="'+(editing?escapeHtml(editing.serie||""):"")+'" placeholder="Opcional" /></div>'+
     '</div>'+
-    (!editing ? '<div class="field"><label>Medidor inicial</label><input type="number" id="mmMeter" value="0" min="0" /></div>' : '')+
+    '<div class="field"><label>Patente (como figura en Easytrack)</label><input type="text" id="mmPatente" value="'+(editing?escapeHtml(editing.patente||""):"")+'" placeholder="Ej: AA953OH — opcional" /></div>'+
+    (!editing ? '<div class="field-row"><div class="field"><label>Km actuales</label><input type="number" id="mmKm" step="any" min="0" placeholder="Opcional" /></div><div class="field"><label>Horas de motor actuales</label><input type="number" id="mmHs" step="any" min="0" placeholder="Opcional" /></div></div>' : '')+
     '</div>'+
     '<div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cancelar</button><button class="btn btn-primary" id="mSave">Guardar</button></div>'
   );
@@ -2164,14 +2408,20 @@ function openMachineModal(machineId){
     var motor = document.getElementById("mmMotor").value.trim();
     var serie = document.getElementById("mmSerie").value.trim();
     if(!nombre){ toast("Ingresá un nombre para la unidad", "err"); return; }
+    var patente = normPatente(document.getElementById("mmPatente").value);
+    var otra = patente ? findByPatente(patente) : null;
+    if(otra && (!editing || otra.id!==editing.id)){ toast("Esa patente ya está en "+otra.nombre, "err"); return; }
     if(editing){
-      editing.motor = motor; editing.serie = serie; editing.nombre = nombre;
+      editing.motor = motor; editing.serie = serie; editing.nombre = nombre; editing.patente = patente;
       toast("Máquina actualizada");
     } else {
       var tipo = document.getElementById("mmTipo").value;
       var meterType = tipo==="vehiculo" ? "km" : "horas";
-      var meter = Math.max(0, Math.round(Number(document.getElementById("mmMeter").value)||0));
-      state.machines.push({ id: uid("M"), nombre: nombre, tipo: tipo, motor: motor, serie: serie, meterType: meterType, currentMeter: meter, tasks: [], notes: "" });
+      var nm = { id: uid("M"), nombre: nombre, tipo: tipo, motor: motor, serie: serie, patente: patente, meterType: meterType, currentMeter: 0, meters:{ km:null, horas:null }, tasks: [], notes: "" };
+      var vk = document.getElementById("mmKm").value, vh = document.getElementById("mmHs").value;
+      if(vk!=="") setMeter(nm, "km", Number(vk), false);
+      if(vh!=="") setMeter(nm, "horas", Number(vh), false);
+      state.machines.push(nm);
       toast("Máquina creada. Agregale tareas a su plan de mantenimiento.");
     }
     saveState(); closeModal(); render();
@@ -2218,7 +2468,10 @@ function openTaskModal(machineId, taskId){
       '<h3>'+(editing?"Editar tarea":"Nueva tarea del plan")+'</h3>'+
       '<p>'+escapeHtml(m.nombre)+'</p>'+
       '<div class="field"><label>Nombre de la tarea</label><input type="text" id="tNombre" value="'+(editing?escapeHtml(editing.nombre):"Service Motor")+'" /></div>'+
-      '<div class="field"><label>Intervalo (cada cuántos '+UNIT_LABEL[m.meterType]+')</label><input type="number" id="tIntervalo" value="'+(editing?editing.intervalo:(m.meterType==="horas"?250:10000))+'" min="1" /></div>'+
+      '<div class="field-row">'+
+        '<div class="field"><label>Vence por</label><select id="tUnidad"><option value="km" '+(((editing?tUnit(editing,m):m.meterType))==="km"?"selected":"")+'>Kilómetros</option><option value="horas" '+(((editing?tUnit(editing,m):m.meterType))==="horas"?"selected":"")+'>Horas de motor</option></select></div>'+
+        '<div class="field"><label>Intervalo</label><input type="number" id="tIntervalo" value="'+(editing?editing.intervalo:(m.meterType==="horas"?250:10000))+'" min="1" /></div>'+
+      '</div>'+
       '<div class="field"><label>Repuestos que consume esta tarea</label>'+
         '<div style="display:flex; gap:8px; margin-bottom:8px;">'+
           '<input type="search" id="tPartFilter" placeholder="Filtrar repuestos por nombre o código…" style="flex:1;" />'+
@@ -2239,7 +2492,7 @@ function openTaskModal(machineId, taskId){
           '</div>'+
         '</div>'+
         '<div class="parts-picker" id="partsPicker">'+partsListHtml+'</div>'+
-        '<div class="help">Tildá los repuestos y ajustá la cantidad que se descuenta por service. Si el repuesto no existe en el catálogo, creálo con "Nuevo repuesto".</div>'+
+        '<div class="help">Tildá los repuestos y ajustá la cantidad que se descuenta por service (es opcional). Si el repuesto no existe en el catálogo, creálo con "Nuevo repuesto".</div>'+
       '</div>'+
     '</div>'+
     '<div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cancelar</button><button class="btn btn-primary" id="mSave">Guardar</button></div>'
@@ -2302,12 +2555,13 @@ function openTaskModal(machineId, taskId){
       var qty = Math.max(1, Math.round(Number(qtyInput.value)||1));
       parts.push({ partId: cb.value, qty: qty });
     });
-    if(parts.length===0){ toast("Seleccioná al menos un repuesto para la tarea", "err"); return; }
+    var unidadSel = document.getElementById("tUnidad").value;
     if(editing){
-      editing.nombre = nombre; editing.intervalo = intervalo; editing.parts = parts;
+      if(tUnit(editing, m)!==unidadSel){ editing.lastMeter = null; editing.lastDate = null; }
+      editing.nombre = nombre; editing.intervalo = intervalo; editing.parts = parts; editing.unidad = unidadSel;
       toast("Tarea actualizada");
     } else {
-      m.tasks.push({ id: uid("T"), nombre: nombre, intervalo: intervalo, unidad: m.meterType, parts: parts, lastMeter: m.currentMeter, lastDate: todayISO() });
+      m.tasks.push({ id: uid("T"), nombre: nombre, intervalo: intervalo, unidad: unidadSel, parts: parts, lastMeter: hasMeter(m, unidadSel) ? meterOf(m, unidadSel) : null, lastDate: hasMeter(m, unidadSel) ? todayISO() : null });
       toast("Tarea agregada al plan");
     }
     saveState(); closeModal(); render();
@@ -2402,7 +2656,8 @@ function printMaintenance(id){
       (rec.equipoTexto ? '<div><b>Equipo / zona</b>'+escapeHtml(rec.equipoTexto)+'</div>' : '')+
       '<div><b>Tarea</b>'+escapeHtml(rec.taskNombre)+'</div>'+
       '<div><b>Fecha</b>'+fmtDate(rec.fecha)+'</div>'+
-      '<div><b>Medidor al momento del service</b>'+(rec.medidor!=null ? fmtInt(rec.medidor)+' '+(m?UNIT_LABEL[m.meterType]:"") : "—")+'</div>'+
+      '<div><b>Medidor al momento del service</b>'+(rec.medidor!=null ? fmtInt(rec.medidor)+' '+(m?UNIT_LABEL[rec.medidorUnidad||m.meterType]:"") : "—")+'</div>'+
+      (m && m.patente ? '<div><b>Patente</b>'+escapeHtml(m.patente)+'</div>' : '')+
       '<div><b>Técnico responsable</b>'+escapeHtml(rec.tecnico||"—")+'</div>'+
       '<div><b>Cargado por</b>'+escapeHtml(rec.cargadoPor||"—")+'</div>'+
       '<div><b>Notas</b>'+escapeHtml(rec.notas||"—")+'</div>'+

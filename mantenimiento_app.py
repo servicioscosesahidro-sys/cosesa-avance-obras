@@ -32,6 +32,8 @@ ENDPOINTS = {
     "mantenimiento_api_guardar": "modulo_mantenimiento",
     "mantenimiento_api_solicitudes": "modulo_mantenimiento",
     "mantenimiento_api_solicitud_estado": "modulo_mantenimiento",
+    "mantenimiento_easytrack_leer": "modulo_mantenimiento", "mantenimiento_easytrack_estado": "modulo_mantenimiento",
+    "mantenimiento_easytrack_sincronizar": "modulo_mantenimiento",
 }
 
 SCHEMA = """
@@ -47,6 +49,8 @@ CREATE TABLE IF NOT EXISTS mantenimiento_app_estado (
 
 def migrate(conn):
     conn.executescript(SCHEMA)
+    import easytrack_sync
+    easytrack_sync.migrate(conn)
 
 
 def init_app(app, h):
@@ -210,3 +214,46 @@ def init_app(app, h):
         db.commit()
         db.close()
         return jsonify({"ok": True})
+
+
+def init_easytrack(app, h):
+    """Rutas de Easytrack: leer un reporte exportado, ver el estado de la
+    sincronización automática y forzar una sincronización ahora."""
+    import easytrack_sync
+
+    def _admin(user):
+        return h.is_admin(user) or h.puede("modulo_mantenimiento_admin", user)
+
+    @app.route("/mantenimiento/api/easytrack/leer", methods=["POST"])
+    @h.cosesa_required
+    def mantenimiento_easytrack_leer():
+        user = h.get_current_user()
+        if not _admin(user):
+            return jsonify({"ok": False, "error": "Solo quien administra Mantenimiento puede importar."}), 403
+        f = request.files.get("archivo")
+        if not f:
+            return jsonify({"ok": False, "error": "Elegí el archivo exportado de Easytrack."}), 400
+        contenido = f.read()
+        if len(contenido) > 15 * 1024 * 1024:
+            return jsonify({"ok": False, "error": "El archivo es demasiado grande."}), 400
+        try:
+            registros, adv = easytrack_sync.leer_archivo(f.filename, contenido)
+        except Exception as e:  # noqa: BLE001
+            return jsonify({"ok": False, "error": str(e)}), 400
+        return jsonify({"ok": True, "registros": registros, "advertencias": adv})
+
+    @app.route("/mantenimiento/api/easytrack/estado")
+    @h.cosesa_required
+    def mantenimiento_easytrack_estado():
+        if not h.puede("modulo_mantenimiento", h.get_current_user()):
+            return jsonify({"ok": False}), 403
+        return jsonify({"ok": True, **easytrack_sync.estado()})
+
+    @app.route("/mantenimiento/api/easytrack/sincronizar", methods=["POST"])
+    @h.cosesa_required
+    def mantenimiento_easytrack_sincronizar():
+        user = h.get_current_user()
+        if not _admin(user):
+            return jsonify({"ok": False, "error": "Solo quien administra Mantenimiento puede sincronizar."}), 403
+        ok, msg, _res = easytrack_sync.sincronizar(origen=user["nombre"] or user["username"])
+        return jsonify({"ok": ok, "mensaje": msg}), (200 if ok else 400)

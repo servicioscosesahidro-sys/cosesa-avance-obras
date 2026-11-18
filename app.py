@@ -582,6 +582,8 @@ ENDPOINT_PERMISO = {
     "mantenimiento_app": "modulo_mantenimiento", "mantenimiento_api_estado": "modulo_mantenimiento",
     "mantenimiento_api_guardar": "modulo_mantenimiento", "mantenimiento_api_solicitudes": "modulo_mantenimiento",
     "mantenimiento_api_solicitud_estado": "modulo_mantenimiento",
+    "mantenimiento_easytrack_leer": "modulo_mantenimiento", "mantenimiento_easytrack_estado": "modulo_mantenimiento",
+    "mantenimiento_easytrack_sincronizar": "modulo_mantenimiento",
 }
 
 # Cómo encontrar la obra a partir del parámetro de la URL.
@@ -3853,6 +3855,9 @@ _mant_app.init_app(app, _types.SimpleNamespace(
     get_db=get_db, get_current_user=get_current_user, cosesa_required=cosesa_required,
     puede=puede, is_admin=is_admin,
 ))
+_mant_app.init_easytrack(app, _types.SimpleNamespace(
+    get_current_user=get_current_user, cosesa_required=cosesa_required, puede=puede, is_admin=is_admin,
+))
 
 # Pantalla de inicio de la Plataforma COSESA (módulos)
 import plataforma as _plataforma
@@ -3863,6 +3868,8 @@ _plataforma.init_app(app, _types.SimpleNamespace(
 restore_latest()
 init_db()
 iniciar_backup_periodico()
+import easytrack_sync as _easytrack_sync
+_easytrack_sync.iniciar_programador()   # horas y km de Easytrack todas las madrugadas
 
 
 def _bootstrap_admin():
