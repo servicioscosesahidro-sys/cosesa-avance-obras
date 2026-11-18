@@ -243,8 +243,15 @@ def descargar(cfg, desde, hasta):
         pass
     if isinstance(datos, dict) and datos.get("error"):
         raise RuntimeError("Easytrack devolvió un error al pedir el reporte.")
+    if isinstance(datos, dict):
+        for k in ("data", "rows", "result", "records", "items"):
+            if isinstance(datos.get(k), list):
+                datos = datos[k]
+                break
     if not isinstance(datos, list):
-        raise RuntimeError("Respuesta inesperada de Easytrack.")
+        raise RuntimeError("Respuesta inesperada de Easytrack (" + type(datos).__name__ + ": " + ", ".join(list(datos)[:8] if isinstance(datos, dict) else []) + ").")
+    if not datos:
+        raise RuntimeError(f"Easytrack devolvió el reporte vacío (empresa {company}, {desde:%d/%m} al {hasta:%d/%m}).")
     registros = []
     for x in datos:
         pat = norm_patente(x.get("domain_veh"))
@@ -253,6 +260,10 @@ def descargar(cfg, desde, hasta):
             continue
         registros.append({"patente": pat, "fecha": fecha, "horas": round(a_horas(x.get("time_er")), 4),
                           "km": round(a_km(x.get("km_total")), 2)})
+    if not registros:
+        ej = datos[0] if isinstance(datos[0], dict) else {}
+        campos = ", ".join(f"{k}={str(v)[:16]!r}" for k, v in list(ej.items())[:10])
+        raise RuntimeError(f"Easytrack devolvió {len(datos)} fila(s) pero con otro formato. Campos de la primera: {campos}")
     return registros
 
 
