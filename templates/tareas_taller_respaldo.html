@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Respaldo Tareas de Taller · COSESA{% endblock %}
+{% block content %}
+<h1>Respaldo de Tareas de Taller</h1>
+<div class="card">
+  <p class="subtitle">Todos los días a las {{ hora }}:00 (hora de Argentina) la plataforma baja <strong>todos los datos</strong> de la app Tareas de Taller (tareas, subtareas, personal, equipos y las tareas privadas) y guarda una copia en el repositorio <strong>privado</strong> de backups de GitHub, una por día. Solo lee: nunca modifica ni borra nada de la app.</p>
+  {% if not configurado %}
+    <div class="flash flash-error">Falta configurar en Render las variables <code>TAREAS_FIREBASE_APIKEY</code> y <code>TAREAS_FIREBASE_URL</code>.</div>
+  {% endif %}
+  <table style="margin:14px 0;">
+    <tr><td><strong>Último respaldo correcto</strong></td><td>{{ est.ultimo_ok or "todavía ninguno" }}{% if est.origen %} ({{ est.origen }}){% endif %}</td></tr>
+    {% if est.resumen %}<tr><td><strong>Contenido</strong></td><td>{{ est.resumen.tareas }} tareas · {{ est.resumen.subtareas }} subtareas · {{ est.resumen.personal }} personas · {{ est.resumen.equipos }} equipos · {{ est.resumen.tareas_privadas }} tareas privadas · {{ ((est.bytes or 0) / 1024)|round|int }} KB</td></tr>{% endif %}
+    {% if est.ultimo_error %}<tr><td><strong>Último error</strong></td><td style="color:#b42318;">{{ est.ultimo_error }}</td></tr>{% endif %}
+  </table>
+  <form method="post">
+    <button class="btn" type="submit" {% if not configurado %}disabled{% endif %}>Respaldar ahora</button>
+  </form>
+  <p class="subtitle" style="margin-top:14px;">Los archivos adjuntos (fotos y documentos) quedan en Firebase Storage; este respaldo guarda la lista de adjuntos con sus enlaces.</p>
+</div>
+{% endblock %}
