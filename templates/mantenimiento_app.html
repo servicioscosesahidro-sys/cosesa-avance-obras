@@ -962,7 +962,7 @@ function renderMaintTable(list, showMachineFilterNote){
     return '<tr>'+
       '<td class="cell-muted mono row-link" data-nav="ot" data-id="'+rec.id+'" style="white-space:nowrap;">'+fmtDate(rec.fecha)+(rec.numero?'<div style="font-size:12px; font-weight:800; color:var(--brand-700, var(--ink));">'+escapeHtml(rec.numero)+'</div>':'')+'</td>'+
       (m ? '<td class="cell-strong row-link" data-nav="flota" data-id="'+rec.machineId+'">'+escapeHtml(nombreUnidad)+origen+'</td>' : '<td class="cell-strong">'+escapeHtml(nombreUnidad)+origen+'</td>')+
-      '<td>'+(tipoMantDe(rec)==="correctivo" && rec.taskNombre==="Correctivo" ? pillTipo(rec).replace('pill-tipo ','pill-tipo solo ') : escapeHtml(rec.taskNombre)+pillTipo(rec))+(rec.lugar==="externo"?'<div class="cell-muted" style="font-size:11.5px;">'+escapeHtml(lugarTxt(rec))+'</div>':'')+(rec.trabajo?'<div class="cell-muted" style="font-size:11.5px; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="'+escapeHtml(rec.trabajo)+'">'+escapeHtml(rec.trabajo)+'</div>':'')+'</td>'+
+      '<td>'+(tipoMantDe(rec)==="correctivo" && rec.taskNombre==="Correctivo" ? pillTipo(rec).replace('pill-tipo ','pill-tipo solo ') : escapeHtml(rec.taskNombre)+pillTipo(rec))+(rec.lugar==="externo"?'<div class="cell-muted" style="font-size:11.5px;">'+escapeHtml(lugarTxt(rec))+'</div>':'')+(rec.ttTarea?'<div class="cell-muted" style="font-size:11.5px;">Tareas taller N° '+escapeHtml(String(rec.ttTarea.numero))+'</div>':'')+(rec.trabajo?'<div class="cell-muted" style="font-size:11.5px; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="'+escapeHtml(rec.trabajo)+'">'+escapeHtml(rec.trabajo)+'</div>':'')+'</td>'+
       '<td class="mono">'+(rec.medidor!=null ? fmtInt(rec.medidor)+' '+(m?UNIT_LABEL[rec.medidorUnidad||m.meterType]:"") : "—")+'</td>'+
       '<td>'+escapeHtml(rec.tecnico||"—")+'</td>'+
       '<td style="max-width:260px;"><div style="display:flex; flex-wrap:wrap; gap:5px;">'+partsChips+'</div></td>'+
@@ -995,7 +995,7 @@ function viewFlota(){
         }).join("")+
       '</div>'+
     '</div>'+
-    (isAdmin() ? '<div style="display:flex; gap:8px; flex-wrap:wrap;"><button class="btn btn-secondary btn-sm" data-action="import-easytrack"><svg><use href="#i-upload"/></svg>Importar Easytrack</button><button class="btn btn-secondary btn-sm" data-action="import-meters"><svg><use href="#i-gauge"/></svg>Cargar medidores</button><button class="btn btn-primary btn-sm" data-action="machine-new"><svg><use href="#i-plus"/></svg>Nueva máquina</button></div>' : '')+
+    (isAdmin() ? '<div style="display:flex; gap:8px; flex-wrap:wrap;"><button class="btn btn-secondary btn-sm" data-action="import-easytrack"><svg><use href="#i-upload"/></svg>Importar Easytrack</button><button class="btn btn-secondary btn-sm" data-action="import-meters"><svg><use href="#i-gauge"/></svg>Cargar medidores</button><button class="btn btn-secondary btn-sm" data-action="tt-vincular"><svg><use href="#i-layers"/></svg>Vincular con Tareas taller</button><button class="btn btn-primary btn-sm" data-action="machine-new"><svg><use href="#i-plus"/></svg>Nueva máquina</button></div>' : '')+
   '</div>';
 
   var any = false;
@@ -1044,7 +1044,7 @@ function viewMachineDetail(id){
       '<div style="display:flex; gap:14px;">'+
         '<div class="mach-ic" style="width:52px; height:52px; border-radius:14px;"><svg style="width:26px;height:26px;"><use href="#'+machineIcon(m.tipo)+'"/></svg></div>'+
         '<div>'+
-          '<div class="badge-type"><svg><use href="#'+(m.tipo==="vehiculo"?"i-truck":"i-gauge")+'"/></svg>'+TYPE_LABEL[m.tipo]+(m.patente?(' · Patente '+escapeHtml(m.patente)):"")+(m.serie?(' · Serie '+escapeHtml(m.serie)):"")+'</div>'+
+          '<div class="badge-type"><svg><use href="#'+(m.tipo==="vehiculo"?"i-truck":"i-gauge")+'"/></svg>'+TYPE_LABEL[m.tipo]+(m.patente?(' · Patente '+escapeHtml(m.patente)):"")+(m.serie?(' · Serie '+escapeHtml(m.serie)):"")+(m.ttEquipoId?(' · Tareas taller: '+escapeHtml(m.ttEquipoTxt||"vinculado")):"")+'</div>'+
           '<h2 style="font-size:24px; margin-top:2px;">'+escapeHtml(m.nombre)+'</h2>'+
           '<div class="cell-muted" style="font-size:13px; max-width:520px;">'+escapeHtml(m.motor||"Motor no especificado")+'</div>'+
         '</div>'+
@@ -2214,6 +2214,7 @@ function viewOT(id){
     '</div>';
 
   var u = m ? unidadMedidor(rec.medidorUnidad || m.meterType, m) : null;
+  html += htmlTTCard(rec);
   html += '<div class="card card-pad" style="max-width:860px;"><div class="section-head" style="margin-bottom:10px;"><h2>Datos de la orden</h2>'+(anulada?'<span class="hint">Orden anulada: solo lectura</span>':'')+'</div>'+
     '<fieldset id="otForm" style="border:0; padding:0; margin:0;" '+(anulada?"disabled":"")+'>'+
     '<div class="field-row">'+
@@ -2290,6 +2291,8 @@ function viewOT(id){
     };
   });
   document.getElementById("otCopiar").onclick = function(){ modalCopiarOT(rec); };
+  wireTTCard(rec);
+  if(window.__abrirTT===rec.id){ window.__abrirTT = null; if(!rec.ttTarea) modalCrearTareaTT(rec); }
 }
 
 function modalRealizada(rec){
@@ -2448,6 +2451,172 @@ function viewIndicadores(){
     'Para que los indicadores sean confiables, cargá el <b>inicio y fin</b> de cada orden.</div>';
   document.getElementById("view").innerHTML = html;
   document.getElementById("indTipo").onchange = function(){ window.__indTipo = this.value; viewIndicadores(); };
+}
+
+/* ================= TAREAS DE TALLER (app externa, vía servidor) ================= */
+var TT = { cat: null, url: "https://tareastaller.netlify.app/" };
+function ttCatalogo(refrescar){
+  if(TT.cat && !refrescar) return Promise.resolve(TT.cat);
+  return apiJSON("GET", API+"/tt/catalogo"+(refrescar?"?refrescar=1":"")).then(function(res){
+    if(!res.d || !res.d.ok) throw new Error((res.d && res.d.error) || "No se pudo conectar con Tareas taller");
+    TT.cat = res.d; return TT.cat;
+  });
+}
+function ttEquipo(id){ return TT.cat ? TT.cat.equipos.find(function(e){ return e.id===id; }) : null; }
+function ttEquipoTxt(e){ return e ? (e.codigo ? e.codigo+" · " : "")+e.titulo : ""; }
+function ttNorm(s){
+  return (" "+String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\(.*?\)/g," ").replace(/[^a-z0-9]+/g," ")+" ")
+    .replace(/ uno /g," 1 ").replace(/ dos /g," 2 ").replace(/ tres /g," 3 ").trim().split(/\s+/).filter(Boolean);
+}
+/* Sugiere el equipo de Tareas taller que corresponde a una unidad (por nombre y tipo) */
+function ttSugerir(m){
+  if(!TT.cat) return null;
+  var tok = ttNorm(m.nombre + " " + (m.patente||"")), mejor = null, mejorN = 0;
+  TT.cat.equipos.forEach(function(e){
+    var esBomba = /motobomba/i.test(e.tipo||"");
+    if((m.tipo==="motobomba") !== esBomba) return;
+    var et = ttNorm(e.titulo);
+    if(!et.length || !et.every(function(w){ return tok.indexOf(w)>=0; })) return;
+    if(et.length > mejorN){ mejor = e; mejorN = et.length; }
+  });
+  return mejor;
+}
+function ttOpcionesEquipos(sel){
+  var porTipo = {};
+  (TT.cat ? TT.cat.equipos : []).forEach(function(e){ (porTipo[e.tipo||"Otros"] = porTipo[e.tipo||"Otros"] || []).push(e); });
+  return '<option value="">— Sin equipo —</option>'+Object.keys(porTipo).sort().map(function(t){
+    return '<optgroup label="'+escapeHtml(t)+'">'+porTipo[t].map(function(e){ return '<option value="'+e.id+'" '+(e.id===sel?"selected":"")+'>'+escapeHtml(ttEquipoTxt(e))+'</option>'; }).join("")+'</optgroup>';
+  }).join("");
+}
+
+/* ---- Vincular unidades con equipos de Tareas taller ---- */
+function openVincularTT(){
+  showModal('<div class="modal-body"><h3>Vincular con Tareas taller</h3><p class="cell-muted">Cargando equipos de Tareas taller…</p></div>');
+  ttCatalogo(true).then(function(){
+    var lista = state.machines.slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
+    showModal('<div class="modal-body" style="max-height:82vh; overflow-y:auto;"><h3>Vincular con Tareas taller</h3>'+
+      '<p>Elegí qué equipo de la app Tareas taller es cada máquina o vehículo. Así, las tareas que se creen desde una orden quedan con el equipo correcto.</p>'+
+      '<div style="margin-bottom:10px;"><button type="button" class="btn btn-secondary btn-sm" id="ttSug"><svg><use href="#i-refresh"/></svg>Sugerir los que faltan</button> <span class="hint" id="ttSugTxt"></span></div>'+
+      '<div class="table-wrap"><table style="min-width:520px;"><thead><tr><th>Unidad de Mantenimiento</th><th>Equipo en Tareas taller</th></tr></thead><tbody>'+
+      lista.map(function(m){
+        return '<tr><td class="cell-strong">'+escapeHtml(m.nombre)+'<div class="cell-muted" style="font-size:11.5px; font-weight:500;">'+TYPE_LABEL[m.tipo]+(m.patente?' · '+escapeHtml(m.patente):'')+'</div></td>'+
+          '<td><select data-tt-m="'+m.id+'" style="min-width:240px;">'+ttOpcionesEquipos(m.ttEquipoId||"")+'</select></td></tr>';
+      }).join("")+'</tbody></table></div></div>'+
+      '<div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cancelar</button><button class="btn btn-primary" id="mSave">Guardar vínculos</button></div>');
+    document.querySelector("#modalRoot .modal").style.maxWidth = "720px";
+    document.getElementById("mCancel").onclick = closeModal;
+    document.getElementById("ttSug").onclick = function(){
+      var n = 0;
+      document.querySelectorAll("[data-tt-m]").forEach(function(s){
+        if(s.value) return;
+        var e = ttSugerir(getMachine(s.dataset.ttM));
+        if(e){ s.value = e.id; s.style.outline = "2px solid #f2c94c"; n++; }
+      });
+      document.getElementById("ttSugTxt").textContent = n ? n+" sugerencia(s) marcadas en amarillo: revisalas antes de guardar." : "No encontré más coincidencias.";
+    };
+    document.getElementById("mSave").onclick = function(){
+      var n = 0;
+      document.querySelectorAll("[data-tt-m]").forEach(function(s){
+        var m = getMachine(s.dataset.ttM); if(!m) return;
+        var v = s.value || null;
+        if((m.ttEquipoId||null) !== v){ m.ttEquipoId = v; n++; }
+        m.ttEquipoTxt = v ? ttEquipoTxt(ttEquipo(v)) : null;
+      });
+      saveState(); closeModal(); toast(n ? n+" vínculo(s) guardados" : "Sin cambios"); render();
+    };
+  }).catch(function(e){
+    showModal('<div class="modal-body"><h3>Vincular con Tareas taller</h3><div class="banner banner-crit"><svg><use href="#i-alert-circle"/></svg><div>'+escapeHtml(e.message)+'</div></div></div><div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cerrar</button></div>');
+    document.getElementById("mCancel").onclick = closeModal;
+  });
+}
+
+/* ---- Tarjeta "Tareas taller" dentro de una orden ---- */
+function htmlTTCard(rec){
+  var anulada = rec.estado==="anulado";
+  var html = '<div class="card card-pad" id="ttCard" style="max-width:860px; margin-bottom:16px;"><div class="section-head" style="margin-bottom:8px;"><h2>Tareas taller</h2>'+
+    '<a class="btn btn-ghost btn-sm" href="'+TT.url+'" target="_blank" rel="noopener">Abrir Tareas taller ↗</a></div>';
+  if(rec.ttTarea){
+    html += '<div>Tarea <b>N° '+escapeHtml(String(rec.ttTarea.numero))+'</b> creada en la sección Tareas Taller el '+fmtDT(rec.ttTarea.creadaEn)+' por '+escapeHtml(rec.ttTarea.por||"—")+'.</div>'+
+      '<div id="ttEstado" class="cell-muted" style="margin-top:8px;">Consultando avance…</div>';
+  } else {
+    html += '<div class="cell-muted" style="margin-bottom:10px;">Esta orden todavía no tiene una tarea en la app Tareas taller.</div>'+
+      (anulada ? '' : '<button class="btn btn-secondary btn-sm" id="ttCrearBtn"><svg><use href="#i-plus"/></svg>Crear tarea en Tareas taller</button>');
+  }
+  return html + '</div>';
+}
+function wireTTCard(rec){
+  var b = document.getElementById("ttCrearBtn");
+  if(b) b.onclick = function(){ modalCrearTareaTT(rec); };
+  if(rec.ttTarea){
+    apiJSON("POST", API+"/tt/estado", { ids:[rec.ttTarea.id] }).then(function(res){
+      var el = document.getElementById("ttEstado"); if(!el) return;
+      if(!res.d || !res.d.ok){ el.textContent = "No se pudo consultar el avance ("+((res.d&&res.d.error)||"sin conexión")+")."; return; }
+      var t = res.d.tareas[rec.ttTarea.id];
+      if(t===null){ el.innerHTML = '<span style="color:var(--crit);">La tarea ya no existe en Tareas taller (la eliminaron).</span>'; return; }
+      if(!t){ el.textContent = ""; return; }
+      var av = Number(t.avance)||0;
+      el.innerHTML = '<div style="display:flex; align-items:center; gap:10px; max-width:420px;"><span>Avance en Tareas taller: <b>'+av+' de 5</b>'+(t.archivada?' · archivada':'')+'</span>'+
+        '<div class="progress" style="flex:1;"><i style="width:'+(av*20)+'%; background:'+(av>=5?"var(--ok)":"var(--warn)")+';"></i></div></div>'+
+        (av>=5 && rec.estado!=="realizada" ? '<div style="margin-top:6px;">El taller ya la marcó como terminada: podés pasar la orden a <b>Realizada</b>.</div>' : '');
+    });
+  }
+}
+function modalCrearTareaTT(rec){
+  var m = getMachine(rec.machineId);
+  showModal('<div class="modal-body"><h3>Crear tarea en Tareas taller</h3><p class="cell-muted">Cargando datos de Tareas taller…</p></div>');
+  ttCatalogo(false).then(function(cat){
+    var equipoSel = m ? (m.ttEquipoId || (ttSugerir(m)||{}).id || "") : "";
+    var tecN = ttNorm(rec.tecnico);
+    var resp = cat.personal.find(function(p){ var pn = ttNorm(p.nombre); return pn.length && tecN.length && (pn.every(function(w){ return tecN.indexOf(w)>=0; }) || tecN.every(function(w){ return pn.indexOf(w)>=0; })); });
+    var area = cat.areas.indexOf("Mantenimiento")>=0 ? "Mantenimiento" : (cat.areas[0]||"");
+    var primera = lineasTareas(rec.trabajo)[0] || "";
+    var titulo = (rec.numero||"")+" · "+(m?m.nombre:(rec.equipoTexto||""))+" · "+(rec.taskNombre && rec.taskNombre!=="Correctivo" ? rec.taskNombre : (primera || "Correctivo"));
+    var obs = [];
+    obs.push("Orden de mantenimiento "+(rec.numero||"")+" ("+(tipoMantDe(rec)==="preventivo"?"preventivo":"correctivo")+") · "+lugarTxt(rec));
+    if(rec.trabajo) obs.push(rec.trabajo);
+    lineasTareas(rec.tareas).forEach(function(l){ obs.push("- "+l); });
+    if(rec.notas) obs.push("Notas: "+rec.notas);
+    showModal('<div class="modal-body" style="max-height:82vh; overflow-y:auto;"><h3>Crear tarea en Tareas taller</h3>'+
+      '<p>La tarea aparece en la sección <b>Tareas Taller</b> de la app, con su número propio.</p>'+
+      '<div class="field"><label>Título</label><input type="text" id="ttTitulo" value="'+escapeHtml(titulo)+'" /></div>'+
+      '<div class="field-row">'+
+        '<div class="field"><label>Área</label><select id="ttArea">'+cat.areas.map(function(a){ return '<option '+(a===area?"selected":"")+'>'+escapeHtml(a)+'</option>'; }).join("")+'</select></div>'+
+        '<div class="field"><label>Responsable</label><select id="ttResp"><option value="">Elegí…</option>'+cat.personal.map(function(p){ return '<option value="'+p.id+'" '+(resp&&resp.id===p.id?"selected":"")+'>'+escapeHtml(p.nombre)+'</option>'; }).join("")+'</select></div>'+
+      '</div>'+
+      '<div class="field"><label>Equipo</label><select id="ttEquipo">'+ttOpcionesEquipos(equipoSel)+'</select>'+
+        (m && !m.ttEquipoId ? '<label style="display:flex; gap:8px; align-items:center; font-weight:600; color:var(--ink); margin-top:8px;"><input type="checkbox" id="ttGuardarVinculo" checked style="width:16px; height:16px;"> Recordar este equipo para '+escapeHtml(m.nombre)+'</label>' : '')+'</div>'+
+      '<div class="field-row">'+
+        '<div class="field"><label>Prioridad (1 a 5)</label><select id="ttPrio">'+[1,2,3,4,5].map(function(n){ return '<option '+(n===3?"selected":"")+'>'+n+'</option>'; }).join("")+'</select></div>'+
+        '<div class="field"><label>Fecha fin objetivo</label><input type="date" id="ttFecha" value="'+escapeHtml(rec.fecha||todayISO())+'" /></div>'+
+      '</div>'+
+      '<div class="field"><label>Observaciones</label><textarea id="ttObs" rows="6">'+escapeHtml(obs.join("\n"))+'</textarea></div>'+
+      '</div><div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cancelar</button><button class="btn btn-primary" id="mSave">Crear tarea</button></div>');
+    document.querySelector("#modalRoot .modal").style.maxWidth = "620px";
+    document.getElementById("mCancel").onclick = closeModal;
+    document.getElementById("mSave").onclick = function(){
+      var btn = this;
+      var datos = { titulo: document.getElementById("ttTitulo").value.trim(), area: document.getElementById("ttArea").value,
+        responsableId: document.getElementById("ttResp").value, equipoId: document.getElementById("ttEquipo").value || null,
+        prioridad: Number(document.getElementById("ttPrio").value), fechaObjetivo: document.getElementById("ttFecha").value || null,
+        observaciones: document.getElementById("ttObs").value, orden: rec.numero||"" };
+      if(!datos.titulo){ toast("Poné un título", "err"); return; }
+      if(!datos.responsableId){ toast("Elegí el responsable de la tarea", "err"); return; }
+      btn.disabled = true; btn.textContent = "Creando…";
+      apiJSON("POST", API+"/tt/tareas", datos).then(function(res){
+        if(!res.d || !res.d.ok){ btn.disabled = false; btn.textContent = "Crear tarea"; toast((res.d&&res.d.error)||"No se pudo crear la tarea", "err"); return; }
+        rec.ttTarea = { id: res.d.id, numero: res.d.numero, creadaEn: ahoraLocal(), por: usuarioActualTxt() };
+        var gv = document.getElementById("ttGuardarVinculo");
+        if(m && gv && gv.checked && datos.equipoId){ m.ttEquipoId = datos.equipoId; m.ttEquipoTxt = ttEquipoTxt(ttEquipo(datos.equipoId)); }
+        saveState(); closeModal(); toast("Tarea N° "+res.d.numero+" creada en Tareas taller"); render();
+      }).catch(function(){ btn.disabled = false; btn.textContent = "Crear tarea"; toast("No se pudo conectar con Tareas taller", "err"); });
+    };
+  }).catch(function(e){
+    showModal('<div class="modal-body"><h3>Crear tarea en Tareas taller</h3><div class="banner banner-crit"><svg><use href="#i-alert-circle"/></svg><div>'+escapeHtml(e.message)+'</div></div></div><div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cerrar</button></div>');
+    document.getElementById("mCancel").onclick = closeModal;
+  });
+}
+function htmlCheckTT(pfx){
+  return '<label style="display:flex; gap:9px; align-items:center; cursor:pointer; font-weight:600; color:var(--ink); margin:4px 0 14px;"><input type="checkbox" id="'+pfx+'CrearTT" style="width:17px; height:17px;" /> Crear también una tarea en <b>Tareas taller</b> (se abre el formulario después de generar la orden)</label>';
 }
 
 /* ================= TIPO DE MANTENIMIENTO / LUGAR ================= */
@@ -2625,6 +2794,7 @@ function viewGenerar(preId, preTask){
       '<div class="field"><label>Repuestos que se van a descontar del stock</label><div class="help" id="genRepHelp"></div><div id="genReps" style="margin-top:8px;"></div></div>'+
       '<div id="genShortBanner"></div>'+
       '<div id="genEstado"></div>'+
+      htmlCheckTT("gen")+
       '<button class="btn btn-primary btn-block" id="genSubmit"><svg><use href="#i-check"/></svg>Generar mantenimiento y actualizar stock</button>';
     document.getElementById("genTask").onchange = function(){ cambiarPlan(m, true); };
     document.getElementById("genMeter").oninput = function(){ renderEstado(m); };
@@ -2646,6 +2816,7 @@ function viewGenerar(preId, preTask){
       '<div class="field"><label>Notas (opcional)</label><input type="text" id="genNotes" placeholder="Observaciones" /></div>'+
       '<div class="field"><label>Repuestos del stock (opcional)</label><div class="help">Solo si se usan repuestos del almacén de COSESA: se descuentan del stock.</div><div id="genReps" style="margin-top:8px;"></div></div>'+
       '<div id="genShortBanner"></div>'+
+      htmlCheckTT("gen")+
       '<button class="btn btn-primary btn-block" id="genSubmit"><svg><use href="#i-check"/></svg>Generar orden de mantenimiento correctivo</button>';
     wireLugar("gen");
     rep = editorRepuestos("genReps", [], refreshShort);
@@ -2680,6 +2851,7 @@ function viewGenerar(preId, preTask){
     if(meter!=null) setMeter(m, m.meterType, meter, true);
     saveState();
     toast("Orden correctiva "+numero+" generada"+(faltante ? " con faltante de stock" : ""), faltante?"err":"ok");
+    var cTT = document.getElementById("genCrearTT"); if(cTT && cTT.checked) window.__abrirTT = state.maintenances[0].id;
     navigate("ot", { id: state.maintenances[0].id });
   }
 
@@ -2796,6 +2968,7 @@ function viewGenerar(preId, preTask){
     if(meter!=null) setMeter(m, unidadMed, meter, true);
     saveState();
     toast("Orden "+numero+" generada"+(faltante ? " con faltante de stock" : ""), faltante?"err":"ok");
+    var cTT = document.getElementById("genCrearTT"); if(cTT && cTT.checked) window.__abrirTT = state.maintenances[0].id;
     navigate("ot", { id: state.maintenances[0].id });
   }
 
@@ -2956,6 +3129,7 @@ document.addEventListener("click", function(e){
   else if(action==="edit-meter"){ openMeterModal(act.dataset.id); }
   else if(action==="import-meters"){ openImportMetersModal(); }
   else if(action==="import-easytrack"){ openEasytrackModal(); }
+  else if(action==="tt-vincular"){ openVincularTT(); }
   else if(action==="sync-easytrack"){ sincronizarEasytrackAhora(act); }
   else if(action==="alert-save-settings"){ saveAlertSettings(); }
   else if(action==="alert-simulate-send"){ simulateAlertSend(); }

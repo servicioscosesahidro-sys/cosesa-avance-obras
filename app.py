@@ -3885,6 +3885,8 @@ _easytrack_sync.iniciar_programador()   # horas y km de Easytrack todas las madr
 import tareas_taller_backup as _tt_backup
 _tt_backup.init_app(app, _types.SimpleNamespace(admin_required=admin_required))
 _tt_backup.iniciar_programador()        # copia diaria de los datos de Tareas de Taller (Firebase)
+import tareas_taller_link as _tt_link
+_tt_link.init_app(app, _types.SimpleNamespace(cosesa_required=cosesa_required, get_current_user=get_current_user, puede=puede))
 
 
 def _bootstrap_admin():
