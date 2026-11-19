@@ -374,6 +374,7 @@ textarea{ resize:vertical; min-height:70px; }
 .banner-info{ background:var(--brand-050); border-color:var(--brand-100); color:var(--brand-700); }
 :root[data-theme=dark] .banner-info, @media(prefers-color-scheme:dark){ .banner-info{ color:var(--brand-300); } }
 .banner-warn{ background:var(--warn-bg); border-color:var(--warn-bg); color:var(--warn-ink); }
+.banner-ok{ background:var(--ok-bg, #e8f6ee); border-color:var(--ok-bg, #e8f6ee); color:var(--ok-ink, #16643a); }
 .banner-crit{ background:var(--crit-bg); border-color:var(--crit-bg); color:var(--crit-ink); }
 
 .back-link{ display:inline-flex; align-items:center; gap:6px; color:var(--ink-soft); font-size:13px; font-weight:600; cursor:pointer; margin-bottom:10px; }
@@ -1511,6 +1512,41 @@ function cargarSolicitudes(){
 }
 function getSolicitud(id){ return SOLICITUDES.find(function(s){ return String(s.id)===String(id); }); }
 function solRevisada(id){ return !!(state.solRevisadas && state.solRevisadas[id]); }
+function solResuelta(id){ var r = state.solRevisadas && state.solRevisadas[id]; return !!(r && r.tipo==="resuelta"); }
+function marcarEstadoObra(sol, estado, fecha, responsable){
+  return apiJSON("POST", API+"/solicitudes/"+sol.id+"/estado", { estado: estado, fecha: fecha, responsable: responsable })
+    .then(function(res){ if(!res.d || !res.d.ok){ toast("No se pudo actualizar el registro de la obra: "+((res.d&&res.d.error)||""), "err"); } })
+    .catch(function(){ toast("No se pudo actualizar el registro de la obra", "err"); });
+}
+function modalResolverSolicitud(sol){
+  showModal('<div class="modal-body"><h3>Marcar como resuelta</h3>'+
+    '<p><b>'+escapeHtml(sol.equipo||"Equipo")+'</b> · '+escapeHtml(sol.obra)+'<br><span class="cell-muted">'+escapeHtml((sol.descripcion||"").slice(0,160))+'</span></p>'+
+    '<div class="field-row"><div class="field"><label>Fecha de resolución</label><input type="date" id="rsFecha" value="'+todayISO()+'" /></div>'+
+    '<div class="field"><label>Resuelta por</label><input type="text" id="rsResp" value="'+escapeHtml(sol.responsable||"")+'" placeholder="Nombre y apellido" /></div></div>'+
+    '<div class="field"><label>Cómo se resolvió (opcional)</label><textarea id="rsNota" rows="3" placeholder="Ej: se ajustó la conexión en la obra, no hizo falta orden"></textarea></div>'+
+    (sol.estado==="pendiente" ? '<label style="display:flex; gap:8px; align-items:center; font-weight:600; color:var(--ink);"><input type="checkbox" id="rsObra" checked style="width:16px; height:16px;"> Marcar también como <b>Finalizado</b> en la obra</label>' : '')+
+    '</div><div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cancelar</button><button class="btn btn-primary" id="mSave">Marcar como resuelta</button></div>');
+  document.getElementById("mCancel").onclick = closeModal;
+  document.getElementById("mSave").onclick = function(){
+    var fecha = document.getElementById("rsFecha").value || todayISO();
+    var resp = document.getElementById("rsResp").value.trim();
+    var ob = document.getElementById("rsObra");
+    if(!state.solRevisadas) state.solRevisadas = {};
+    state.solRevisadas[sol.id] = { tipo:"resuelta", por: usuarioActualTxt(), fecha: fecha, resolvio: resp, nota: document.getElementById("rsNota").value.trim(),
+      cerroObra: !!(ob && ob.checked), estadoPrevio: sol.estado };
+    this.disabled = true;
+    saveState().then(function(){
+      return ob && ob.checked ? marcarEstadoObra(sol, "realizado", fecha, resp) : null;
+    }).then(cargarSolicitudes).then(function(){ closeModal(); toast("Solicitud marcada como resuelta"); render(); });
+  };
+}
+function reabrirSolicitud(sol){
+  var r = state.solRevisadas && state.solRevisadas[sol.id]; if(!r) return;
+  delete state.solRevisadas[sol.id];
+  saveState().then(function(){
+    return r.cerroObra && r.estadoPrevio==="pendiente" ? marcarEstadoObra(sol, "pendiente", sol.fecha, "") : null;
+  }).then(cargarSolicitudes).then(function(){ toast("Solicitud reabierta: vuelve a por atender"); render(); });
+}
 function porAtender(sol){ return ordenesDeSolicitud(sol.id).length===0 && !solRevisada(sol.id); }
 function solNueva(sol){ var c = (sol.creado_en||"").replace(" ","T"); if(!c) return false; return (Date.now() - new Date(c+"Z").getTime()) < 3*864e5; }
 function ordenesDeSolicitud(id){
@@ -1543,7 +1579,7 @@ function viewSolicitudes(){
   var q = (window.__solQuery||"").toLowerCase();
   var todas = SOLICITUDES;
   var lista = todas.filter(function(s){
-    var okF = filtro==="todas" || (filtro==="atender" ? porAtender(s) : filtro==="conorden" ? ordenesDeSolicitud(s.id).length>0 : s.estado===filtro);
+    var okF = filtro==="todas" || (filtro==="atender" ? porAtender(s) : filtro==="conorden" ? ordenesDeSolicitud(s.id).length>0 : filtro==="resueltas" ? solResuelta(s.id) : s.estado===filtro);
     var okQ = !q || (s.obra+" "+s.cliente+" "+s.equipo+" "+s.descripcion+" "+s.responsable+" "+s.cargado_por).toLowerCase().indexOf(q)>=0;
     return okF && okQ;
   });
@@ -1551,18 +1587,19 @@ function viewSolicitudes(){
   var nPend = todas.filter(function(s){ return s.estado==="pendiente"; }).length;
   var nSinOrden = todas.filter(porAtender).length;
   var nConOrden = todas.filter(function(s){ return ordenesDeSolicitud(s.id).length>0; }).length;
+  var nResueltas = todas.filter(function(s){ return solResuelta(s.id); }).length;
   var nFin = todas.length - nPend;
 
   var html = '<div class="banner banner-info"><svg><use href="#i-alert-circle"/></svg><div>'+
     'Acá llega todo lo que se carga en la sección <b>Mantenimiento</b> de cada obra (Avance de obras), tanto lo pendiente como lo finalizado. '+
-    'Desde cada solicitud podés <b>generar una orden de mantenimiento</b>, o marcarla como "no requiere orden". La lista se actualiza sola cada 30 segundos.'+
+    'Desde cada solicitud podés <b>generar una orden de mantenimiento</b>, marcarla como <b>resuelta</b> o como "no requiere orden". La lista se actualiza sola cada 30 segundos.'+
   '</div></div>';
 
   html += '<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-bottom:16px;">'+
     '<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">'+
       '<div class="topbar-search" style="width:280px;"><svg><use href="#i-search"/></svg><input type="search" id="solSearch" placeholder="Buscar obra, equipo, descripción…" value="'+escapeHtml(window.__solQuery||"")+'"></div>'+
       '<div class="tabs" style="border-bottom:none; margin-bottom:0;">'+
-        [["atender","Por atender ("+nSinOrden+")"],["pendiente","Pendientes en obra ("+nPend+")"],["realizado","Finalizadas en obra ("+nFin+")"],["conorden","Con orden ("+nConOrden+")"],["todas","Todas ("+todas.length+")"]].map(function(kv){
+        [["atender","Por atender ("+nSinOrden+")"],["pendiente","Pendientes en obra ("+nPend+")"],["realizado","Finalizadas en obra ("+nFin+")"],["conorden","Con orden ("+nConOrden+")"],["resueltas","Resueltas ("+nResueltas+")"],["todas","Todas ("+todas.length+")"]].map(function(kv){
           return '<button class="tab-btn'+(filtro===kv[0]?" active":"")+'" data-action="sol-filter" data-key="'+kv[0]+'">'+kv[1]+'</button>';
         }).join("")+
       '</div>'+
@@ -1582,7 +1619,7 @@ function viewSolicitudes(){
       html += '<div class="card card-pad">'+
         '<div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:flex-start;">'+
           '<div style="min-width:0; flex:1;">'+
-            '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;">'+(porAtender(s) && solNueva(s) ? '<span class="pill pill-crit">NUEVA</span>' : '')+solicitudEstadoPill(s)+(solRevisada(s.id) ? '<span class="pill pill-neutral">No requiere orden</span>' : '')+(prio?'<span class="pill '+prio.cls+'">'+prio.label+'</span>':'')+
+            '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;">'+(porAtender(s) && solNueva(s) ? '<span class="pill pill-crit">NUEVA</span>' : '')+solicitudEstadoPill(s)+(solResuelta(s.id) ? '<span class="pill pill-ok"><svg><use href="#i-check"/></svg>Resuelta</span>' : solRevisada(s.id) ? '<span class="pill pill-neutral">No requiere orden</span>' : '')+(prio?'<span class="pill '+prio.cls+'">'+prio.label+'</span>':'')+
               '<span class="pill pill-neutral"><svg><use href="#i-cal"/></svg>'+fmtDate(s.fecha)+'</span></div>'+
             '<h3 style="font-size:19px;">'+escapeHtml(s.equipo || "Equipo / zona sin especificar")+'</h3>'+
             '<div class="cell-muted" style="font-size:12.5px; margin-top:2px;"><b style="color:var(--ink-soft);">'+escapeHtml(s.cliente)+'</b> · '+escapeHtml(s.obra)+(s.obra_codigo?' (N° '+escapeHtml(s.obra_codigo)+')':'')+'</div>'+
@@ -1591,6 +1628,7 @@ function viewSolicitudes(){
               (s.responsable ? 'Responsable: <b>'+escapeHtml(s.responsable)+'</b> · ' : '')+
               'Cargado por: '+escapeHtml(s.cargado_por || "—")+
             '</div>'+
+            (solResuelta(s.id) ? (function(r){ return '<div class="banner banner-ok" style="margin-top:10px;"><svg><use href="#i-check-circle"/></svg><div>Resuelta el <b>'+fmtDate(r.fecha)+'</b>'+(r.resolvio?' por <b>'+escapeHtml(r.resolvio)+'</b>':'')+' · marcada por '+escapeHtml(r.por||"—")+(r.nota?'<br>'+escapeHtml(r.nota):'')+'</div></div>'; })(state.solRevisadas[s.id]) : '')+
             fotosHtml(s)+
             (ords.length ? '<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:12px;">'+ords.map(function(o){
                 return '<button class="chip" data-action="print-maint" data-id="'+o.id+'" title="Imprimir orden" style="cursor:pointer;"><svg style="width:12px;height:12px;"><use href="#i-print"/></svg><b>Orden '+escapeHtml(o.numero||o.id)+'</b> · '+fmtDate(o.fecha)+' · '+escapeHtml(o.tecnico||"")+'</button>';
@@ -1599,7 +1637,9 @@ function viewSolicitudes(){
           '<div style="display:flex; flex-direction:column; gap:8px; align-items:stretch; min-width:180px;">'+
             '<button class="btn btn-primary btn-sm" data-nav="orden" data-id="'+s.id+'"><svg><use href="#i-wrench"/></svg>'+(ords.length?"Generar otra orden":"Generar orden")+'</button>'+
             '<a class="btn btn-secondary btn-sm" href="'+escapeHtml(s.url_obra)+'" target="_blank" rel="noopener" style="text-decoration:none; justify-content:center;">Ver en la obra ↗</a>'+
-            (!ords.length ? '<button class="btn btn-ghost btn-sm" data-action="sol-revisada" data-id="'+s.id+'">'+(solRevisada(s.id) ? "Volver a por atender" : "No requiere orden")+'</button>' : '')+
+            (!ords.length && !solRevisada(s.id) ? '<button class="btn btn-secondary btn-sm" data-action="sol-resolver" data-id="'+s.id+'"><svg><use href="#i-check"/></svg>Marcar como resuelta</button>'+
+              '<button class="btn btn-ghost btn-sm" data-action="sol-revisada" data-id="'+s.id+'">No requiere orden</button>' : '')+
+            (solRevisada(s.id) ? '<button class="btn btn-ghost btn-sm" data-action="sol-reabrir" data-id="'+s.id+'">Reabrir</button>' : '')+
           '</div>'+
         '</div>'+
       '</div>';
@@ -3132,10 +3172,11 @@ document.addEventListener("click", function(e){
   else if(action==="sol-revisada"){
     if(!state.solRevisadas) state.solRevisadas = {};
     var sid = act.dataset.id;
-    if(state.solRevisadas[sid]){ delete state.solRevisadas[sid]; toast("Volvió a por atender"); }
-    else { state.solRevisadas[sid] = { por: usuarioActualTxt(), fecha: ahoraLocal() }; toast("Marcada: no requiere orden"); }
+    state.solRevisadas[sid] = { tipo:"noreq", por: usuarioActualTxt(), fecha: ahoraLocal() }; toast("Marcada: no requiere orden");
     saveState(); render();
   }
+  else if(action==="sol-resolver"){ var so = getSolicitud(act.dataset.id); if(so) modalResolverSolicitud(so); }
+  else if(action==="sol-reabrir"){ var so2 = getSolicitud(act.dataset.id); if(so2) reabrirSolicitud(so2); }
   else if(action==="sol-refresh"){ cargarSolicitudes().then(function(){ render(); toast("Solicitudes actualizadas"); }); }
   else if(action==="plan-filter"){ window.__planFilter = act.dataset.key; viewPlanes(); }
   else if(action==="plan-task-new"){ openPlanMachinePicker(); }
