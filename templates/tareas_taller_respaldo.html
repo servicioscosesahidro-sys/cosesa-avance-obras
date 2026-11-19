@@ -3,7 +3,7 @@
 {% block content %}
 <h1>Respaldo de Tareas de Taller</h1>
 <div class="card">
-  <p class="subtitle">Todos los días a las {{ hora }}:00 (hora de Argentina) la plataforma baja <strong>todos los datos</strong> de la app Tareas de Taller (tareas, subtareas, personal, equipos y las tareas privadas) y guarda una copia en el repositorio <strong>privado</strong> de backups de GitHub, una por día. Solo lee: nunca modifica ni borra nada de la app.</p>
+  <p class="subtitle">Es automático: todos los días a las {{ hora }}:00 (hora de Argentina) la plataforma baja <strong>todos los datos</strong> de la app Tareas de Taller (tareas, subtareas, personal, equipos y las tareas privadas) y guarda una copia en el repositorio <strong>privado</strong> de backups de GitHub, una por día. Solo lee: nunca modifica ni borra nada de la app.</p>
   {% if not configurado %}
     <div class="flash flash-error">Falta configurar en Render las variables <code>TAREAS_FIREBASE_APIKEY</code> y <code>TAREAS_FIREBASE_URL</code>.</div>
   {% endif %}
@@ -13,7 +13,7 @@
     {% if est.ultimo_error %}<tr><td><strong>Último error</strong></td><td style="color:#b42318;">{{ est.ultimo_error }}</td></tr>{% endif %}
   </table>
   <form method="post">
-    <button class="btn" type="submit" {% if not configurado %}disabled{% endif %}>Respaldar ahora</button>
+    <button class="btn btn-secondary" type="submit" {% if not configurado %}disabled{% endif %}>Respaldar ahora (opcional)</button>
   </form>
   <p class="subtitle" style="margin-top:14px;">Los archivos adjuntos (fotos y documentos) quedan en Firebase Storage; este respaldo guarda la lista de adjuntos con sus enlaces.</p>
 </div>

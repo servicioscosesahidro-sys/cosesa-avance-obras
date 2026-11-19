@@ -64,9 +64,4 @@
     {% if m.href %}</a>{% else %}</div>{% endif %}
   {% endfor %}
 </div>
-{% if current_user and is_admin(current_user) %}
-<div style="margin-top:22px; text-align:center;">
-  <a class="btn btn-secondary" href="{{ url_for('tareas_taller_respaldo') }}">🗄️ Respaldo de Tareas de Taller</a>
-</div>
-{% endif %}
 {% endblock %}

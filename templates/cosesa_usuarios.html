@@ -202,5 +202,6 @@ document.getElementById('form-nuevo-usuario-cliente')?.addEventListener('submit'
   {% else %}
   <p class="subtitle">El backup automático todavía no está configurado en este servidor.</p>
   {% endif %}
+  <p class="subtitle" style="margin-top:14px;"><strong>Tareas de Taller:</strong> sus datos se copian solos todos los días a las 3:00. <a href="{{ url_for('tareas_taller_respaldo') }}">Ver el estado del último respaldo</a></p>
 </div>
 {% endblock %}
