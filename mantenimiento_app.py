@@ -123,7 +123,7 @@ def init_app(app, h):
             "doc": doc,
             "version": row["version"] if row else 0,
             "actualizado_por": row["actualizado_por"] if row else None,
-            "usuario": {"nombre": _usuario_txt(user), "admin": _puede_admin(user)},
+            "usuario": {"nombre": _usuario_txt(user), "username": user["username"], "admin": _puede_admin(user)},
             "urls": {"inicio": url_for("plataforma_inicio"), "logout": url_for("logout")},
         })
 

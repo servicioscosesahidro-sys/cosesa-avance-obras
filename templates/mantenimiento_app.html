@@ -443,6 +443,16 @@ textarea{ resize:vertical; min-height:70px; }
   .topbar{ padding:12px 14px; }
   .topbar-titles h1{ font-size:21px; }
 }
+.tipo-mant{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.tipo-opt{ display:flex; gap:10px; align-items:flex-start; border:1.5px solid var(--border); border-radius:10px; padding:11px 13px; cursor:pointer; background:var(--surface); }
+.tipo-opt input{ width:17px; height:17px; margin-top:2px; flex:none; }
+.tipo-opt b{ display:block; color:var(--ink); font-size:14px; }
+.tipo-opt small{ display:block; color:var(--ink-faint); font-size:12px; font-weight:500; margin-top:2px; }
+.tipo-opt:has(input:checked){ border-color:var(--accent, #0b84d8); background:var(--surface-2); box-shadow:0 0 0 2px rgba(11,132,216,.12); }
+@media (max-width:560px){ .tipo-mant{ grid-template-columns:1fr; } }
+.pill-tipo{ display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:.3px; text-transform:uppercase; padding:1px 7px; border-radius:20px; margin-left:6px; vertical-align:middle; }
+.pill-tipo.solo{ margin-left:0; }
+.pill-tipo.prev{ background:#e3f1fb; color:#0b6aa8; } .pill-tipo.corr{ background:#fdeee0; color:#a5520c; }
 .tareas-lista{ margin:8px 0 0; padding-left:18px; font-size:13px; color:var(--ink-soft); } .tareas-lista li{ margin:2px 0; }
 </style>
 
@@ -942,7 +952,7 @@ function renderMaintTable(list, showMachineFilterNote){
     return '<tr>'+
       '<td class="cell-muted mono" style="white-space:nowrap;">'+fmtDate(rec.fecha)+(rec.numero?'<div style="font-size:11px; font-weight:700; color:var(--ink-soft);">'+escapeHtml(rec.numero)+'</div>':'')+'</td>'+
       (m ? '<td class="cell-strong row-link" data-nav="flota" data-id="'+rec.machineId+'">'+escapeHtml(nombreUnidad)+origen+'</td>' : '<td class="cell-strong">'+escapeHtml(nombreUnidad)+origen+'</td>')+
-      '<td>'+escapeHtml(rec.taskNombre)+(rec.trabajo?'<div class="cell-muted" style="font-size:11.5px; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="'+escapeHtml(rec.trabajo)+'">'+escapeHtml(rec.trabajo)+'</div>':'')+'</td>'+
+      '<td>'+(tipoMantDe(rec)==="correctivo" && rec.taskNombre==="Correctivo" ? pillTipo(rec).replace('pill-tipo ','pill-tipo solo ') : escapeHtml(rec.taskNombre)+pillTipo(rec))+(rec.lugar==="externo"?'<div class="cell-muted" style="font-size:11.5px;">'+escapeHtml(lugarTxt(rec))+'</div>':'')+(rec.trabajo?'<div class="cell-muted" style="font-size:11.5px; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="'+escapeHtml(rec.trabajo)+'">'+escapeHtml(rec.trabajo)+'</div>':'')+'</td>'+
       '<td class="mono">'+(rec.medidor!=null ? fmtInt(rec.medidor)+' '+(m?UNIT_LABEL[rec.medidorUnidad||m.meterType]:"") : "—")+'</td>'+
       '<td>'+escapeHtml(rec.tecnico||"—")+'</td>'+
       '<td style="max-width:260px;"><div style="display:flex; flex-wrap:wrap; gap:5px;">'+partsChips+'</div></td>'+
@@ -955,7 +965,7 @@ function renderMaintTable(list, showMachineFilterNote){
       '</div></td>'+
     '</tr>';
   }).join("");
-  return '<div class="table-wrap"><table><thead><tr><th>Fecha / N°</th><th>Unidad / equipo</th><th>Tarea / trabajo</th><th>Medidor</th><th>Técnico</th><th>Repuestos consumidos</th><th>Estado</th><th>Cargado por</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  return '<div class="table-wrap"><table><thead><tr><th>Fecha / N°</th><th>Unidad / equipo</th><th>Tarea / trabajo</th><th>Medidor</th><th>Responsable</th><th>Repuestos consumidos</th><th>Estado</th><th>Generada por</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 
 function viewFlota(){
@@ -1455,9 +1465,9 @@ function exportHistorialCSV(){
   var rows = state.maintenances.map(function(rec){
     var m = getMachine(rec.machineId);
     var partes = rec.partesUsadas.map(function(pu){ var p=getPart(pu.partId); return pu.qty+"x "+(p?p.nombre:pu.partId); }).join(" / ");
-    return [rec.numero||"", rec.fecha, m?m.nombre:(rec.equipoTexto||"Equipo de planta"), rec.solicitud?rec.solicitud.obra:"", rec.solicitud?rec.solicitud.cliente:"", rec.taskNombre, rec.trabajo||"", rec.medidor==null?"":rec.medidor, m?UNIT_LABEL[m.meterType]:"", rec.tecnico, partes, rec.estado, rec.cargadoPor||""];
+    return [rec.numero||"", rec.fecha, m?m.nombre:(rec.equipoTexto||"Equipo de planta"), rec.solicitud?rec.solicitud.obra:"", rec.solicitud?rec.solicitud.cliente:"", tipoMantDe(rec)==="preventivo"?"Preventivo":"Correctivo", rec.taskNombre, rec.trabajo||(rec.tareas||""), lugarTxt(rec), rec.medidor==null?"":rec.medidor, m?UNIT_LABEL[m.meterType]:"", rec.tecnico, partes, rec.estado, rec.cargadoPor||""];
   });
-  downloadCSV("cosesa_historial_mantenimientos", ["N° orden","Fecha","Unidad / equipo","Obra","Cliente","Tarea","Trabajo","Medidor","Unidad medidor","Técnico","Repuestos consumidos","Estado","Cargado por"], rows);
+  downloadCSV("cosesa_historial_mantenimientos", ["N° orden","Fecha","Unidad / equipo","Obra","Cliente","Tipo","Tarea / plan","Trabajo / tareas","Dónde se hizo","Medidor","Unidad medidor","Responsable","Repuestos consumidos","Estado","Generada por"], rows);
 }
 function exportMovimientosCSV(){
   var TIPOLBL = { consumo:"Consumo", ingreso:"Ingreso", ajuste:"Ajuste manual", reversion:"Reversión" };
@@ -1626,8 +1636,8 @@ function viewOrden(solId){
     '<div class="field"><label>Trabajo a realizar / realizado</label><textarea id="ordTrabajo" rows="3">'+escapeHtml(s.descripcion)+'</textarea></div>'+
     '<div class="field-row">'+
       '<div class="field"><label>Fecha</label><input type="date" id="ordFecha" value="'+todayISO()+'" /></div>'+
-      '<div class="field"><label>Técnico responsable</label><input type="text" id="ordTech" placeholder="Nombre y apellido" value="'+escapeHtml(s.responsable||"")+'" /></div>'+
     '</div>'+
+    htmlLugarResponsable("ord", s.responsable)+
     '<div class="field"><label>Repuestos e insumos utilizados</label>'+
       '<div class="help" style="margin-bottom:8px;">Se descuentan del stock al generar la orden. Dejalo vacío si no se usaron repuestos.</div>'+
       '<div id="ordParts" class="parts-check"></div>'+
@@ -1702,6 +1712,7 @@ function viewOrden(solId){
     };
   }
   document.getElementById("ordMachine").onchange = renderMachineArea;
+  wireLugar("ord");
   renderMachineArea();
   document.getElementById("ordAddPart").onclick = function(){
     if(!partsSorted.length){ toast("No hay repuestos en el catálogo", "err"); return; }
@@ -1712,8 +1723,8 @@ function viewOrden(solId){
     var btn = this;
     var trabajo = document.getElementById("ordTrabajo").value.trim();
     if(!trabajo){ toast("Describí el trabajo de la orden", "err"); return; }
-    var tech = document.getElementById("ordTech").value.trim();
-    if(!tech){ toast("Indicá el técnico responsable", "err"); return; }
+    var lr = leerLugarResponsable("ord"); if(!lr) return;
+    var tech = lr.tecnico;
     var fecha = document.getElementById("ordFecha").value || todayISO();
     var notas = document.getElementById("ordNotas").value.trim();
     var m = getMachine(document.getElementById("ordMachine").value);
@@ -1734,11 +1745,13 @@ function viewOrden(solId){
       id: uid("MT"), numero: numero, machineId: m ? m.id : null, taskId: t ? t.id : null,
       taskNombre: t ? t.nombre : "Correctivo", tareas: t && document.getElementById("ordTareasPlan") ? document.getElementById("ordTareasPlan").value.trim() : "", fecha: fecha, medidor: meter, tecnico: tech, notas: notas,
       trabajo: trabajo, equipoTexto: s.equipo || "",
-      partesUsadas: partesUsadas, estado: "completado", faltante: faltante, cargadoPor: u ? u.nombre : "—",
+      partesUsadas: partesUsadas, estado: "completado", faltante: faltante, cargadoPor: usuarioActualTxt(), cargadoPorUsuario: usuarioActualLogin(),
+      tipoMant: t ? "preventivo" : "correctivo", lugar: lr.lugar, taller: lr.taller,
       solicitud: { id: s.id, obra: s.obra, obra_codigo: s.obra_codigo, cliente: s.cliente, fecha: s.fecha,
         equipo: s.equipo, descripcion: s.descripcion, prioridad: s.prioridad, responsable: s.responsable, cargado_por: s.cargado_por }
     };
     state.maintenances.unshift(rec);
+    if(lr.lugar==="externo") registrarTaller(lr.taller);
     var unidadO = m ? (t ? unidadMedidor(tUnit(t, m), m) : m.meterType) : null;
     rec.medidorUnidad = unidadO;
     if(m){
@@ -2083,6 +2096,50 @@ function planesTipoOrdenados(){
   return (state.planesTipo||[]).slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre) || (a.unidad<b.unidad?-1:1) || a.intervalo-b.intervalo; });
 }
 
+/* ================= TIPO DE MANTENIMIENTO / LUGAR ================= */
+function tipoMantDe(rec){ return rec.tipoMant || (rec.taskId ? "preventivo" : "correctivo"); }
+function pillTipo(rec){ var t = tipoMantDe(rec); return '<span class="pill-tipo '+(t==="preventivo"?"prev":"corr")+'">'+(t==="preventivo"?"Preventivo":"Correctivo")+'</span>'; }
+function lugarTxt(rec){ return rec.lugar==="externo" ? "Taller externo"+(rec.taller ? ": "+rec.taller : "") : (rec.lugar==="planta" ? "Planta COSESA" : "—"); }
+function listaTalleres(){
+  var vistos = {}, out = [];
+  (state.talleres||[]).concat(state.maintenances.map(function(r){ return r.taller; })).forEach(function(t){
+    t = (t||"").trim(); if(t && !vistos[t.toLowerCase()]){ vistos[t.toLowerCase()] = 1; out.push(t); }
+  });
+  return out.sort(function(a,b){ return a.localeCompare(b); });
+}
+function registrarTaller(nombre){
+  nombre = (nombre||"").trim(); if(!nombre) return;
+  if(!Array.isArray(state.talleres)) state.talleres = [];
+  if(!state.talleres.some(function(t){ return t.toLowerCase()===nombre.toLowerCase(); })) state.talleres.push(nombre);
+}
+/* Campos de responsable y lugar (Planta COSESA / taller externo). pfx = prefijo de ids */
+function htmlLugarResponsable(pfx, responsable){
+  return '<div class="field"><label>Responsable de la tarea</label><input type="text" id="'+pfx+'Tech" placeholder="Nombre y apellido" value="'+escapeHtml(responsable||"")+'" /></div>'+
+    '<div class="field"><label>¿Dónde se hace el mantenimiento?</label><div class="tipo-mant">'+
+      '<label class="tipo-opt"><input type="radio" name="'+pfx+'Lugar" value="planta" checked /><span><b>Planta COSESA</b><small>Lo hace personal de COSESA</small></span></label>'+
+      '<label class="tipo-opt"><input type="radio" name="'+pfx+'Lugar" value="externo" /><span><b>Taller externo</b><small>Se envía a un taller / proveedor</small></span></label>'+
+    '</div></div>'+
+    '<div class="field" id="'+pfx+'TallerBox" style="display:none;"><label>Taller externo</label><input type="text" id="'+pfx+'Taller" list="'+pfx+'TalleresList" placeholder="Nombre del taller" />'+
+      '<datalist id="'+pfx+'TalleresList">'+listaTalleres().map(function(t){ return '<option value="'+escapeHtml(t)+'"></option>'; }).join("")+'</datalist>'+
+      '<div class="help">Elegí uno de la lista o escribí uno nuevo. Más adelante esta lista se vincula con los proveedores de Órdenes de compra.</div></div>';
+}
+function wireLugar(pfx){
+  document.querySelectorAll('input[name="'+pfx+'Lugar"]').forEach(function(r){
+    r.addEventListener("change", function(){ document.getElementById(pfx+"TallerBox").style.display = lugarSel(pfx)==="externo" ? "" : "none"; });
+  });
+}
+function lugarSel(pfx){ var r = document.querySelector('input[name="'+pfx+'Lugar"]:checked'); return r ? r.value : "planta"; }
+/* Valida y devuelve {tecnico, lugar, taller} o null */
+function leerLugarResponsable(pfx){
+  var tech = document.getElementById(pfx+"Tech").value.trim();
+  if(!tech){ toast("Indicá el responsable de la tarea", "err"); return null; }
+  var lugar = lugarSel(pfx), taller = lugar==="externo" ? document.getElementById(pfx+"Taller").value.trim() : "";
+  if(lugar==="externo" && !taller){ toast("Indicá el taller externo", "err"); return null; }
+  return { tecnico: tech, lugar: lugar, taller: taller };
+}
+function usuarioActualTxt(){ return PLATFORM.usuario ? PLATFORM.usuario.nombre : "—"; }
+function usuarioActualLogin(){ return PLATFORM.usuario ? (PLATFORM.usuario.username || "") : ""; }
+
 /* ================= TAREAS / PROCEDIMIENTO DE UN PLAN ================= */
 function lineasTareas(txt){ return String(txt||"").split(/\r?\n/).map(function(l){ return l.replace(/^\s*[-•*·☐]\s*/, "").trim(); }).filter(Boolean); }
 function htmlTareasLista(txt, max){
@@ -2180,6 +2237,10 @@ function viewGenerar(preId, preTask){
     '<option value="">Seleccioná una unidad…</option>'+
     state.machines.slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre); }).map(function(m){ return '<option value="'+m.id+'" '+(machine&&machine.id===m.id?"selected":"")+'>'+escapeHtml(m.nombre)+' — '+TYPE_LABEL[m.tipo]+'</option>'; }).join("")+
   '</select></div>';
+  html += '<div class="field"><label>Tipo de mantenimiento</label><div class="tipo-mant">'+
+    '<label class="tipo-opt"><input type="radio" name="genTipo" value="preventivo" checked /><span><b>Preventivo</b><small>Según un plan de mantenimiento (service programado)</small></span></label>'+
+    '<label class="tipo-opt"><input type="radio" name="genTipo" value="correctivo" /><span><b>Correctivo</b><small>Eventual: una falla o reparación, sin plan</small></span></label>'+
+  '</div></div>';
   html += '<div id="genTaskWrap"></div>';
   html += '</div>';
   document.getElementById("view").innerHTML = html;
@@ -2189,10 +2250,11 @@ function viewGenerar(preId, preTask){
     var m = getMachine(document.getElementById("genMachine").value);
     var wrap = document.getElementById("genTaskWrap");
     if(!m){ wrap.innerHTML = ""; return; }
+    if(tipoSel()==="correctivo"){ renderCorrectivo(m); return; }
     var admin = isAdmin();
     var sel = (preTask && m.id===preId) ? preTask : (m.tasks[0] ? m.tasks[0].id : (admin ? (planesTipoOrdenados()[0] ? "tpl:"+planesTipoOrdenados()[0].id : "new") : ""));
     if(!m.tasks.length && !admin){
-      wrap.innerHTML = '<div class="banner banner-warn"><svg><use href="#i-alert"/></svg><div>Esta unidad todavía no tiene planes de mantenimiento. Pedile a quien administra Mantenimiento que le asigne uno.</div></div>';
+      wrap.innerHTML = '<div class="banner banner-warn"><svg><use href="#i-alert"/></svg><div>Esta unidad todavía no tiene planes de mantenimiento. Pedile a quien administra Mantenimiento que le asigne uno, o cargá un mantenimiento <b>Correctivo</b>.</div></div>';
       return;
     }
     wrap.innerHTML =
@@ -2204,10 +2266,8 @@ function viewGenerar(preId, preTask){
         '<div class="field"><label id="genMeterLbl">Medidor actual</label><input type="number" id="genMeter" value="" min="0" step="any" /></div>'+
         '<div class="field"><label>Fecha</label><input type="date" id="genDate" value="'+todayISO()+'" /></div>'+
       '</div>'+
-      '<div class="field-row">'+
-        '<div class="field"><label>Técnico responsable</label><input type="text" id="genTech" placeholder="Nombre y apellido" /></div>'+
-        '<div class="field"><label>Notas (opcional)</label><input type="text" id="genNotes" placeholder="Observaciones del service" /></div>'+
-      '</div>'+
+      htmlLugarResponsable("gen")+
+      '<div class="field"><label>Notas (opcional)</label><input type="text" id="genNotes" placeholder="Observaciones del service" /></div>'+
       '<div class="field"><label>Repuestos que se van a descontar del stock</label><div class="help" id="genRepHelp"></div><div id="genReps" style="margin-top:8px;"></div></div>'+
       '<div id="genShortBanner"></div>'+
       '<div id="genEstado"></div>'+
@@ -2215,7 +2275,58 @@ function viewGenerar(preId, preTask){
     document.getElementById("genTask").onchange = function(){ cambiarPlan(m, true); };
     document.getElementById("genMeter").oninput = function(){ renderEstado(m); };
     document.getElementById("genSubmit").onclick = function(){ submitMaintenance(m); };
+    wireLugar("gen");
     cambiarPlan(m, true);
+  }
+  function tipoSel(){ var r = document.querySelector('input[name="genTipo"]:checked'); return r ? r.value : "preventivo"; }
+
+  function renderCorrectivo(m){
+    var wrap = document.getElementById("genTaskWrap");
+    wrap.innerHTML =
+      '<div class="field"><label>Trabajo a realizar / falla a reparar</label><textarea id="genTareas" rows="4" placeholder="Describí la falla o el trabajo. Ej: Reparar pérdida de aire en cañería trasera"></textarea></div>'+
+      '<div class="field-row">'+
+        '<div class="field"><label>Medidor actual ('+UNIT_LABEL[m.meterType]+') — opcional</label><input type="number" id="genMeter" value="'+(hasMeter(m,m.meterType)?meterOf(m,m.meterType):"")+'" min="0" step="any" /></div>'+
+        '<div class="field"><label>Fecha</label><input type="date" id="genDate" value="'+todayISO()+'" /></div>'+
+      '</div>'+
+      htmlLugarResponsable("gen")+
+      '<div class="field"><label>Notas (opcional)</label><input type="text" id="genNotes" placeholder="Observaciones" /></div>'+
+      '<div class="field"><label>Repuestos del stock (opcional)</label><div class="help">Solo si se usan repuestos del almacén de COSESA: se descuentan del stock.</div><div id="genReps" style="margin-top:8px;"></div></div>'+
+      '<div id="genShortBanner"></div>'+
+      '<button class="btn btn-primary btn-block" id="genSubmit"><svg><use href="#i-check"/></svg>Generar orden de mantenimiento correctivo</button>';
+    wireLugar("gen");
+    rep = editorRepuestos("genReps", [], refreshShort);
+    refreshShort();
+    document.getElementById("genSubmit").onclick = function(){ submitCorrectivo(m); };
+  }
+  function submitCorrectivo(m){
+    var trabajo = document.getElementById("genTareas").value.trim();
+    if(!trabajo){ toast("Describí el trabajo o la falla a reparar", "err"); return; }
+    var lr = leerLugarResponsable("gen"); if(!lr) return;
+    var meterRaw = document.getElementById("genMeter").value;
+    var meter = meterRaw==="" ? null : Math.max(0, Number(meterRaw)||0);
+    var date = document.getElementById("genDate").value || todayISO();
+    var notes = document.getElementById("genNotes").value.trim();
+    var numero = proximoNumeroOrden();
+    var faltante = false;
+    var partesUsadas = (rep ? rep.valores() : []).map(function(x){
+      var p = getPart(x.partId);
+      var applied = Math.min(x.qty, p ? p.stock : 0);
+      if(applied < x.qty) faltante = true;
+      if(applied>0) applyMovement(x.partId, -applied, "consumo", "Orden "+numero+" · "+m.nombre+" · Correctivo");
+      return { partId: x.partId, qty: x.qty, aplicado: applied };
+    });
+    if(lr.lugar==="externo") registrarTaller(lr.taller);
+    state.maintenances.unshift({
+      id: uid("MT"), numero: numero, machineId: m.id, taskId: null, taskNombre: "Correctivo", tipoMant: "correctivo",
+      trabajo: trabajo, tareas: "", fecha: date, medidor: meter, medidorUnidad: m.meterType,
+      tecnico: lr.tecnico, lugar: lr.lugar, taller: lr.taller, notas: notes,
+      partesUsadas: partesUsadas, estado: "completado", faltante: faltante,
+      cargadoPor: usuarioActualTxt(), cargadoPorUsuario: usuarioActualLogin()
+    });
+    if(meter!=null) setMeter(m, m.meterType, meter, true);
+    saveState();
+    toast("Orden correctiva "+numero+" generada"+(faltante ? " con faltante de stock" : ""), faltante?"err":"ok");
+    navigate("flota", { id:m.id });
   }
 
   function planElegido(m){
@@ -2288,6 +2399,7 @@ function viewGenerar(preId, preTask){
   function submitMaintenance(m){
     var pe = planElegido(m);
     var t = pe.t;
+    var lr = leerLugarResponsable("gen"); if(!lr) return;
     var meterRaw = document.getElementById("genMeter").value;
     var unidadT = unidadElegida(m), unidadMed = unidadMedidor(unidadT, m);
     if(meterRaw==="" && !esTiempo(unidadT)){ toast("Cargá la lectura actual del medidor ("+UNIT_LABEL[unidadT]+")", "err"); return; }
@@ -2309,7 +2421,6 @@ function viewGenerar(preId, preTask){
     }
     if(!t){ toast("Elegí un plan", "err"); return; }
     var date = document.getElementById("genDate").value || todayISO();
-    var tech = document.getElementById("genTech").value.trim();
     var notes = document.getElementById("genNotes").value.trim();
     var numero = proximoNumeroOrden();
     var faltante = false;
@@ -2323,9 +2434,11 @@ function viewGenerar(preId, preTask){
     var u = currentUser();
     state.maintenances.unshift({
       id: uid("MT"), numero: numero, machineId: m.id, taskId: t.id, taskNombre: t.nombre,
-      fecha: date, medidor: meter, medidorUnidad: unidadMed, tecnico: tech || "Sin asignar", notas: notes, tareas: tareasTxt,
-      partesUsadas: partesUsadas, estado: "completado", faltante: faltante, cargadoPor: u ? u.nombre : "—"
+      tipoMant: "preventivo", lugar: lr.lugar, taller: lr.taller,
+      fecha: date, medidor: meter, medidorUnidad: unidadMed, tecnico: lr.tecnico, notas: notes, tareas: tareasTxt,
+      partesUsadas: partesUsadas, estado: "completado", faltante: faltante, cargadoPor: usuarioActualTxt(), cargadoPorUsuario: usuarioActualLogin()
     });
+    if(lr.lugar==="externo") registrarTaller(lr.taller);
     t.lastMeter = esTiempo(unidadT) ? null : meter;
     t.lastDate = date;
     if(meter!=null) setMeter(m, unidadMed, meter, true);
@@ -2335,6 +2448,7 @@ function viewGenerar(preId, preTask){
   }
 
   document.getElementById("genMachine").onchange = renderTaskArea;
+  document.querySelectorAll('input[name="genTipo"]').forEach(function(r){ r.addEventListener("change", renderTaskArea); });
   if(machine) renderTaskArea();
 }
 
@@ -3054,12 +3168,14 @@ function printMaintenance(id){
       '<div><b>Unidad de la flota</b>'+escapeHtml(m?m.nombre:"— (equipo de planta / otro)")+'</div>'+
       '<div><b>Tipo</b>'+(m?TYPE_LABEL[m.tipo]:"—")+'</div>'+
       (rec.equipoTexto ? '<div><b>Equipo / zona</b>'+escapeHtml(rec.equipoTexto)+'</div>' : '')+
-      '<div><b>Tarea</b>'+escapeHtml(rec.taskNombre)+'</div>'+
+      '<div><b>Tipo de mantenimiento</b>'+(tipoMantDe(rec)==="preventivo"?"Preventivo":"Correctivo")+'</div>'+
+      (rec.taskNombre && rec.taskNombre!=="Correctivo" ? '<div><b>'+(tipoMantDe(rec)==="preventivo"?"Plan":"Tarea")+'</b>'+escapeHtml(rec.taskNombre)+'</div>' : '')+
       '<div><b>Fecha</b>'+fmtDate(rec.fecha)+'</div>'+
+      '<div><b>Dónde se realiza</b>'+escapeHtml(lugarTxt(rec))+'</div>'+
       '<div><b>Medidor al momento del service</b>'+(rec.medidor!=null ? fmtInt(rec.medidor)+' '+(m?UNIT_LABEL[rec.medidorUnidad||m.meterType]:"") : "—")+'</div>'+
       (m && m.patente ? '<div><b>Patente</b>'+escapeHtml(m.patente)+'</div>' : '')+
-      '<div><b>Técnico responsable</b>'+escapeHtml(rec.tecnico||"—")+'</div>'+
-      '<div><b>Cargado por</b>'+escapeHtml(rec.cargadoPor||"—")+'</div>'+
+      '<div><b>Responsable de la tarea</b>'+escapeHtml(rec.tecnico||"—")+'</div>'+
+      '<div><b>Orden generada por (usuario)</b>'+escapeHtml(rec.cargadoPor||"—")+(rec.cargadoPorUsuario && rec.cargadoPorUsuario!==rec.cargadoPor ? ' ('+escapeHtml(rec.cargadoPorUsuario)+')' : '')+'</div>'+
       '<div><b>Notas</b>'+escapeHtml(rec.notas||"—")+'</div>'+
     '</div>'+
     (lineasTareas(rec.tareas).length ? '<h3 style="font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#555;margin:0 0 6px;">Tareas a realizar</h3><table style="width:100%;border-collapse:collapse;margin-bottom:20px;font-size:13px;">'+
@@ -3076,7 +3192,7 @@ function printMaintenance(id){
         '<div style="grid-column:1/-1;"><b>Pedido / problema informado</b>'+escapeHtml(sol.descripcion||"—")+'</div>'+
       '</div>' : '')+
     '<table><thead><tr><th>Repuesto</th><th>Código</th><th style="text-align:center;">Cant. solicitada</th><th style="text-align:center;">Cant. aplicada</th></tr></thead><tbody>'+partsRows+'</tbody></table>'+
-    '<div class="sign"><div>Firma técnico responsable</div><div>Firma supervisor / control de calidad</div></div>'+
+    '<div class="sign"><div>Firma responsable de la tarea</div><div>Firma supervisor / control de calidad</div></div>'+
     '<div class="foot">COSESA Servicios Industriales · Documento generado desde la Plataforma COSESA · Mantenimiento el '+fmtDate(todayISO())+'.</div>'+
   '</body></html>';
 
