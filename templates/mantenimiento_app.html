@@ -336,7 +336,7 @@ tbody tr:hover{ background:var(--surface-2); }
 label{ display:block; font-size:12.5px; font-weight:600; color:var(--ink-soft); margin-bottom:6px; }
 .field{ margin-bottom:16px; }
 .field-row{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-input[type=text], input[type=number], input[type=date], input[type=search], select, textarea{
+input[type=text], input[type=number], input[type=date], input[type=datetime-local], input[type=search], select, textarea{
   width:100%; background:var(--surface); border:1px solid var(--border); color:var(--ink);
   border-radius:9px; padding:9px 12px; font-size:14px; font-family:inherit; outline:none;
 }
@@ -443,6 +443,14 @@ textarea{ resize:vertical; min-height:70px; }
   .topbar{ padding:12px 14px; }
   .topbar-titles h1{ font-size:21px; }
 }
+.ind-chart{ display:flex; gap:10px; align-items:flex-end; height:200px; padding-top:6px; }
+.ind-col{ flex:1; display:flex; flex-direction:column; align-items:center; height:100%; min-width:0; }
+.ind-bar{ flex:1; width:100%; max-width:38px; display:flex; flex-direction:column; justify-content:flex-end; background:var(--surface-2); border-radius:6px; overflow:hidden; }
+.ind-bar i{ display:block; width:100%; }
+.ind-bar i.prev, .ind-dot.prev{ background:#1f8fd6; } .ind-bar i.corr, .ind-dot.corr{ background:#e8892b; }
+.ind-num{ font-size:11.5px; font-weight:700; color:var(--ink-soft); height:16px; }
+.ind-lbl{ font-size:11.5px; color:var(--ink-faint); margin-top:6px; text-transform:capitalize; }
+.ind-dot{ display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:4px; vertical-align:-1px; }
 .tipo-mant{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 .tipo-opt{ display:flex; gap:10px; align-items:flex-start; border:1.5px solid var(--border); border-radius:10px; padding:11px 13px; cursor:pointer; background:var(--surface); }
 .tipo-opt input{ width:17px; height:17px; margin-top:2px; flex:none; }
@@ -607,7 +615,8 @@ function normalizeState(st){
   st.machines.forEach(function(m){ ensureMeters(m); (m.tasks||[]).forEach(function(t){ if(!t.unidad) t.unidad = m.meterType; if(!Array.isArray(t.parts)) t.parts = []; }); });
   var semU = sembrarUnidadesEasytrack(st);
   var semP = sembrarPlanesTipo(st);
-  st.__sembrado = semU || semP;
+  var semO = migrarOrdenes(st);
+  st.__sembrado = semU || semP || semO;
   return st;
 }
 function apiJSON(method, url, body){
@@ -770,7 +779,8 @@ var NAV = [
   { view:"flota", label:"Máquinas y vehículos", icon:"i-truck" },
   { view:"planes", label:"Planes de mantenimiento", icon:"i-clip" },
   { view:"generar", label:"Generar mantenimiento", icon:"i-wrench" },
-  { view:"historial", label:"Historial de órdenes", icon:"i-history" },
+  { view:"historial", label:"Órdenes de mantenimiento", icon:"i-history" },
+  { view:"indicadores", label:"Indicadores", icon:"i-gauge" },
   { section:"Almacén" },
   { view:"stock", label:"Stock de repuestos", icon:"i-box", badgeKey:"critStock" },
   { view:"movimientos", label:"Movimientos", icon:"i-list" },
@@ -786,6 +796,7 @@ function renderSidebarNav(){
     var active = route.view===item.view ? " active":"";
     var badge = "";
     if(item.badgeKey && c[item.badgeKey]>0){ badge = '<span class="nav-badge'+(item.badgeKey==="solPend"?" warn":"")+'">'+c[item.badgeKey]+'</span>'; }
+    if(item.view==="historial"){ var ab = state.maintenances.filter(otAbierta).length; if(ab) badge = '<span class="nav-badge warn">'+ab+'</span>'; }
     if(item.view==="planes" && c.vencidos>0){ badge = '<span class="nav-badge">'+c.vencidos+'</span>'; }
     return '<button class="nav-item'+active+'" data-nav="'+item.view+'"><svg><use href="#'+item.icon+'"/></svg>'+item.label+badge+'</button>';
   }).join("");
@@ -922,7 +933,7 @@ function viewDashboard(){
   html += '</div>';
   html += '</div>';
 
-  html += '<div class="section-head" style="margin-top:22px;"><h2>Últimos mantenimientos generados</h2><button class="btn btn-ghost btn-sm" data-nav="historial">Ver historial completo <svg><use href="#i-chevron-right"/></svg></button></div>';
+  html += '<div class="section-head" style="margin-top:22px;"><h2>Últimos mantenimientos generados</h2><button class="btn btn-ghost btn-sm" data-nav="historial">Ver todas las órdenes <svg><use href="#i-chevron-right"/></svg></button></div>';
   html += renderMaintTable(recentMaint, false);
 
   document.getElementById("view").innerHTML = html;
@@ -941,16 +952,15 @@ function renderMaintTable(list, showMachineFilterNote){
   if(list.length===0) return '<div class="table-wrap">'+emptyState("i-history","Todavía no hay mantenimientos generados.")+'</div>';
   var rows = list.map(function(rec){
     var m = getMachine(rec.machineId);
-    var partsChips = rec.partesUsadas.map(function(pu){
+    var partsChips = rec.partesUsadas.slice(0,2).map(function(pu){
       var p = getPart(pu.partId);
       return '<span class="chip"><b>'+pu.qty+'×</b>'+escapeHtml(p?p.nombre:pu.partId)+'</span>';
-    }).join(" ");
+    }).join(" ") + (rec.partesUsadas.length>2 ? ' <span class="chip" title="'+escapeHtml(rec.partesUsadas.slice(2).map(function(pu){ var p=getPart(pu.partId); return pu.qty+"× "+(p?p.nombre:pu.partId); }).join(", "))+'">+'+(rec.partesUsadas.length-2)+' más</span>' : '');
     var nombreUnidad = m ? m.nombre : (rec.equipoTexto || "Equipo de planta");
     var origen = rec.solicitud ? '<div class="cell-muted" style="font-size:11.5px;">Obra: '+escapeHtml(rec.solicitud.obra)+' · '+escapeHtml(rec.solicitud.cliente)+'</div>' : '';
-    var estadoPill = rec.estado==="anulado" ? '<span class="pill pill-neutral"><svg><use href="#i-ban"/></svg>Anulado</span>' :
-      (rec.faltante ? '<span class="pill pill-warn"><svg><use href="#i-alert"/></svg>Con faltante</span>' : '<span class="pill pill-ok"><svg><use href="#i-check-circle"/></svg>Completado</span>');
+    var estadoPill = estadoPillOT(rec);
     return '<tr>'+
-      '<td class="cell-muted mono" style="white-space:nowrap;">'+fmtDate(rec.fecha)+(rec.numero?'<div style="font-size:11px; font-weight:700; color:var(--ink-soft);">'+escapeHtml(rec.numero)+'</div>':'')+'</td>'+
+      '<td class="cell-muted mono row-link" data-nav="ot" data-id="'+rec.id+'" style="white-space:nowrap;">'+fmtDate(rec.fecha)+(rec.numero?'<div style="font-size:12px; font-weight:800; color:var(--brand-700, var(--ink));">'+escapeHtml(rec.numero)+'</div>':'')+'</td>'+
       (m ? '<td class="cell-strong row-link" data-nav="flota" data-id="'+rec.machineId+'">'+escapeHtml(nombreUnidad)+origen+'</td>' : '<td class="cell-strong">'+escapeHtml(nombreUnidad)+origen+'</td>')+
       '<td>'+(tipoMantDe(rec)==="correctivo" && rec.taskNombre==="Correctivo" ? pillTipo(rec).replace('pill-tipo ','pill-tipo solo ') : escapeHtml(rec.taskNombre)+pillTipo(rec))+(rec.lugar==="externo"?'<div class="cell-muted" style="font-size:11.5px;">'+escapeHtml(lugarTxt(rec))+'</div>':'')+(rec.trabajo?'<div class="cell-muted" style="font-size:11.5px; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="'+escapeHtml(rec.trabajo)+'">'+escapeHtml(rec.trabajo)+'</div>':'')+'</td>'+
       '<td class="mono">'+(rec.medidor!=null ? fmtInt(rec.medidor)+' '+(m?UNIT_LABEL[rec.medidorUnidad||m.meterType]:"") : "—")+'</td>'+
@@ -960,7 +970,7 @@ function renderMaintTable(list, showMachineFilterNote){
       '<td class="cell-muted" style="font-size:12px;">'+escapeHtml(rec.cargadoPor||"—")+'</td>'+
       '<td><div style="display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap;">'+
         '<button class="btn btn-ghost btn-sm" data-action="print-maint" data-id="'+rec.id+'" title="Imprimir orden de mantenimiento"><svg><use href="#i-print"/></svg></button>'+
-        (rec.estado!=="anulado" && isAdmin() ? '<button class="btn btn-ghost btn-sm" data-action="edit-consumables" data-id="'+rec.id+'" title="Editar consumibles"><svg><use href="#i-box"/></svg></button>' : '')+
+        '<button class="btn btn-secondary btn-sm" data-nav="ot" data-id="'+rec.id+'" title="Abrir la orden"><svg><use href="#i-edit"/></svg>Abrir</button>'+
         (rec.estado!=="anulado" && isAdmin() ? '<button class="btn btn-ghost btn-sm" data-action="void-maint" data-id="'+rec.id+'"><svg><use href="#i-ban"/></svg>Anular</button>' : '')+
       '</div></td>'+
     '</tr>';
@@ -1156,20 +1166,21 @@ function openPlanMachinePicker(){
 }
 
 function viewHistorial(){
-  setHeader("Historial de mantenimientos");
+  setHeader("Órdenes de mantenimiento");
   var q = (window.__histQuery||"").toLowerCase();
   var estadoFilter = window.__histEstado||"todos";
   var machineFilter = window.__histMachine||"todos";
-  var all = state.maintenances.slice().sort(function(a,b){ return a.fecha<b.fecha?1:-1; });
+  var all = state.maintenances.slice().sort(function(a,b){ return a.fecha!==b.fecha ? (a.fecha<b.fecha?1:-1) : ((b.numero||"").localeCompare(a.numero||"")); });
   var list = all.filter(function(rec){
     var m = getMachine(rec.machineId);
-    var matchesQ = !q || ((m?m.nombre:"")+" "+rec.taskNombre+" "+(rec.tecnico||"")+" "+(rec.numero||"")+" "+(rec.equipoTexto||"")+" "+(rec.solicitud?rec.solicitud.obra+" "+rec.solicitud.cliente:"")).toLowerCase().indexOf(q)>=0;
+    var matchesQ = !q || ((m?m.nombre:"")+" "+rec.taskNombre+" "+(rec.tecnico||"")+" "+(rec.numero||"")+" "+(rec.equipoTexto||"")+" "+(rec.trabajo||"")+" "+(rec.taller||"")+" "+(rec.solicitud?rec.solicitud.obra+" "+rec.solicitud.cliente:"")).toLowerCase().indexOf(q)>=0;
     var matchesEstado = estadoFilter==="todos" || (estadoFilter==="faltante" ? rec.faltante && rec.estado!=="anulado" : rec.estado===estadoFilter);
     var matchesMachine = machineFilter==="todos" || rec.machineId===machineFilter;
     return matchesQ && matchesEstado && matchesMachine;
   });
 
-  var html = '<div class="section-head"><h2>Todos los registros</h2><div style="display:flex; gap:8px;">'+
+  var html = '<div class="section-head"><h2>Todas las órdenes</h2><div style="display:flex; gap:8px;">'+
+    '<button class="btn btn-primary btn-sm" data-nav="generar"><svg><use href="#i-plus"/></svg>Nueva orden</button>'+
     '<span class="hint">'+list.length+' de '+all.length+'</span>'+
     '<button class="btn btn-secondary btn-sm" data-action="export-historial"><svg><use href="#i-history"/></svg>Exportar CSV</button>'+
   '</div></div>';
@@ -1180,7 +1191,9 @@ function viewHistorial(){
       state.machines.map(function(m){ return '<option value="'+m.id+'" '+(machineFilter===m.id?"selected":"")+'>'+escapeHtml(m.nombre)+'</option>'; }).join("")+
     '</select>'+
     '<div class="tabs" style="border-bottom:none; margin-bottom:0;">'+
-      [["todos","Todos"],["completado","Completados"],["faltante","Con faltante"],["anulado","Anulados"]].map(function(kv){
+      [["todos","Todas"],["generada","Generadas"],["en_proceso","En proceso"],["realizada","Realizadas"],["faltante","Falta stock"],["anulado","Anuladas"]].map(function(kv){
+        var n = kv[0]==="todos" ? all.length : all.filter(function(r){ return kv[0]==="faltante" ? r.faltante && r.estado!=="anulado" : r.estado===kv[0]; }).length;
+        kv = [kv[0], kv[1]+(n ? ' <span class="cell-muted" style="font-weight:600;">'+n+'</span>' : '')];
         return '<button class="tab-btn'+(estadoFilter===kv[0]?" active":"")+'" data-action="hist-filter" data-key="'+kv[0]+'">'+kv[1]+'</button>';
       }).join("")+
     '</div>'+
@@ -1745,7 +1758,7 @@ function viewOrden(solId){
       id: uid("MT"), numero: numero, machineId: m ? m.id : null, taskId: t ? t.id : null,
       taskNombre: t ? t.nombre : "Correctivo", tareas: t && document.getElementById("ordTareasPlan") ? document.getElementById("ordTareasPlan").value.trim() : "", fecha: fecha, medidor: meter, tecnico: tech, notas: notas,
       trabajo: trabajo, equipoTexto: s.equipo || "",
-      partesUsadas: partesUsadas, estado: "completado", faltante: faltante, cargadoPor: usuarioActualTxt(), cargadoPorUsuario: usuarioActualLogin(),
+      partesUsadas: partesUsadas, estado: "generada", creadaEn: ahoraLocal(), faltante: faltante, cargadoPor: usuarioActualTxt(), cargadoPorUsuario: usuarioActualLogin(),
       tipoMant: t ? "preventivo" : "correctivo", lugar: lr.lugar, taller: lr.taller,
       solicitud: { id: s.id, obra: s.obra, obra_codigo: s.obra_codigo, cliente: s.cliente, fecha: s.fecha,
         equipo: s.equipo, descripcion: s.descripcion, prioridad: s.prioridad, responsable: s.responsable, cargado_por: s.cargado_por }
@@ -1756,7 +1769,6 @@ function viewOrden(solId){
     rec.medidorUnidad = unidadO;
     if(m){
       if(meter!=null) setMeter(m, unidadO, meter, true);
-      if(t){ t.lastMeter = esTiempo(tUnit(t,m)) ? null : (meter!=null ? meter : meterOf(m, unidadO)); t.lastDate = fecha; }
     }
     btn.disabled = true;
     var cerrar = document.getElementById("ordCerrar");
@@ -2096,6 +2108,348 @@ function planesTipoOrdenados(){
   return (state.planesTipo||[]).slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre) || (a.unidad<b.unidad?-1:1) || a.intervalo-b.intervalo; });
 }
 
+/* ================= ÓRDENES DE MANTENIMIENTO: ESTADOS ================= */
+var ESTADO_OT = {
+  generada:   { label:"Generada",   cls:"pill-neutral", icon:"i-clip" },
+  en_proceso: { label:"En proceso", cls:"pill-warn",    icon:"i-wrench" },
+  realizada:  { label:"Realizada",  cls:"pill-ok",      icon:"i-check-circle" },
+  anulado:    { label:"Anulada",    cls:"pill-neutral", icon:"i-ban" }
+};
+function estadoOT(rec){ return ESTADO_OT[rec.estado] ? rec.estado : "realizada"; }
+function estadoPillOT(rec){
+  var e = ESTADO_OT[estadoOT(rec)];
+  return '<span class="pill '+e.cls+'"><svg><use href="#'+e.icon+'"/></svg>'+e.label+'</span>'+
+    (rec.faltante && rec.estado!=="anulado" ? '<div style="margin-top:4px;"><span class="pill pill-crit" style="font-size:10.5px;"><svg><use href="#i-alert"/></svg>Falta stock</span></div>' : '');
+}
+function otAbierta(rec){ return rec.estado==="generada" || rec.estado==="en_proceso"; }
+/* Órdenes viejas ("completado") pasan a "realizada" */
+function migrarOrdenes(st){
+  var cambio = false;
+  (st.maintenances||[]).forEach(function(r){
+    if(r.estado==="completado" || !r.estado){ r.estado = "realizada"; r.planAplicado = true; cambio = true; }
+  });
+  return cambio;
+}
+function ahoraLocal(){ var d = new Date(); return isoLocal(d)+"T"+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
+function fmtDT(s){
+  if(!s) return "—";
+  var d = new Date(s); if(isNaN(d)) return s;
+  return d.toLocaleDateString("es-AR",{day:"2-digit",month:"short",year:"numeric"})+" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+}
+function horasEntre(a, b){ if(!a || !b) return null; var x = new Date(a), y = new Date(b); if(isNaN(x)||isNaN(y)) return null; return (y-x)/36e5; }
+function fmtHoras(h){
+  if(h==null) return "—";
+  if(h < 1) return Math.round(h*60)+" min";
+  if(h < 48) return (Math.round(h*10)/10).toLocaleString("es-AR")+" hs";
+  return (Math.round(h/24*10)/10).toLocaleString("es-AR")+" días";
+}
+function getOT(id){ return state.maintenances.find(function(r){ return r.id===id; }); }
+
+/* Al quedar realizada, el plan preventivo vuelve a contar desde esta orden */
+function aplicarPlanDeOrden(rec){
+  if(rec.planAplicado || !rec.taskId) return;
+  var m = getMachine(rec.machineId); if(!m) return;
+  var t = getTask(m, rec.taskId); if(!t) return;
+  var fecha = rec.fin ? rec.fin.slice(0,10) : rec.fecha;
+  if(t.lastDate && fecha < t.lastDate){ rec.planAplicado = true; return; }
+  var u = tUnit(t, m);
+  t.lastMeter = esTiempo(u) ? null : (rec.medidor!=null ? rec.medidor : (hasMeter(m,u) ? meterOf(m,u) : null));
+  t.lastDate = fecha;
+  rec.planAplicado = true;
+}
+
+/* Ajusta el stock según la nueva lista de repuestos de la orden */
+function actualizarRepuestosOT(rec, nuevos){
+  var prev = {};
+  (rec.partesUsadas||[]).forEach(function(pu){ prev[pu.partId] = (prev[pu.partId]||0) + (pu.aplicado!=null ? pu.aplicado : pu.qty); });
+  var nuevoMap = {}; nuevos.forEach(function(x){ nuevoMap[x.partId] = (nuevoMap[x.partId]||0) + x.qty; });
+  var ids = Object.keys(prev).concat(Object.keys(nuevoMap).filter(function(k){ return !(k in prev); }));
+  var lista = [], faltante = false, ref = "Orden "+(rec.numero||rec.id);
+  ids.forEach(function(pid){
+    var a = prev[pid]||0, q = nuevoMap[pid]||0, aplicado = a;
+    if(q > a){
+      var p = getPart(pid), take = Math.min(q-a, p ? p.stock : 0);
+      if(take>0) applyMovement(pid, -take, "consumo", ref);
+      aplicado = a + take;
+    } else if(q < a){
+      applyMovement(pid, a-q, "reversion", "Devolución · "+ref);
+      aplicado = q;
+    }
+    if(q>0){ lista.push({ partId: pid, qty: q, aplicado: aplicado }); if(aplicado < q) faltante = true; }
+  });
+  rec.partesUsadas = lista; rec.faltante = faltante;
+}
+
+/* ---------- Detalle / edición de una orden ---------- */
+function viewOT(id){
+  var rec = getOT(id);
+  if(!rec){ setHeader("Orden de mantenimiento"); document.getElementById("view").innerHTML = emptyState("i-clip","No se encontró la orden."); return; }
+  setHeader("Orden "+(rec.numero||""), "Órdenes de mantenimiento");
+  var m = getMachine(rec.machineId), est = estadoOT(rec), anulada = rec.estado==="anulado";
+  var dur = horasEntre(rec.inicio, rec.fin);
+  var btns = [];
+  if(!anulada){
+    if(est==="generada") btns.push('<button class="btn btn-secondary btn-sm" data-ot-estado="en_proceso"><svg><use href="#i-wrench"/></svg>Iniciar (en proceso)</button>');
+    if(est!=="realizada") btns.push('<button class="btn btn-primary btn-sm" data-ot-estado="realizada"><svg><use href="#i-check"/></svg>Marcar realizada</button>');
+    if(est==="en_proceso") btns.push('<button class="btn btn-ghost btn-sm" data-ot-estado="generada">Volver a generada</button>');
+    if(est==="realizada") btns.push('<button class="btn btn-secondary btn-sm" data-ot-estado="en_proceso">Reabrir (en proceso)</button>');
+  }
+  btns.push('<button class="btn btn-secondary btn-sm" data-action="print-maint" data-id="'+rec.id+'"><svg><use href="#i-print"/></svg>Imprimir</button>');
+  btns.push('<button class="btn btn-secondary btn-sm" id="otCopiar"><svg><use href="#i-layers"/></svg>Copiar a otra unidad</button>');
+  if(!anulada && isAdmin()) btns.push('<button class="btn btn-ghost btn-sm" data-action="void-maint" data-id="'+rec.id+'"><svg><use href="#i-ban"/></svg>Anular</button>');
+
+  var sol = rec.solicitud;
+  var html = '<div style="margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-nav="historial"><svg><use href="#i-arrow-left"/></svg>Volver a órdenes</button></div>'+
+    '<div class="card card-pad" style="margin-bottom:16px;">'+
+      '<div style="display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap; align-items:flex-start;">'+
+        '<div><div style="font-size:22px; font-weight:800; color:var(--ink);">'+escapeHtml(rec.numero||rec.id)+' '+pillTipo(rec)+'</div>'+
+          '<div class="cell-muted" style="margin-top:4px;">'+(m ? '<a class="row-link" data-nav="flota" data-id="'+m.id+'" style="font-weight:700; color:var(--ink);">'+escapeHtml(m.nombre)+'</a>' : escapeHtml(rec.equipoTexto||"Equipo de planta"))+
+            ' · '+escapeHtml(rec.taskNombre||"")+' · generada por '+escapeHtml(rec.cargadoPor||"—")+(rec.creadaEn ? ' el '+fmtDT(rec.creadaEn) : '')+(rec.copiadaDe ? ' · copia de '+escapeHtml(rec.copiadaDe) : '')+'</div>'+
+          '<div style="margin-top:10px;">'+estadoPillOT(rec)+'</div>'+
+          '<div class="cell-muted" style="margin-top:8px; font-size:12.5px;">Inicio: <b>'+fmtDT(rec.inicio)+'</b> · Fin: <b>'+fmtDT(rec.fin)+'</b>'+(dur!=null ? ' · Duración: <b>'+fmtHoras(dur)+'</b>' : '')+'</div>'+
+        '</div>'+
+        '<div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">'+btns.join("")+'</div>'+
+      '</div>'+
+      (sol ? '<div class="banner banner-info" style="margin-top:14px;"><svg><use href="#i-bell"/></svg><div>Viene de la solicitud de obra <b>'+escapeHtml(sol.obra||"")+'</b> ('+escapeHtml(sol.cliente||"")+') · '+escapeHtml(sol.descripcion||"")+'</div></div>' : '')+
+    '</div>';
+
+  var u = m ? unidadMedidor(rec.medidorUnidad || m.meterType, m) : null;
+  html += '<div class="card card-pad" style="max-width:860px;"><div class="section-head" style="margin-bottom:10px;"><h2>Datos de la orden</h2>'+(anulada?'<span class="hint">Orden anulada: solo lectura</span>':'')+'</div>'+
+    '<fieldset id="otForm" style="border:0; padding:0; margin:0;" '+(anulada?"disabled":"")+'>'+
+    '<div class="field-row">'+
+      '<div class="field"><label>Tipo de mantenimiento</label><select id="otTipo"><option value="preventivo" '+(tipoMantDe(rec)==="preventivo"?"selected":"")+'>Preventivo</option><option value="correctivo" '+(tipoMantDe(rec)==="correctivo"?"selected":"")+'>Correctivo</option></select></div>'+
+      '<div class="field"><label>Fecha de la orden</label><input type="date" id="otFecha" value="'+escapeHtml(rec.fecha||todayISO())+'" /></div>'+
+    '</div>'+
+    '<div class="field"><label>Trabajo a realizar / falla</label><textarea id="otTrabajo" rows="3" placeholder="Descripción del trabajo">'+escapeHtml(rec.trabajo||"")+'</textarea></div>'+
+    '<div class="field"><label>Tareas a realizar / procedimiento</label><textarea id="otTareas" rows="4" placeholder="'+escapeHtml(TAREAS_PH)+'">'+escapeHtml(rec.tareas||"")+'</textarea></div>'+
+    '<div class="field-row">'+
+      '<div class="field"><label>Inicio del trabajo</label><input type="datetime-local" id="otInicio" value="'+escapeHtml(rec.inicio||"")+'" /></div>'+
+      '<div class="field"><label>Fin del trabajo</label><input type="datetime-local" id="otFin" value="'+escapeHtml(rec.fin||"")+'" /></div>'+
+    '</div>'+
+    (m ? '<div class="field"><label>Medidor ('+UNIT_LABEL[u]+')</label><input type="number" id="otMedidor" min="0" step="any" value="'+(rec.medidor!=null?rec.medidor:"")+'" /></div>' : '')+
+    htmlLugarResponsable("ot", rec.tecnico)+
+    '<div class="field"><label>Notas</label><input type="text" id="otNotas" value="'+escapeHtml(rec.notas||"")+'" /></div>'+
+    '<div class="field"><label>Repuestos de la orden</label><div class="help">Agregá o quitá repuestos: el stock se descuenta o se devuelve por la diferencia.</div><div id="otReps" style="margin-top:8px;"></div></div>'+
+    '<div id="otShort"></div>'+
+    '</fieldset>'+
+    (anulada ? '' : '<button class="btn btn-primary btn-block" id="otGuardar"><svg><use href="#i-check"/></svg>Guardar cambios</button>')+
+  '</div>';
+  document.getElementById("view").innerHTML = html;
+
+  if(rec.lugar==="externo"){
+    var rx = document.querySelector('input[name="otLugar"][value="externo"]'); if(rx) rx.checked = true;
+    document.getElementById("otTallerBox").style.display = "";
+    document.getElementById("otTaller").value = rec.taller||"";
+  }
+  wireLugar("ot");
+  var repEd = editorRepuestos("otReps", (rec.partesUsadas||[]).map(function(pu){ return { partId: pu.partId, qty: pu.qty }; }), refrescar);
+  function refrescar(){
+    var cortos = [];
+    document.querySelectorAll("#otReps [data-rep-row]").forEach(function(row){
+      var pid = row.querySelector(".rep-part").value, q = Math.max(0, Math.round(Number(row.querySelector(".rep-qty").value)||0));
+      var ya = (rec.partesUsadas||[]).filter(function(x){ return x.partId===pid; }).reduce(function(s,x){ return s+(x.aplicado!=null?x.aplicado:x.qty); }, 0);
+      var p = getPart(pid), corto = !!p && q-ya > p.stock;
+      row.classList.toggle("short", corto); if(corto) cortos.push(p.nombre);
+    });
+    document.getElementById("otShort").innerHTML = cortos.length ? '<div class="banner banner-crit"><svg><use href="#i-alert-circle"/></svg><div><b>Stock insuficiente</b> para: '+escapeHtml(cortos.join(", "))+'. Se puede guardar igual: la orden queda marcada "falta stock".</div></div>' : "";
+  }
+  refrescar();
+  if(anulada) document.querySelectorAll("#otReps button").forEach(function(b){ b.disabled = true; });
+
+  function guardar(silencioso){
+    var lr = leerLugarResponsable("ot"); if(!lr) return false;
+    var ini = document.getElementById("otInicio").value || null, fin = document.getElementById("otFin").value || null;
+    if(ini && fin && fin < ini){ toast("El fin no puede ser anterior al inicio", "err"); return false; }
+    rec.tipoMant = document.getElementById("otTipo").value;
+    rec.fecha = document.getElementById("otFecha").value || rec.fecha;
+    rec.trabajo = document.getElementById("otTrabajo").value.trim();
+    rec.tareas = document.getElementById("otTareas").value.trim();
+    rec.inicio = ini; rec.fin = fin;
+    rec.tecnico = lr.tecnico; rec.lugar = lr.lugar; rec.taller = lr.taller;
+    rec.notas = document.getElementById("otNotas").value.trim();
+    var med = document.getElementById("otMedidor");
+    if(med){
+      rec.medidor = med.value==="" ? null : Math.max(0, Number(med.value)||0);
+      if(rec.medidor!=null && m) setMeter(m, u, rec.medidor, true);
+    }
+    if(lr.lugar==="externo") registrarTaller(lr.taller);
+    actualizarRepuestosOT(rec, repEd.valores());
+    rec.editadaPor = usuarioActualTxt(); rec.editadaEn = ahoraLocal();
+    if(!silencioso){ saveState(); toast("Orden "+(rec.numero||"")+" guardada"); render(); }
+    return true;
+  }
+  var gb = document.getElementById("otGuardar"); if(gb) gb.onclick = function(){ guardar(false); };
+  document.querySelectorAll("[data-ot-estado]").forEach(function(b){
+    b.onclick = function(){
+      var nuevo = b.dataset.otEstado;
+      if(!guardar(true)) return;
+      if(nuevo==="realizada"){ modalRealizada(rec); return; }
+      if(nuevo==="en_proceso" && !rec.inicio) rec.inicio = ahoraLocal();
+      rec.estado = nuevo;
+      saveState(); toast("Orden "+(rec.numero||"")+": "+ESTADO_OT[nuevo].label.toLowerCase()); render();
+    };
+  });
+  document.getElementById("otCopiar").onclick = function(){ modalCopiarOT(rec); };
+}
+
+function modalRealizada(rec){
+  var m = getMachine(rec.machineId);
+  var u = m ? unidadMedidor(rec.medidorUnidad || m.meterType, m) : null;
+  showModal('<div class="modal-body"><h3>Marcar '+escapeHtml(rec.numero||"")+' como realizada</h3>'+
+    '<div class="field-row">'+
+      '<div class="field"><label>Inicio del trabajo</label><input type="datetime-local" id="mrInicio" value="'+escapeHtml(rec.inicio||ahoraLocal())+'" /></div>'+
+      '<div class="field"><label>Fin del trabajo</label><input type="datetime-local" id="mrFin" value="'+escapeHtml(rec.fin||ahoraLocal())+'" /></div>'+
+    '</div>'+
+    (m ? '<div class="field"><label>Medidor al terminar ('+UNIT_LABEL[u]+')</label><input type="number" id="mrMedidor" min="0" step="any" value="'+(rec.medidor!=null?rec.medidor:(hasMeter(m,u)?meterOf(m,u):""))+'" /></div>' : '')+
+    (rec.taskId ? '<div class="help">El plan "'+escapeHtml(rec.taskNombre)+'" vuelve a contar desde este service.</div>' : '')+
+    '</div><div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cancelar</button><button class="btn btn-primary" id="mSave">Marcar realizada</button></div>');
+  document.getElementById("mCancel").onclick = function(){ closeModal(); saveState(); render(); };
+  document.getElementById("mSave").onclick = function(){
+    var ini = document.getElementById("mrInicio").value, fin = document.getElementById("mrFin").value;
+    if(!ini || !fin){ toast("Completá inicio y fin del trabajo", "err"); return; }
+    if(fin < ini){ toast("El fin no puede ser anterior al inicio", "err"); return; }
+    rec.inicio = ini; rec.fin = fin;
+    var mi = document.getElementById("mrMedidor");
+    if(mi && mi.value!==""){ rec.medidor = Math.max(0, Number(mi.value)||0); if(m) setMeter(m, u, rec.medidor, true); }
+    rec.estado = "realizada";
+    rec.realizadaPor = usuarioActualTxt();
+    aplicarPlanDeOrden(rec);
+    saveState(); closeModal(); toast("Orden "+(rec.numero||"")+" realizada"); render();
+  };
+}
+
+function modalCopiarOT(rec){
+  var lista = state.machines.slice().sort(function(a,b){ return a.nombre.localeCompare(b.nombre); });
+  showModal('<div class="modal-body"><h3>Copiar '+escapeHtml(rec.numero||"")+' a otra unidad</h3>'+
+    '<p>Se crea una orden nueva (con su propio número) con el mismo trabajo, tareas, responsable y lugar.</p>'+
+    '<div class="field"><label>Unidad</label><select id="cpMachine">'+lista.map(function(m){ return '<option value="'+m.id+'" '+(m.id===rec.machineId?"":"")+'>'+escapeHtml(m.nombre)+' — '+TYPE_LABEL[m.tipo]+'</option>'; }).join("")+'</select></div>'+
+    '<div class="field"><label>Fecha de la nueva orden</label><input type="date" id="cpFecha" value="'+todayISO()+'" /></div>'+
+    ((rec.partesUsadas||[]).length ? '<label style="display:flex; gap:8px; align-items:center; font-weight:600; color:var(--ink);"><input type="checkbox" id="cpReps" checked style="width:16px; height:16px;"> Copiar también los repuestos ('+rec.partesUsadas.length+') — se descuentan del stock</label>' : '')+
+    '</div><div class="modal-actions"><button class="btn btn-secondary" id="mCancel">Cancelar</button><button class="btn btn-primary" id="mSave">Crear copia</button></div>');
+  document.getElementById("mCancel").onclick = closeModal;
+  document.getElementById("mSave").onclick = function(){
+    var m = getMachine(document.getElementById("cpMachine").value); if(!m) return;
+    var t = rec.taskId ? m.tasks.find(function(x){ return x.nombre===rec.taskNombre; }) : null;
+    var numero = proximoNumeroOrden();
+    var nueva = {
+      id: uid("MT"), numero: numero, machineId: m.id, taskId: t ? t.id : null, taskNombre: rec.taskNombre,
+      tipoMant: tipoMantDe(rec), trabajo: rec.trabajo||"", tareas: rec.tareas||"",
+      fecha: document.getElementById("cpFecha").value || todayISO(), medidor: null, medidorUnidad: m.meterType,
+      tecnico: rec.tecnico, lugar: rec.lugar||"planta", taller: rec.taller||"", notas: rec.notas||"",
+      partesUsadas: [], estado: "generada", faltante: false, inicio: null, fin: null,
+      cargadoPor: usuarioActualTxt(), cargadoPorUsuario: usuarioActualLogin(), creadaEn: ahoraLocal(), copiadaDe: rec.numero||rec.id
+    };
+    var cr = document.getElementById("cpReps");
+    if(cr && cr.checked) actualizarRepuestosOT(nueva, rec.partesUsadas.map(function(pu){ return { partId: pu.partId, qty: pu.qty }; }));
+    state.maintenances.unshift(nueva);
+    saveState(); closeModal(); toast("Orden "+numero+" creada para "+m.nombre);
+    navigate("ot", { id: nueva.id });
+  };
+}
+
+/* ================= INDICADORES ================= */
+function viewIndicadores(){
+  setHeader("Indicadores de mantenimiento");
+  var per = window.__indPer || "90", tipoU = window.__indTipo || "todos";
+  var hoy = todayISO();
+  var desde = per==="anio" ? hoy.slice(0,4)+"-01-01" : (function(){ var d = new Date(hoy+"T12:00:00"); d.setDate(d.getDate()-(Number(per)-1)); return isoLocal(d); })();
+  var dias = diasEntre(desde, hoy) + 1, horasPer = dias*24;
+  var pIni = new Date(desde+"T00:00:00"), pFin = new Date(Math.min(new Date(hoy+"T23:59:59"), new Date()));
+  var unidades = state.machines.filter(function(m){ return tipoU==="todos" || m.tipo===tipoU; });
+  var ids = {}; unidades.forEach(function(m){ ids[m.id] = 1; });
+  var validas = state.maintenances.filter(function(r){ return r.estado!=="anulado" && ids[r.machineId]; });
+  var enPer = validas.filter(function(r){ return r.fecha>=desde && r.fecha<=hoy; });
+  var nPrev = enPer.filter(function(r){ return tipoMantDe(r)==="preventivo"; }).length, nCorr = enPer.length - nPrev;
+  var abiertas = validas.filter(otAbierta).length;
+
+  function fuera(r){
+    if(!r.inicio) return 0;
+    var a = new Date(r.inicio), b = r.fin ? new Date(r.fin) : (r.estado==="en_proceso" ? new Date() : null);
+    if(!b || isNaN(a) || isNaN(b)) return 0;
+    var x = Math.max(a, pIni), y = Math.min(b, pFin);
+    return y > x ? (y-x)/36e5 : 0;
+  }
+  var filas = unidades.map(function(m){
+    var mios = validas.filter(function(r){ return r.machineId===m.id; });
+    var corr = mios.filter(function(r){ return tipoMantDe(r)==="correctivo" && r.fecha>=desde && r.fecha<=hoy; });
+    var prev = mios.filter(function(r){ return tipoMantDe(r)==="preventivo" && r.fecha>=desde && r.fecha<=hoy; });
+    var down = mios.reduce(function(s,r){ return s+fuera(r); }, 0);
+    var rep = corr.map(function(r){ return r.estado==="realizada" ? horasEntre(r.inicio, r.fin) : null; }).filter(function(h){ return h!=null && h>=0; });
+    var uso = 0, conUso = false;
+    var et = m.easytrack && m.easytrack.dias;
+    if(et) Object.keys(et).forEach(function(f){ if(f>=desde && f<=hoy){ uso += Number(et[f].h)||0; conUso = true; } });
+    return { m:m, prev:prev.length, corr:corr.length, down:down,
+      mttr: rep.length ? rep.reduce(function(a,b){ return a+b; },0)/rep.length : null, nRep: rep.length,
+      mtbfDias: corr.length ? dias/corr.length : null, mtbfHs: (corr.length && conUso && uso>0) ? uso/corr.length : null, uso: conUso ? uso : null,
+      disp: Math.max(0, 1 - down/horasPer) };
+  });
+  var dispFlota = filas.length ? filas.reduce(function(s,f){ return s+f.disp; },0)/filas.length : null;
+  var todasRep = []; filas.forEach(function(f){ if(f.mttr!=null) for(var i=0;i<f.nRep;i++) todasRep.push(f.mttr); });
+  var mttrFlota = todasRep.length ? todasRep.reduce(function(a,b){ return a+b; },0)/todasRep.length : null;
+  var mtbfFlota = nCorr ? (dias*unidades.length)/nCorr : null;
+  var tConDatos = 0, tAlDia = 0;
+  unidades.forEach(function(m){ m.tasks.forEach(function(t){ var s = taskProgress(t, m).status; if(s!=="nodata"){ tConDatos++; if(s!=="crit") tAlDia++; } }); });
+  var pctPrev = enPer.length ? Math.round(nPrev*100/enPer.length) : null;
+  function pct(x){ return x==null ? "—" : (Math.round(x*1000)/10).toLocaleString("es-AR")+"%"; }
+
+  var html = '<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:16px;">'+
+    '<div class="tabs" style="border-bottom:none; margin-bottom:0;">'+
+      [["30","30 días"],["90","90 días"],["180","6 meses"],["365","12 meses"],["anio","Año "+hoy.slice(0,4)]].map(function(kv){
+        return '<button class="tab-btn'+(per===kv[0]?" active":"")+'" data-action="ind-per" data-key="'+kv[0]+'">'+kv[1]+'</button>'; }).join("")+
+    '</div>'+
+    '<select id="indTipo" style="width:200px;"><option value="todos">Toda la flota</option><option value="vehiculo" '+(tipoU==="vehiculo"?"selected":"")+'>Solo vehículos</option><option value="motobomba" '+(tipoU==="motobomba"?"selected":"")+'>Solo motobombas</option></select>'+
+    '<span class="hint">Del '+fmtDate(desde)+' al '+fmtDate(hoy)+' · '+dias+' días · '+unidades.length+' unidades</span>'+
+  '</div>';
+  html += '<div class="kpi-grid">'+
+    kpiCard("i-check-circle","Disponibilidad de la flota", pct(dispFlota), "tiempo en servicio / tiempo total", dispFlota!=null && dispFlota<0.9 ? "warn" : "brand")+
+    kpiCard("i-history","MTBF (entre fallas)", mtbfFlota==null ? "Sin fallas" : (Math.round(mtbfFlota*10)/10).toLocaleString("es-AR")+" días", "promedio por unidad, días calendario", "brand")+
+    kpiCard("i-wrench","MTTR (reparación)", fmtHoras(mttrFlota), "promedio de correctivos realizados", "brand")+
+    kpiCard("i-layers","Preventivo vs correctivo", pctPrev==null ? "—" : pctPrev+"% / "+(100-pctPrev)+"%", nPrev+" preventivos · "+nCorr+" correctivos", pctPrev!=null && pctPrev<50 ? "warn" : "brand")+
+    kpiCard("i-clip","Órdenes abiertas", abiertas, "generadas + en proceso", abiertas ? "warn" : "brand")+
+    kpiCard("i-cal","Cumplimiento de planes", tConDatos ? Math.round(tAlDia*100/tConDatos)+"%" : "—", tAlDia+" de "+tConDatos+" planes no vencidos", tConDatos && tAlDia<tConDatos ? "warn" : "brand")+
+  '</div>';
+
+  // Preventivo vs correctivo por mes (últimos 12 meses)
+  var meses = [], d0 = new Date(hoy.slice(0,7)+"-01T12:00:00");
+  for(var i=11;i>=0;i--){ var d = new Date(d0); d.setMonth(d.getMonth()-i); meses.push(isoLocal(d).slice(0,7)); }
+  var porMes = meses.map(function(k){
+    var rs = validas.filter(function(r){ return (r.fecha||"").slice(0,7)===k; });
+    var p = rs.filter(function(r){ return tipoMantDe(r)==="preventivo"; }).length;
+    return { k:k, p:p, c:rs.length-p };
+  });
+  var maxMes = Math.max(1, Math.max.apply(null, porMes.map(function(x){ return x.p+x.c; })));
+  html += '<div class="card card-pad" style="margin:18px 0;"><div class="section-head" style="margin-bottom:10px;"><h2>Preventivo vs correctivo por mes</h2>'+
+    '<span class="hint"><span class="ind-dot prev"></span>Preventivo <span class="ind-dot corr" style="margin-left:10px;"></span>Correctivo</span></div>'+
+    '<div class="ind-chart">'+porMes.map(function(x){
+      var nom = new Date(x.k+"-15T12:00:00").toLocaleDateString("es-AR",{month:"short"}).replace(".","");
+      return '<div class="ind-col" title="'+x.k+': '+x.p+' preventivos, '+x.c+' correctivos">'+
+        '<div class="ind-num">'+((x.p+x.c)||"")+'</div>'+
+        '<div class="ind-bar"><i class="corr" style="height:'+(x.c*100/maxMes)+'%"></i><i class="prev" style="height:'+(x.p*100/maxMes)+'%"></i></div>'+
+        '<div class="ind-lbl">'+nom+'</div></div>';
+    }).join("")+'</div></div>';
+
+  // Tabla por unidad
+  filas.sort(function(a,b){ return a.disp-b.disp || b.corr-a.corr; });
+  html += '<div class="section-head"><h2>Por unidad</h2><span class="hint">ordenado por disponibilidad (menor primero)</span></div>'+
+    '<div class="table-wrap"><table><thead><tr><th>Unidad</th><th>Preventivos</th><th>Correctivos</th><th>Fuera de servicio</th><th>MTBF</th><th>MTTR</th><th>Disponibilidad</th></tr></thead><tbody>'+
+    filas.map(function(f){
+      var mtbf = f.corr ? (f.mtbfHs!=null ? (Math.round(f.mtbfHs)).toLocaleString("es-AR")+" hs de uso" : (Math.round(f.mtbfDias*10)/10).toLocaleString("es-AR")+" días") : '<span class="cell-muted">sin fallas</span>';
+      var tone = f.disp<0.9 ? "var(--crit)" : f.disp<0.97 ? "var(--warn)" : "var(--ok)";
+      return '<tr><td class="cell-strong row-link" data-nav="flota" data-id="'+f.m.id+'">'+escapeHtml(f.m.nombre)+'</td>'+
+        '<td class="mono">'+f.prev+'</td><td class="mono">'+f.corr+'</td>'+
+        '<td class="mono">'+(f.down ? fmtHoras(f.down) : "—")+'</td>'+
+        '<td class="mono">'+mtbf+'</td><td class="mono">'+fmtHoras(f.mttr)+'</td>'+
+        '<td style="min-width:150px;"><div style="display:flex; align-items:center; gap:8px;"><div class="progress" style="flex:1;"><i style="width:'+(f.disp*100).toFixed(1)+'%; background:'+tone+';"></i></div><span class="mono" style="font-size:12px;">'+pct(f.disp)+'</span></div></td></tr>';
+    }).join("")+'</tbody></table></div>';
+  html += '<div class="help" style="margin-top:12px; line-height:1.6;">'+
+    '<b>Cómo se calculan:</b> <b>Disponibilidad</b> = 1 − (horas fuera de servicio ÷ horas del período), con el tiempo entre inicio y fin de cada orden (las órdenes en proceso cuentan hasta ahora). '+
+    '<b>MTBF</b> = tiempo del período ÷ cantidad de correctivos (en horas de uso si la unidad tiene datos de Easytrack; si no, en días calendario). '+
+    '<b>MTTR</b> = promedio de la duración (inicio a fin) de los correctivos realizados. '+
+    'Para que los indicadores sean confiables, cargá el <b>inicio y fin</b> de cada orden.</div>';
+  document.getElementById("view").innerHTML = html;
+  document.getElementById("indTipo").onchange = function(){ window.__indTipo = this.value; viewIndicadores(); };
+}
+
 /* ================= TIPO DE MANTENIMIENTO / LUGAR ================= */
 function tipoMantDe(rec){ return rec.tipoMant || (rec.taskId ? "preventivo" : "correctivo"); }
 function pillTipo(rec){ var t = tipoMantDe(rec); return '<span class="pill-tipo '+(t==="preventivo"?"prev":"corr")+'">'+(t==="preventivo"?"Preventivo":"Correctivo")+'</span>'; }
@@ -2320,13 +2674,13 @@ function viewGenerar(preId, preTask){
       id: uid("MT"), numero: numero, machineId: m.id, taskId: null, taskNombre: "Correctivo", tipoMant: "correctivo",
       trabajo: trabajo, tareas: "", fecha: date, medidor: meter, medidorUnidad: m.meterType,
       tecnico: lr.tecnico, lugar: lr.lugar, taller: lr.taller, notas: notes,
-      partesUsadas: partesUsadas, estado: "completado", faltante: faltante,
+      partesUsadas: partesUsadas, estado: "generada", creadaEn: ahoraLocal(), faltante: faltante,
       cargadoPor: usuarioActualTxt(), cargadoPorUsuario: usuarioActualLogin()
     });
     if(meter!=null) setMeter(m, m.meterType, meter, true);
     saveState();
     toast("Orden correctiva "+numero+" generada"+(faltante ? " con faltante de stock" : ""), faltante?"err":"ok");
-    navigate("flota", { id:m.id });
+    navigate("ot", { id: state.maintenances[0].id });
   }
 
   function planElegido(m){
@@ -2436,15 +2790,13 @@ function viewGenerar(preId, preTask){
       id: uid("MT"), numero: numero, machineId: m.id, taskId: t.id, taskNombre: t.nombre,
       tipoMant: "preventivo", lugar: lr.lugar, taller: lr.taller,
       fecha: date, medidor: meter, medidorUnidad: unidadMed, tecnico: lr.tecnico, notas: notes, tareas: tareasTxt,
-      partesUsadas: partesUsadas, estado: "completado", faltante: faltante, cargadoPor: usuarioActualTxt(), cargadoPorUsuario: usuarioActualLogin()
+      partesUsadas: partesUsadas, estado: "generada", creadaEn: ahoraLocal(), faltante: faltante, cargadoPor: usuarioActualTxt(), cargadoPorUsuario: usuarioActualLogin()
     });
     if(lr.lugar==="externo") registrarTaller(lr.taller);
-    t.lastMeter = esTiempo(unidadT) ? null : meter;
-    t.lastDate = date;
     if(meter!=null) setMeter(m, unidadMed, meter, true);
     saveState();
-    toast(faltante ? "Mantenimiento "+numero+" generado con faltante de stock" : "Mantenimiento "+numero+" generado y stock actualizado", faltante?"err":"ok");
-    navigate("flota", { id:m.id });
+    toast("Orden "+numero+" generada"+(faltante ? " con faltante de stock" : ""), faltante?"err":"ok");
+    navigate("ot", { id: state.maintenances[0].id });
   }
 
   document.getElementById("genMachine").onchange = renderTaskArea;
@@ -2559,12 +2911,14 @@ function render(){
   else if(v==="orden") viewOrden(route.params.id);
   else if(v==="generar") viewGenerar(route.params.id, route.params.sub);
   else if(v==="historial") viewHistorial();
+  else if(v==="ot") viewOT(route.params.id);
+  else if(v==="indicadores") viewIndicadores();
   else if(v==="stock") viewStock();
   else if(v==="movimientos") viewMovimientos();
   else if(v==="alertas") viewAlertas();
   else viewDashboard();
 
-  document.querySelectorAll(".nav-item").forEach(function(b){ b.classList.toggle("active", b.dataset.nav===route.view || (route.view==="orden" && b.dataset.nav==="solicitudes")); });
+  document.querySelectorAll(".nav-item").forEach(function(b){ b.classList.toggle("active", b.dataset.nav===route.view || (route.view==="orden" && b.dataset.nav==="solicitudes") || (route.view==="ot" && b.dataset.nav==="historial")); });
   updateAlertDot();
   window.scrollTo(0,0);
 }
@@ -2595,6 +2949,7 @@ document.addEventListener("click", function(e){
   else if(action==="plantipo-del"){ borrarPlanTipo(act.dataset.id); }
   else if(action==="plantipo-asignar"){ openAsignarPlanModal(act.dataset.id); }
   else if(action==="flota-filter"){ window.__flotaTipo = act.dataset.key; viewFlota(); }
+  else if(action==="ind-per"){ window.__indPer = act.dataset.key; viewIndicadores(); }
   else if(action==="hist-filter"){ window.__histEstado = act.dataset.key; viewHistorial(); }
   else if(action==="mov-filter"){ window.__movTipo = act.dataset.key; viewMovimientos(); }
   else if(action==="stock-filter"){ window.__stockFilter = act.dataset.key; viewStock(); }
@@ -3126,7 +3481,7 @@ function printMaintenance(id){
   var rec = state.maintenances.find(function(r){ return r.id===id; });
   if(!rec) return;
   var m = getMachine(rec.machineId);
-  var estadoLabel = rec.estado==="anulado" ? "ANULADO" : (rec.faltante ? "COMPLETADO — CON FALTANTE DE STOCK" : "COMPLETADO");
+  var estadoLabel = ESTADO_OT[estadoOT(rec)].label.toUpperCase() + (rec.faltante && rec.estado!=="anulado" ? " — CON FALTANTE DE STOCK" : "");
   var sol = rec.solicitud;
   var PRIO_TXT = { alta:"Alta", media:"Media", baja:"Baja" };
   var partsRows = rec.partesUsadas.map(function(pu){
@@ -3172,6 +3527,8 @@ function printMaintenance(id){
       (rec.taskNombre && rec.taskNombre!=="Correctivo" ? '<div><b>'+(tipoMantDe(rec)==="preventivo"?"Plan":"Tarea")+'</b>'+escapeHtml(rec.taskNombre)+'</div>' : '')+
       '<div><b>Fecha</b>'+fmtDate(rec.fecha)+'</div>'+
       '<div><b>Dónde se realiza</b>'+escapeHtml(lugarTxt(rec))+'</div>'+
+      '<div><b>Inicio del trabajo</b>'+(rec.inicio ? fmtDT(rec.inicio) : '______ / ______ / ______ &nbsp; ____ : ____')+'</div>'+
+      '<div><b>Fin del trabajo</b>'+(rec.fin ? fmtDT(rec.fin) : '______ / ______ / ______ &nbsp; ____ : ____')+'</div>'+
       '<div><b>Medidor al momento del service</b>'+(rec.medidor!=null ? fmtInt(rec.medidor)+' '+(m?UNIT_LABEL[rec.medidorUnidad||m.meterType]:"") : "—")+'</div>'+
       (m && m.patente ? '<div><b>Patente</b>'+escapeHtml(m.patente)+'</div>' : '')+
       '<div><b>Responsable de la tarea</b>'+escapeHtml(rec.tecnico||"—")+'</div>'+
