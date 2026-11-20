@@ -54,7 +54,15 @@
           <input type="datetime-local" name="fecha_fin_estimada">
         </div>
       </div>
-      <button class="btn" type="submit">Crear obra</button>
+      {% set obra = None %}
+      <label>Turnos de trabajo</label>
+      <select name="turnos">
+        <option value="ambos" {{ 'selected' if (obra and obra['turnos'] or 'ambos') == 'ambos' else '' }}>Ambos turnos (24 hs)</option>
+        <option value="dia" {{ 'selected' if obra and obra['turnos'] == 'dia' else '' }}>Solo turno día (07 a 19 hs)</option>
+        <option value="noche" {{ 'selected' if obra and obra['turnos'] == 'noche' else '' }}>Solo turno noche (19 a 07 hs)</option>
+      </select>
+      <p class="subtitle" style="margin:4px 0 10px;">El cronograma marca como "fuera de turno" las horas en que no se trabaja, y esas horas no cuentan en las horas de cada lavado.</p>
+            <button class="btn" type="submit">Crear obra</button>
     </form>
     {% endif %}
   </div>

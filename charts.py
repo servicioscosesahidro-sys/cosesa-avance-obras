@@ -27,6 +27,58 @@ def _fmt(d):
 
 
 # ---------------------------------------------------------------------------
+# Turnos de trabajo de la obra: "ambos" (24 hs), "dia" (07-19) o "noche" (19-07)
+# ---------------------------------------------------------------------------
+TURNOS_OBRA = (("ambos", "Ambos turnos (24 hs)"), ("dia", "Solo turno día (07 a 19 hs)"), ("noche", "Solo turno noche (19 a 07 hs)"))
+
+
+def norm_turnos(t):
+    return t if t in ("dia", "noche") else "ambos"
+
+
+def turno_de_hora(t):
+    return "dia" if 7 <= t.hour < 19 else "noche"
+
+
+def segmentos_turno(a, b):
+    """Parte [a, b) en tramos que no cruzan las 07:00 ni las 19:00.
+    Devuelve [(ini, fin, "dia"|"noche"), ...]."""
+    out = []
+    if not a or not b or b <= a:
+        return out
+    t = a
+    while t < b:
+        cands = []
+        for h in (7, 19):
+            c = t.replace(hour=h, minute=0, second=0, microsecond=0)
+            if c <= t:
+                c += timedelta(days=1)
+            cands.append(c)
+        f = min(min(cands), b)
+        out.append((t, f, turno_de_hora(t)))
+        t = f
+    return out
+
+
+def horas_en_turno(a, b, turnos):
+    """Horas de [a, b) que caen dentro de los turnos en que trabaja la obra."""
+    turnos = norm_turnos(turnos)
+    if not a or not b or b <= a:
+        return 0.0
+    if turnos == "ambos":
+        return (b - a).total_seconds() / 3600
+    return sum((f - i).total_seconds() for i, f, tu in segmentos_turno(a, b) if tu == turnos) / 3600
+
+
+def tramos_fuera_turno(a, b, turnos):
+    """Tramos de [a, b) en que la obra NO trabaja (para sombrearlos en el gráfico)."""
+    turnos = norm_turnos(turnos)
+    if turnos == "ambos":
+        return []
+    return [(i, f) for i, f, tu in segmentos_turno(a, b) if tu != turnos]
+
+
+# ---------------------------------------------------------------------------
 # Diagrama de Gantt
 # ---------------------------------------------------------------------------
 
@@ -104,7 +156,7 @@ _GANTT_DRAG_JS = '''<script>
 </script>'''
 
 
-def gantt_svg(items_con_demoras, width=880, interactive=False, corte=None):
+def gantt_svg(items_con_demoras, width=880, interactive=False, corte=None, turnos="ambos"):
     """Una fila por ítem. Barra clara = cronograma planificado.
     Barra azul = avance real (ancho proporcional al % de avance dentro del
     rango real transcurrido). Los segmentos rojos marcan las demoras
@@ -160,7 +212,20 @@ def gantt_svg(items_con_demoras, width=880, interactive=False, corte=None):
     pd = chart_w / (total_span / 86400.0)  # unidades del viewBox por día
 
     chart_id = f"gantt-{next(_gantt_counter)}"
+    turnos = norm_turnos(turnos)
     svg = [f'<svg id="{chart_id}-svg" viewBox="0 0 {width} {height}" width="100%" style="font-family:inherit;">']
+    patron = f"{chart_id}-fuera"
+    svg.append(
+        f'<defs><pattern id="{patron}" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">'
+        f'<rect width="6" height="6" fill="#dfe3e8" fill-opacity=".85"/><line x1="0" y1="0" x2="0" y2="6" stroke="#9aa4ae" stroke-width="2"/></pattern></defs>'
+    )
+
+    def fuera_turno(a, b, y0, h):
+        """Sombrea con rayado los tramos de [a, b) fuera del turno de la obra."""
+        for fi, ff in tramos_fuera_turno(a, b, turnos):
+            fx0, fx1 = x(fi), x(ff)
+            if fx1 - fx0 > 0.2:
+                svg.append(f'<rect x="{fx0:.1f}" y="{y0}" width="{fx1 - fx0:.1f}" height="{h}" fill="url(#{patron})"/>')
 
     # Franjas de turno de fondo: turno día 07:00-19:00 (blanco) y turno noche
     # 19:00-07:00 del día siguiente (gris azulado), para todo el rango visible.
@@ -172,10 +237,12 @@ def gantt_svg(items_con_demoras, width=880, interactive=False, corte=None):
         noche_fin = dia_ini + timedelta(days=1)
         dx0, dx1 = x(max(dia_ini, start)), x(min(dia_fin, end))
         if dx1 > dx0:
-            svg.append(f'<rect x="{dx0:.1f}" y="{top_pad - 4}" width="{dx1 - dx0:.1f}" height="{height - top_pad - 6:.1f}" fill="#fffdf5"/>')
+            fill_d = "#fffdf5" if turnos != "noche" else "#e4e7eb"
+            svg.append(f'<rect x="{dx0:.1f}" y="{top_pad - 4}" width="{dx1 - dx0:.1f}" height="{height - top_pad - 6:.1f}" fill="{fill_d}"/>')
         nx0, nx1 = x(max(noche_ini, start)), x(min(noche_fin, end))
         if nx1 > nx0:
-            svg.append(f'<rect x="{nx0:.1f}" y="{top_pad - 4}" width="{nx1 - nx0:.1f}" height="{height - top_pad - 6:.1f}" fill="#eef1f6"/>')
+            fill_n = "#eef1f6" if turnos != "dia" else "#e4e7eb"
+            svg.append(f'<rect x="{nx0:.1f}" y="{top_pad - 4}" width="{nx1 - nx0:.1f}" height="{height - top_pad - 6:.1f}" fill="{fill_n}"/>')
         banda_cursor += timedelta(days=1)
 
     # Cabecera del gráfico en 4 filas bien separadas (así no se pisan los
@@ -302,6 +369,7 @@ def gantt_svg(items_con_demoras, width=880, interactive=False, corte=None):
             # vuelve a dibujar su contorno punteado ENCIMA de la barra real,
             # para ver dónde estaba programado el lavado aunque se superpongan.
             svg.append(f'<rect x="{px0:.1f}" y="{bar_y}" width="{max(px1-px0,2):.1f}" height="{bar_h}" rx="4" fill="#f7dc8e" stroke="#c99a1f" stroke-width="1.5"/>')
+            fuera_turno(plan_ini, plan_fin, bar_y, bar_h)
 
         if real_ini:
             rx0, rx1 = x(real_ini), x(real_fin)
@@ -309,6 +377,7 @@ def gantt_svg(items_con_demoras, width=880, interactive=False, corte=None):
             svg.append(f'<rect x="{rx0:.1f}" y="{bar_y}" width="{full_w:.1f}" height="{bar_h}" rx="4" fill="#e6eaf1" stroke="#33456b" stroke-width="1"/>')
             fill_w = full_w * (avance / 100)
             svg.append(f'<rect x="{rx0:.1f}" y="{bar_y}" width="{fill_w:.1f}" height="{bar_h}" rx="4" fill="#33456b"/>')
+            fuera_turno(real_ini, real_fin, bar_y, bar_h)
 
             # demoras en rojo, superpuestas sobre la barra de avance real. Una
             # demora sin fecha_fin es una pausa todavía abierta: se dibuja
@@ -350,7 +419,9 @@ def gantt_svg(items_con_demoras, width=880, interactive=False, corte=None):
         '<span><span style="display:inline-block;width:12px;height:12px;border:1px dashed #d5dade;border-radius:3px;vertical-align:middle;"></span> Cambio de día</span>'
         '<span><span style="display:inline-block;width:12px;height:12px;background:#fffdf5;border:1px solid #e5decf;border-radius:3px;vertical-align:middle;"></span> Turno día (07-19h)</span>'
         '<span><span style="display:inline-block;width:12px;height:12px;background:#eef1f6;border:1px solid #ced6e0;border-radius:3px;vertical-align:middle;"></span> Turno noche (19-07h)</span>'
-        '</div>'
+        + ('<span><span style="display:inline-block;width:12px;height:12px;background:repeating-linear-gradient(45deg,#9aa4ae 0 2px,#dfe3e8 2px 6px);border-radius:3px;vertical-align:middle;"></span> '
+           f'Fuera de turno (la obra trabaja {"solo de día" if turnos == "dia" else "solo de noche"}: esas horas no cuentan)</span>' if turnos != "ambos" else '')
+        + '</div>'
     )
     toolbar = (
         f'<div class="no-print" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">'
@@ -406,13 +477,17 @@ def gantt_svg(items_con_demoras, width=880, interactive=False, corte=None):
 # Curva de avance: planificado (lineal) vs. real (según bitácora)
 # ---------------------------------------------------------------------------
 
-def _expected_pct(day, plan_ini, plan_fin):
+def _expected_pct(day, plan_ini, plan_fin, turnos="ambos"):
     if not (plan_ini and plan_fin) or plan_fin <= plan_ini:
         return None
     if day <= plan_ini:
         return 0.0
     if day >= plan_fin:
         return 100.0
+    if norm_turnos(turnos) != "ambos":
+        total = horas_en_turno(plan_ini, plan_fin, turnos)
+        if total > 0:
+            return horas_en_turno(plan_ini, day, turnos) / total * 100
     return (day - plan_ini).total_seconds() / (plan_fin - plan_ini).total_seconds() * 100
 
 
@@ -426,7 +501,7 @@ def _actual_pct_series(item_avances, day):
     return val
 
 
-def curve_svg(items_con_avances, width=880, corte=None):
+def curve_svg(items_con_avances, width=880, corte=None, turnos="ambos"):
     """items_con_avances: lista de dicts {item: row, avances: [rows...]}"""
     all_dates = []
     for d in items_con_avances:
@@ -462,7 +537,7 @@ def curve_svg(items_con_avances, width=880, corte=None):
         for d in items_con_avances:
             it = d["item"]
             plan_ini, plan_fin = _parse(it["fecha_inicio_plan"]), _parse(it["fecha_fin_plan"])
-            exp = _expected_pct(day, plan_ini, plan_fin)
+            exp = _expected_pct(day, plan_ini, plan_fin, turnos)
             if exp is not None:
                 exp_vals.append(exp)
             act_vals.append(_actual_pct_series(d["avances"], day))

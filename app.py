@@ -23,6 +23,7 @@ from db import get_db, init_db, DB_PATH
 from backup import restore_latest, backup_now, iniciar_backup_periodico
 from charts import gantt_svg, curve_svg, carga_diaria_planificada_svg, carga_diaria_real_svg
 from charts import _parse as _parse_fecha_grafico
+from charts import TURNOS_OBRA, norm_turnos, segmentos_turno
 from excel_io import generar_plantilla_cronograma, generar_plantilla_reales, leer_cronograma, leer_reales, norm_clave
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -155,12 +156,17 @@ def total_personal(personal_by_turno):
     return total_personas, total_bombas
 
 
-def _horas_por_turno(ini, fin, demoras):
+def _horas_por_turno(ini, fin, demoras, turnos="ambos"):
     """Horas de trabajo netas (descontando demoras) repartidas según el turno en
-    que realmente ocurrieron: día 07:00-19:00, noche 19:00-07:00."""
-    res = {"dia": 0.0, "noche": 0.0}
+    que realmente ocurrieron: día 07:00-19:00, noche 19:00-07:00.
+    Si la obra trabaja en un solo turno, las horas del otro turno no cuentan
+    como trabajo (ni como demora): se informan aparte en "fuera"."""
+    turnos = norm_turnos(turnos)
+    res = {"dia": 0.0, "noche": 0.0, "fuera": 0.0}
     if not ini or not fin or fin <= ini:
         return res
+    if turnos != "ambos":
+        res["fuera"] = sum((f - i).total_seconds() for i, f, tu in segmentos_turno(ini, fin) if tu != turnos) / 3600
     dem = []
     for d in demoras:
         di = _parse_dt(d["fecha_inicio"])
@@ -195,12 +201,13 @@ def _horas_por_turno(ini, fin, demoras):
                 cands.append(c)
             fin_seg = min(min(cands), b)
             turno = "dia" if 7 <= t.hour < 19 else "noche"
-            res[turno] += (fin_seg - t).total_seconds() / 3600
+            if turnos == "ambos" or turno == turnos:
+                res[turno] += (fin_seg - t).total_seconds() / 3600
             t = fin_seg
     return res
 
 
-def compute_horas_item(item, demoras):
+def compute_horas_item(item, demoras, turnos="ambos"):
     """Horas totales transcurridas (inicio real -> fin real, o -> ahora si sigue en
     curso), horas de demoras, y horas de trabajo netas (totales menos demoras),
     con el reparto de las horas de trabajo entre turno día y turno noche."""
@@ -213,16 +220,27 @@ def compute_horas_item(item, demoras):
         horas_totales = 0.0
     else:
         horas_totales = (fin - inicio).total_seconds() / 3600
-    por_turno = _horas_por_turno(inicio, fin, demoras)
+    por_turno = _horas_por_turno(inicio, fin, demoras, turnos)
     horas_trabajo = por_turno["dia"] + por_turno["noche"]
-    horas_demoras = max(0.0, horas_totales - horas_trabajo)
+    horas_fuera = por_turno["fuera"]
+    horas_demoras = max(0.0, horas_totales - horas_trabajo - horas_fuera)
     return {
         "horas_totales": round(horas_totales, 2),
         "horas_demoras": round(horas_demoras, 2),
+        "horas_fuera_turno": round(horas_fuera, 2),
+        "turnos": norm_turnos(turnos),
         "horas_trabajo": round(horas_trabajo, 2),
         "horas_dia": por_turno["dia"],
         "horas_noche": por_turno["noche"],
     }
+
+
+def turnos_de_obra(db, obra_id):
+    try:
+        r = db.execute("SELECT turnos FROM obras WHERE id = ?", (obra_id,)).fetchone()
+    except sqlite3.OperationalError:
+        return "ambos"
+    return norm_turnos(r["turnos"] if r else None)
 
 
 def recompute_item_horas(db, item_id, persistir=True):
@@ -234,7 +252,7 @@ def recompute_item_horas(db, item_id, persistir=True):
         return None
     demoras = db.execute("SELECT * FROM demoras WHERE item_id = ?", (item_id,)).fetchall()
     personal = get_personal(db, item_id)
-    horas = compute_horas_item(item, demoras)
+    horas = compute_horas_item(item, demoras, turnos_de_obra(db, item["obra_id"]))
     total_personas, total_bombas = total_personal(personal)
     horas_hombre = horas_maquina = 0.0
     detalle = []
@@ -1016,8 +1034,9 @@ def build_obra_charts(db, items, interactive=False):
         _, total_bombas = total_personal(personal)
         if not _item_cancelada(it):
             items_con_bombas.append({"item": it, "bombas": total_bombas})
-    gantt_html = gantt_svg(items_con_demoras, interactive=interactive, corte=corte) if items else "<p class='subtitle'>Todavía no hay ítems cargados.</p>"
-    curve_html = curve_svg(items_con_avances, corte=corte) if items_con_avances else "<p class='subtitle'>No hay tareas que cuenten para el avance de la obra.</p>"
+    turnos = turnos_de_obra(db, items[0]["obra_id"]) if items else "ambos"
+    gantt_html = gantt_svg(items_con_demoras, interactive=interactive, corte=corte, turnos=turnos) if items else "<p class='subtitle'>Todavía no hay ítems cargados.</p>"
+    curve_html = curve_svg(items_con_avances, corte=corte, turnos=turnos) if items_con_avances else "<p class='subtitle'>No hay tareas que cuenten para el avance de la obra.</p>"
     if items_con_bombas:
         carga_plan_html = carga_diaria_planificada_svg(items_con_bombas)
         carga_real_html = carga_diaria_real_svg(items_con_bombas, corte=corte)
@@ -1484,14 +1503,15 @@ def crear_obra(cliente_id):
     ubicacion = request.form.get("ubicacion", "").strip()
     fecha_inicio = request.form.get("fecha_inicio") or None
     fecha_fin_estimada = request.form.get("fecha_fin_estimada") or None
+    turnos = norm_turnos(request.form.get("turnos"))
     if not nombre:
         flash("El nombre de la obra es obligatorio.", "error")
         return redirect(url_for("cosesa_cliente_detail", cliente_id=cliente_id))
     db = get_db()
     cur = db.execute(
-        "INSERT INTO obras (cliente_id, nombre, descripcion, ubicacion, fecha_inicio, fecha_fin_estimada, estado) "
-        "VALUES (?, ?, ?, ?, ?, ?, 'en_curso')",
-        (cliente_id, nombre, descripcion, ubicacion, fecha_inicio, fecha_fin_estimada),
+        "INSERT INTO obras (cliente_id, nombre, descripcion, ubicacion, fecha_inicio, fecha_fin_estimada, estado, turnos) "
+        "VALUES (?, ?, ?, ?, ?, ?, 'en_curso', ?)",
+        (cliente_id, nombre, descripcion, ubicacion, fecha_inicio, fecha_fin_estimada, turnos),
     )
     obra_id = cur.lastrowid
     user = get_current_user()
@@ -1596,21 +1616,25 @@ def editar_obra(obra_id):
             estado = obra["estado"]
         db.execute(
             "UPDATE obras SET nombre = ?, descripcion = ?, ubicacion = ?, fecha_inicio = ?, "
-            "fecha_fin_estimada = ?, estado = ? WHERE id = ?",
+            "fecha_fin_estimada = ?, estado = ?, turnos = ? WHERE id = ?",
             (
                 nombre, request.form.get("descripcion", "").strip(), request.form.get("ubicacion", "").strip(),
                 request.form.get("fecha_inicio") or None, request.form.get("fecha_fin_estimada") or None,
-                estado, obra_id,
+                estado, norm_turnos(request.form.get("turnos")), obra_id,
             ),
         )
         db.commit()
+        # Cambiar los turnos cambia las horas de trabajo: se recalculan las horas hombre/máquina.
+        if norm_turnos(request.form.get("turnos")) != norm_turnos(obra["turnos"] if "turnos" in obra.keys() else None):
+            for it in db.execute("SELECT id FROM items WHERE obra_id = ?", (obra_id,)).fetchall():
+                recompute_item_horas(db, it["id"], persistir=True)
         db.close()
         flash("Datos de la obra actualizados.", "success")
         return redirect(url_for("cosesa_obra_detail", obra_id=obra_id))
     db.close()
     return render_template(
         "editar_obra.html", obra=obra, fecha_inicio=_dt_local(obra["fecha_inicio"]),
-        fecha_fin=_dt_local(obra["fecha_fin_estimada"]),
+        fecha_fin=_dt_local(obra["fecha_fin_estimada"]), turnos_obra=TURNOS_OBRA,
     )
 
 

@@ -13,7 +13,7 @@
   <div>
     <h1>{{ obra['nombre'] }} <span class="pill pill-{{ obra['estado'] }}">{{ obra['estado'].replace('_',' ') }}</span></h1>
     <p class="subtitle">{{ obra['descripcion'] or '' }}{% if obra['ubicacion'] %} · {{ obra['ubicacion'] }}{% endif %}</p>
-    <p class="subtitle">Inicio: {{ obra['fecha_inicio']|fmtdt }} · Fin estimado: {{ obra['fecha_fin_estimada']|fmtdt }}</p>
+    <p class="subtitle">Inicio: {{ obra['fecha_inicio']|fmtdt }} · Fin estimado: {{ obra['fecha_fin_estimada']|fmtdt }} · Turnos: <strong>{{ {'dia': 'solo día (07-19 hs)', 'noche': 'solo noche (19-07 hs)'}.get(obra['turnos'], 'ambos (24 hs)') }}</strong></p>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
     {% if puede('preparacion') %}

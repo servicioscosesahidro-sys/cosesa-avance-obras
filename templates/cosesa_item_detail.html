@@ -87,6 +87,9 @@
       <div class="stat" style="text-align:left;"><span class="lbl">Horas de demoras</span><div class="num" style="font-size:18px;">{{ horas['horas_demoras'] }}</div></div>
       <div class="stat" style="text-align:left;"><span class="lbl">Horas de trabajo netas</span><div class="num" style="font-size:18px;">{{ horas['horas_trabajo'] }}</div></div>
     </div>
+    {% if horas.get('turnos', 'ambos') != 'ambos' %}
+    <p class="subtitle" style="margin-top:8px;">La obra trabaja <strong>{{ 'solo de día (07 a 19 hs)' if horas['turnos'] == 'dia' else 'solo de noche (19 a 07 hs)' }}</strong>: {{ horas['horas_fuera_turno'] }} h fuera de turno no cuentan como trabajo ni como demora.</p>
+    {% endif %}
     <div class="grid grid-2" style="margin-top:10px;">
       <div class="stat" style="text-align:left;"><span class="lbl">Hs. hombre{% for t in horas['detalle_turnos'] %}{{ ' · ' if not loop.first else ' (' }}{{ t['nombre']|lower }}: {{ t['horas'] }} h × {{ t['personas'] }} pers.{% if loop.last %}){% endif %}{% endfor %}</span><div class="num" style="font-size:20px;">{{ horas['horas_hombre'] }}</div></div>
       <div class="stat" style="text-align:left;"><span class="lbl">Hs. máquina{% for t in horas['detalle_turnos'] %}{{ ' · ' if not loop.first else ' (' }}{{ t['nombre']|lower }}: {{ t['horas'] }} h × {{ t['bombas'] }} bomba{{ 's' if t['bombas'] != 1 else '' }}{% if loop.last %}){% endif %}{% endfor %}</span><div class="num" style="font-size:20px;">{{ horas['horas_maquina'] }}</div></div>

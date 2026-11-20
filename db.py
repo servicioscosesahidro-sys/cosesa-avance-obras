@@ -190,6 +190,9 @@ def _migrate_preparacion(conn):
     if not _column_exists(conn, "obras", "codigo"):
         # Código / número interno de la obra (ej. 413, B001).
         conn.execute("ALTER TABLE obras ADD COLUMN codigo TEXT")
+    if not _column_exists(conn, "obras", "turnos"):
+        # En qué turnos se trabaja la obra: ambos (24 hs), solo día (07-19) o solo noche (19-07).
+        conn.execute("ALTER TABLE obras ADD COLUMN turnos TEXT NOT NULL DEFAULT 'ambos'")
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS preparacion (
