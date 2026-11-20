@@ -2054,7 +2054,9 @@ def registrar_avance(item_id):
     fecha_fin = item["fecha_fin"]
     if avance_pct >= 100:
         nuevo_estado = "finalizado"
-        fecha_fin = fecha
+        # La fecha de fin REAL es la que se escribió en su campo ("Fechas reales").
+        # Solo si todavía no se cargó ninguna se usa la del registro de avance.
+        fecha_fin = item["fecha_fin"] or fecha
     elif avance_pct > 0:
         nuevo_estado = "en_curso"
         fecha_inicio = fecha_inicio or fecha
@@ -2168,7 +2170,7 @@ def finalizar_item(item_id):
     fecha_inicio = item["fecha_inicio"] or ahora
     db.execute(
         "UPDATE items SET estado = 'finalizado', fecha_inicio = ?, fecha_fin = ?, pausado_en = NULL WHERE id = ?",
-        (fecha_inicio, ahora, item_id),
+        (fecha_inicio, item["fecha_fin"] or ahora, item_id),
     )
     db.execute(
         "INSERT INTO avance_log (item_id, fecha, avance_pct, comentario, usuario_id) VALUES (?, ?, ?, ?, ?)",
