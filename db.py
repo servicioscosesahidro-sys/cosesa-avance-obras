@@ -190,6 +190,18 @@ def _migrate_preparacion(conn):
     if not _column_exists(conn, "obras", "codigo"):
         # Código / número interno de la obra (ej. 413, B001).
         conn.execute("ALTER TABLE obras ADD COLUMN codigo TEXT")
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS pausas_plan (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+            fecha_inicio TEXT NOT NULL,
+            fecha_fin TEXT NOT NULL,
+            motivo TEXT,
+            usuario_id INTEGER,
+            creado_en TEXT DEFAULT (datetime('now'))
+        )"""
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pausas_plan_item ON pausas_plan(item_id)")
     if not _column_exists(conn, "obras", "turnos"):
         # En qué turnos se trabaja la obra: ambos (24 hs), solo día (07-19) o solo noche (19-07).
         conn.execute("ALTER TABLE obras ADD COLUMN turnos TEXT NOT NULL DEFAULT 'ambos'")

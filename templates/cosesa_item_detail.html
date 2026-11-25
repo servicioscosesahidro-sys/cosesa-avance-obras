@@ -87,6 +87,9 @@
       <div class="stat" style="text-align:left;"><span class="lbl">Horas de demoras</span><div class="num" style="font-size:18px;">{{ horas['horas_demoras'] }}</div></div>
       <div class="stat" style="text-align:left;"><span class="lbl">Horas de trabajo netas</span><div class="num" style="font-size:18px;">{{ horas['horas_trabajo'] }}</div></div>
     </div>
+    {% if horas.get('horas_pausas_plan') %}
+    <p class="subtitle" style="margin-top:8px;">{{ horas['horas_pausas_plan'] }} h de <strong>pausas planificadas</strong> no cuentan como trabajo ni como demora.</p>
+    {% endif %}
     {% if horas.get('turnos', 'ambos') != 'ambos' %}
     <p class="subtitle" style="margin-top:8px;">La obra trabaja <strong>{{ 'solo de día (07 a 19 hs)' if horas['turnos'] == 'dia' else 'solo de noche (19 a 07 hs)' }}</strong>: {{ horas['horas_fuera_turno'] }} h fuera de turno no cuentan como trabajo ni como demora.</p>
     {% endif %}
@@ -110,8 +113,8 @@
       </div>
       <label>Comentario para el cliente</label>
       <textarea name="comentario" placeholder="Ej: Se completó el desmontaje, pendiente limpieza y prueba hidráulica."></textarea>
-      <label>Foto de avance (opcional)</label>
-      <input type="file" name="foto_progreso" accept="image/*">
+      <label>Fotos de avance (opcional, podés elegir varias)</label>
+      <input type="file" name="foto_progreso" accept="image/*" multiple>
       <button class="btn" type="submit">Guardar avance</button>
     </form>
   </div>
@@ -166,11 +169,11 @@
         <option value="despues">Después</option>
         <option value="progreso">Progreso</option>
       </select>
-      <label>Foto</label>
-      <input type="file" name="foto" accept="image/*" required>
+      <label>Fotos (podés elegir varias a la vez)</label>
+      <input type="file" name="foto" accept="image/*" multiple required>
       <label>Comentario (opcional)</label>
       <input type="text" name="comentario">
-      <button class="btn btn-dark" type="submit">Subir foto</button>
+      <button class="btn btn-dark" type="submit">Subir fotos</button>
     </form>
   </div>
 </div>
@@ -231,6 +234,39 @@
     <label>Motivo</label>
     <input type="text" name="motivo" placeholder="Ej: Espera de repuesto, condiciones climáticas, permiso de trabajo, etc.">
     <button class="btn btn-outline" type="submit">Agregar demora</button>
+  </form>
+</div>
+
+<div class="card" id="pausas-plan">
+  <h2>Pausas planificadas</h2>
+  <p class="subtitle">Marcá los tiempos en que esta tarea <strong>no se trabaja a propósito</strong>, por ejemplo por un cambio de frente. En el cronograma se ven rayadas en celeste, y esas horas no cuentan ni como trabajo ni como demora.</p>
+  {% if pausas_plan %}
+  {% for p in pausas_plan %}
+  <div style="border:1px solid #b9d9ee;background:#f4fafe;border-radius:var(--radius);padding:12px 14px;margin-bottom:10px;">
+    <form method="post" action="{{ url_for('editar_pausa_plan', pausa_id=p['id']) }}" class="field-inline" style="align-items:flex-end;flex-wrap:wrap;margin-bottom:0;">
+      <div><label>Inicio</label><input type="datetime-local" name="fecha_inicio" value="{{ p['fecha_inicio'] }}" required></div>
+      <div><label>Fin</label><input type="datetime-local" name="fecha_fin" value="{{ p['fecha_fin'] }}" required></div>
+      <div style="flex:2;"><label>Motivo</label><input type="text" name="motivo" value="{{ p['motivo'] or '' }}" placeholder="Ej: cambio de frente"></div>
+      <div style="margin-bottom:14px;white-space:nowrap;"><button class="btn btn-outline btn-sm" type="submit">Guardar</button></div>
+    </form>
+    <form method="post" action="{{ url_for('eliminar_pausa_plan', pausa_id=p['id']) }}" onsubmit="return confirm('¿Eliminar esta pausa planificada?');" style="margin-top:6px;">
+      <button class="btn btn-sm btn-danger" type="submit">Eliminar</button>
+    </form>
+  </div>
+  {% endfor %}
+  {% else %}
+  <p class="subtitle">Esta tarea no tiene pausas planificadas.</p>
+  {% endif %}
+  <hr style="border:none;border-top:1px solid var(--cosesa-border);margin:18px 0;">
+  <h3>Agregar pausa planificada</h3>
+  <form method="post" action="{{ url_for('agregar_pausa_plan', item_id=item['id']) }}">
+    <div class="field-inline">
+      <div><label>Inicio de la pausa</label><input type="datetime-local" name="fecha_inicio" required></div>
+      <div><label>Fin de la pausa</label><input type="datetime-local" name="fecha_fin" required></div>
+    </div>
+    <label>Motivo</label>
+    <input type="text" name="motivo" placeholder="Ej: Cambio de frente, traslado de equipos al sector B">
+    <button class="btn btn-outline" type="submit">Agregar pausa planificada</button>
   </form>
 </div>
 
@@ -485,8 +521,8 @@
   <p class="subtitle">Todavía no se subió el checklist ya firmado (PDF o foto).</p>
   {% endif %}
   <form method="post" action="{{ url_for('subir_foto_checklist', item_id=item['id']) }}" enctype="multipart/form-data">
-    <label>Checklist firmado (PDF escaneado o foto)</label>
-    <input type="file" name="foto" accept="application/pdf,image/*" required>
+    <label>Checklist firmado (PDF escaneado o fotos; podés elegir varios)</label>
+    <input type="file" name="foto" accept="application/pdf,image/*" multiple required>
     <button class="btn btn-dark" type="submit">Subir documento firmado</button>
   </form>
 </div>

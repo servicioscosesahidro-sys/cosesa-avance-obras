@@ -23,7 +23,7 @@ from db import get_db, init_db, DB_PATH
 from backup import restore_latest, backup_now, iniciar_backup_periodico
 from charts import gantt_svg, curve_svg, carga_diaria_planificada_svg, carga_diaria_real_svg
 from charts import _parse as _parse_fecha_grafico
-from charts import TURNOS_OBRA, norm_turnos, segmentos_turno
+from charts import TURNOS_OBRA, norm_turnos, segmentos_turno, intervalos_pausas, horas_en_turno
 from excel_io import generar_plantilla_cronograma, generar_plantilla_reales, leer_cronograma, leer_reales, norm_clave
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -48,7 +48,7 @@ TURNOS = (("dia", "Turno día"), ("noche", "Turno noche"))
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "cosesa-dev-secret-change-me")
-app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB por request
+app.config["MAX_CONTENT_LENGTH"] = 100 * 1024 * 1024  # 100 MB por request (varias fotos de una vez)
 
 DT_FORMATS = ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%d")
 
@@ -156,15 +156,22 @@ def total_personal(personal_by_turno):
     return total_personas, total_bombas
 
 
-def _horas_por_turno(ini, fin, demoras, turnos="ambos"):
+def _horas_por_turno(ini, fin, demoras, turnos="ambos", pausas=None):
     """Horas de trabajo netas (descontando demoras) repartidas según el turno en
     que realmente ocurrieron: día 07:00-19:00, noche 19:00-07:00.
     Si la obra trabaja en un solo turno, las horas del otro turno no cuentan
     como trabajo (ni como demora): se informan aparte en "fuera"."""
     turnos = norm_turnos(turnos)
-    res = {"dia": 0.0, "noche": 0.0, "fuera": 0.0}
+    res = {"dia": 0.0, "noche": 0.0, "fuera": 0.0, "pausa": 0.0}
     if not ini or not fin or fin <= ini:
         return res
+    # Pausas planificadas (cambio de frente, etc.): no son trabajo ni demora.
+    pausas_int = []
+    for pa, pb in intervalos_pausas(pausas):
+        pa, pb = max(pa, ini), min(pb, fin)
+        if pb > pa:
+            pausas_int.append((pa, pb))
+            res["pausa"] += horas_en_turno(pa, pb, turnos)
     if turnos != "ambos":
         res["fuera"] = sum((f - i).total_seconds() for i, f, tu in segmentos_turno(ini, fin) if tu != turnos) / 3600
     dem = []
@@ -176,6 +183,7 @@ def _horas_por_turno(ini, fin, demoras, turnos="ambos"):
         di, df = max(di, ini), min(df, fin)
         if df > di:
             dem.append((di, df))
+    dem.extend(pausas_int)
     dem.sort()
     merged = []
     for a, b in dem:
@@ -207,7 +215,7 @@ def _horas_por_turno(ini, fin, demoras, turnos="ambos"):
     return res
 
 
-def compute_horas_item(item, demoras, turnos="ambos"):
+def compute_horas_item(item, demoras, turnos="ambos", pausas=None):
     """Horas totales transcurridas (inicio real -> fin real, o -> ahora si sigue en
     curso), horas de demoras, y horas de trabajo netas (totales menos demoras),
     con el reparto de las horas de trabajo entre turno día y turno noche."""
@@ -220,19 +228,28 @@ def compute_horas_item(item, demoras, turnos="ambos"):
         horas_totales = 0.0
     else:
         horas_totales = (fin - inicio).total_seconds() / 3600
-    por_turno = _horas_por_turno(inicio, fin, demoras, turnos)
+    por_turno = _horas_por_turno(inicio, fin, demoras, turnos, pausas)
     horas_trabajo = por_turno["dia"] + por_turno["noche"]
     horas_fuera = por_turno["fuera"]
-    horas_demoras = max(0.0, horas_totales - horas_trabajo - horas_fuera)
+    horas_pausas = por_turno["pausa"]
+    horas_demoras = max(0.0, horas_totales - horas_trabajo - horas_fuera - horas_pausas)
     return {
         "horas_totales": round(horas_totales, 2),
         "horas_demoras": round(horas_demoras, 2),
         "horas_fuera_turno": round(horas_fuera, 2),
+        "horas_pausas_plan": round(horas_pausas, 2),
         "turnos": norm_turnos(turnos),
         "horas_trabajo": round(horas_trabajo, 2),
         "horas_dia": por_turno["dia"],
         "horas_noche": por_turno["noche"],
     }
+
+
+def get_pausas_plan(db, item_id):
+    try:
+        return db.execute("SELECT * FROM pausas_plan WHERE item_id = ? ORDER BY fecha_inicio", (item_id,)).fetchall()
+    except sqlite3.OperationalError:
+        return []
 
 
 def turnos_de_obra(db, obra_id):
@@ -252,7 +269,7 @@ def recompute_item_horas(db, item_id, persistir=True):
         return None
     demoras = db.execute("SELECT * FROM demoras WHERE item_id = ?", (item_id,)).fetchall()
     personal = get_personal(db, item_id)
-    horas = compute_horas_item(item, demoras, turnos_de_obra(db, item["obra_id"]))
+    horas = compute_horas_item(item, demoras, turnos_de_obra(db, item["obra_id"]), get_pausas_plan(db, item_id))
     total_personas, total_bombas = total_personal(personal)
     horas_hombre = horas_maquina = 0.0
     detalle = []
@@ -570,6 +587,7 @@ ENDPOINT_PERMISO = {
     "cancelar_item": "cancelar_tareas", "reabrir_item": "cancelar_tareas",
     "agregar_demora": "demoras", "cerrar_demora": "demoras", "editar_demora": "demoras",
     "eliminar_demora": "demoras",
+    "agregar_pausa_plan": "editar_tareas", "editar_pausa_plan": "editar_tareas", "eliminar_pausa_plan": "editar_tareas",
     "actualizar_personal": "personal", "actualizar_observaciones": "personal",
     "importar_reales_excel": "importar_reales",
     "subir_foto": "fotos", "eliminar_foto": "fotos",
@@ -1025,11 +1043,13 @@ def build_obra_charts(db, items, interactive=False):
         # Las tareas canceladas, o finalizadas con avance parcial, no cuentan
         # para el avance total de la obra (curva) ni para la carga diaria.
         if not item_excluido(it):
-            items_con_avances.append({"item": it, "avances": avances})
+            items_con_avances.append({"item": it, "avances": avances,
+                                      "pausas_int": intervalos_pausas(get_pausas_plan(db, it["id"]))})
         demoras = db.execute(
             "SELECT * FROM demoras WHERE item_id = ? ORDER BY fecha_inicio", (it["id"],)
         ).fetchall()
-        items_con_demoras.append({"item": it, "demoras": demoras})
+        pausas = get_pausas_plan(db, it["id"])
+        items_con_demoras.append({"item": it, "demoras": demoras, "pausas": pausas})
         personal = get_personal(db, it["id"])
         _, total_bombas = total_personal(personal)
         if not _item_cancelada(it):
@@ -2014,6 +2034,7 @@ def cosesa_item_detail(item_id):
     personal = get_personal(db, item_id)
     subtareas = get_subtareas(db, item_id)
     horas = recompute_item_horas(db, item_id, persistir=False)
+    pausas_plan = get_pausas_plan(db, item_id)
     item = db.execute(
         "SELECT i.*, o.id AS obra_id, o.nombre AS obra_nombre, o.cliente_id, c.nombre AS cliente_nombre "
         "FROM items i JOIN obras o ON o.id = i.obra_id JOIN clientes c ON c.id = o.cliente_id "
@@ -2026,7 +2047,7 @@ def cosesa_item_detail(item_id):
         checklist=checklist, checklist_puntos=checklist_puntos, checklist_estados=CHECKLIST_ESTADOS,
         fotos_checklist=fotos_checklist, piezas=piezas, piezas_sugeridas=PIEZAS_SUGERIDAS,
         personal=personal, cargos_personal=CARGOS_PERSONAL, turnos=TURNOS, horas=horas,
-        subtareas=subtareas,
+        subtareas=subtareas, pausas_plan=pausas_plan,
     )
 
 
@@ -2081,9 +2102,9 @@ def registrar_avance(item_id):
     db.close()
 
     # Fotos de progreso opcionales junto con el avance
-    foto_progreso = request.files.get("foto_progreso")
-    if foto_progreso and foto_progreso.filename:
-        save_photo(item_id, foto_progreso, "progreso", comentario, user["id"])
+    for foto_progreso in request.files.getlist("foto_progreso"):
+        if foto_progreso and foto_progreso.filename:
+            save_photo(item_id, foto_progreso, "progreso", comentario, user["id"])
 
     flash("Avance registrado.", "success")
     if request.form.get("volver") == "obra":
@@ -2353,6 +2374,76 @@ def cerrar_demora(demora_id):
     return redirect(url_for("cosesa_item_detail", item_id=item_id))
 
 
+# ---------------------------------------------------------------------------
+# Pausas planificadas: tiempos en que la tarea NO se trabaja a propósito
+# (cambio de frente, espera programada, etc.). No cuentan como trabajo ni como
+# demora, y se ven rayadas en celeste en el cronograma.
+# ---------------------------------------------------------------------------
+def _leer_pausa_form():
+    ini = (request.form.get("fecha_inicio") or "").strip()
+    fin = (request.form.get("fecha_fin") or "").strip()
+    motivo = request.form.get("motivo", "").strip()
+    a, b = _parse_dt(ini), _parse_dt(fin)
+    if not a or not b:
+        return None, "Completá el inicio y el fin de la pausa planificada."
+    if b <= a:
+        return None, "El fin de la pausa tiene que ser posterior al inicio."
+    return (ini, fin, motivo), None
+
+
+@app.route("/cosesa/items/<int:item_id>/pausas-plan", methods=["POST"])
+@cosesa_required
+def agregar_pausa_plan(item_id):
+    db = get_db()
+    if db.execute("SELECT id FROM items WHERE id = ?", (item_id,)).fetchone() is None:
+        abort(404)
+    datos, err = _leer_pausa_form()
+    if err:
+        flash(err, "error")
+    else:
+        db.execute("INSERT INTO pausas_plan (item_id, fecha_inicio, fecha_fin, motivo, usuario_id) VALUES (?, ?, ?, ?, ?)",
+                   (item_id, *datos, get_current_user()["id"]))
+        db.commit()
+        recompute_item_horas(db, item_id)
+        flash("Pausa planificada agregada.", "success")
+    db.close()
+    return redirect(url_for("cosesa_item_detail", item_id=item_id) + "#pausas-plan")
+
+
+@app.route("/cosesa/pausas-plan/<int:pausa_id>/editar", methods=["POST"])
+@cosesa_required
+def editar_pausa_plan(pausa_id):
+    db = get_db()
+    p = db.execute("SELECT * FROM pausas_plan WHERE id = ?", (pausa_id,)).fetchone()
+    if p is None:
+        abort(404)
+    datos, err = _leer_pausa_form()
+    if err:
+        flash(err, "error")
+    else:
+        db.execute("UPDATE pausas_plan SET fecha_inicio = ?, fecha_fin = ?, motivo = ? WHERE id = ?", (*datos, pausa_id))
+        db.commit()
+        recompute_item_horas(db, p["item_id"])
+        flash("Pausa planificada actualizada.", "success")
+    db.close()
+    return redirect(url_for("cosesa_item_detail", item_id=p["item_id"]) + "#pausas-plan")
+
+
+@app.route("/cosesa/pausas-plan/<int:pausa_id>/eliminar", methods=["POST"])
+@cosesa_required
+def eliminar_pausa_plan(pausa_id):
+    db = get_db()
+    p = db.execute("SELECT * FROM pausas_plan WHERE id = ?", (pausa_id,)).fetchone()
+    if p is None:
+        abort(404)
+    db.execute("DELETE FROM pausas_plan WHERE id = ?", (pausa_id,))
+    db.commit()
+    recompute_item_horas(db, p["item_id"])
+    db.close()
+    flash("Pausa planificada eliminada.", "success")
+    return redirect(url_for("cosesa_item_detail", item_id=p["item_id"]) + "#pausas-plan")
+
+
 @app.route("/cosesa/demoras/<int:demora_id>/eliminar", methods=["POST"])
 @cosesa_required
 def eliminar_demora(demora_id):
@@ -2451,10 +2542,10 @@ def subir_foto(item_id):
     user = get_current_user()
     tipo = request.form.get("tipo", "progreso")
     comentario = request.form.get("comentario", "").strip()
-    file_storage = request.files.get("foto")
-    saved = save_photo(item_id, file_storage, tipo, comentario, user["id"])
-    if saved:
-        flash("Foto subida correctamente.", "success")
+    archivos = [f for f in request.files.getlist("foto") if f and f.filename]
+    subidas = sum(1 for f in archivos if save_photo(item_id, f, tipo, comentario, user["id"]))
+    if subidas:
+        flash("Foto subida correctamente." if subidas == 1 else f"{subidas} fotos subidas correctamente.", "success")
     return redirect(url_for("cosesa_item_detail", item_id=item_id))
 
 
@@ -2578,10 +2669,10 @@ def checklist_item_pdf(item_id):
 @cosesa_required
 def subir_foto_checklist(item_id):
     user = get_current_user()
-    file_storage = request.files.get("foto")
-    saved = save_photo(item_id, file_storage, "certificado_lavado", "Documento firmado", user["id"], permitir_pdf=True)
-    if saved:
-        flash("Documento firmado subido correctamente.", "success")
+    archivos = [f for f in request.files.getlist("foto") if f and f.filename]
+    subidas = sum(1 for f in archivos if save_photo(item_id, f, "certificado_lavado", "Documento firmado", user["id"], permitir_pdf=True))
+    if subidas:
+        flash("Documento firmado subido correctamente." if subidas == 1 else f"{subidas} archivos subidos correctamente.", "success")
     return redirect(url_for("cosesa_item_detail", item_id=item_id))
 
 
