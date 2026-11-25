@@ -86,7 +86,9 @@ def unir_intervalos(ints):
 
 def intervalos_pausas(pausas):
     """Filas de pausas planificadas -> [(ini, fin)] unidos."""
-    return unir_intervalos((_parse(p["fecha_inicio"]), _parse(p["fecha_fin"])) for p in (pausas or []))
+    ahora = datetime.now()
+    # Una pausa sin fecha de fin está abierta: corre hasta ahora.
+    return unir_intervalos((_parse(p["fecha_inicio"]), _parse(p["fecha_fin"]) if p["fecha_fin"] else ahora) for p in (pausas or []))
 
 
 def horas_habiles(a, b, turnos, pausas_int=None):
@@ -255,7 +257,8 @@ def gantt_svg(items_con_demoras, width=880, interactive=False, corte=None, turno
     def pausas_plan(d, a, b, y0, h):
         """Pausas planificadas (cambio de frente, etc.) rayadas en celeste."""
         for p in d.get("pausas") or []:
-            pa, pb = _parse(p["fecha_inicio"]), _parse(p["fecha_fin"])
+            abierta = not p["fecha_fin"]
+            pa, pb = _parse(p["fecha_inicio"]), (_parse(p["fecha_fin"]) if not abierta else datetime.now())
             if not pa or not pb or pb <= pa:
                 continue
             ia, ib = max(pa, a), min(pb, b)
@@ -263,8 +266,9 @@ def gantt_svg(items_con_demoras, width=880, interactive=False, corte=None, turno
                 continue
             fx0, fx1 = x(ia), x(ib)
             if fx1 - fx0 > 0.2:
-                svg.append(f'<rect x="{fx0:.1f}" y="{y0}" width="{fx1 - fx0:.1f}" height="{h}" fill="url(#{chart_id}-pausa)" stroke="#2f7fb3" stroke-width=".8">'
-                           f'<title>Pausa planificada: {_fmt(pa)} a {_fmt(pb)}{(" · " + _esc_html(str(p["motivo"]))) if p["motivo"] else ""}</title></rect>')
+                borde = ' stroke-dasharray="3,2" stroke-width="1.5"' if abierta else ' stroke-width=".8"'
+                svg.append(f'<rect x="{fx0:.1f}" y="{y0}" width="{fx1 - fx0:.1f}" height="{h}" fill="url(#{chart_id}-pausa)" stroke="#2f7fb3"{borde}>'
+                           f'<title>Pausa planificada: {_fmt(pa)} a {"ahora (abierta)" if abierta else _fmt(pb)}{(" · " + _esc_html(str(p["motivo"]))) if p["motivo"] else ""}</title></rect>')
 
     def fuera_turno(a, b, y0, h):
         """Sombrea con rayado los tramos de [a, b) fuera del turno de la obra."""

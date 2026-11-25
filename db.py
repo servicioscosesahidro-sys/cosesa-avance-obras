@@ -202,6 +202,26 @@ def _migrate_preparacion(conn):
         )"""
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_pausas_plan_item ON pausas_plan(item_id)")
+    # La fecha de fin pasó a ser opcional (pausa abierta, corre hasta ahora):
+    # SQLite no permite quitar el NOT NULL, así que se rehace la tabla conservando los datos.
+    fin_col = [c for c in conn.execute("PRAGMA table_info(pausas_plan)").fetchall() if c[1] == "fecha_fin"]
+    if fin_col and fin_col[0][3]:
+        conn.execute("ALTER TABLE pausas_plan RENAME TO pausas_plan_old")
+        conn.execute(
+            """CREATE TABLE pausas_plan (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+                fecha_inicio TEXT NOT NULL,
+                fecha_fin TEXT,
+                motivo TEXT,
+                usuario_id INTEGER,
+                creado_en TEXT DEFAULT (datetime('now'))
+            )"""
+        )
+        conn.execute("INSERT INTO pausas_plan (id, item_id, fecha_inicio, fecha_fin, motivo, usuario_id, creado_en) "
+                     "SELECT id, item_id, fecha_inicio, fecha_fin, motivo, usuario_id, creado_en FROM pausas_plan_old")
+        conn.execute("DROP TABLE pausas_plan_old")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pausas_plan_item ON pausas_plan(item_id)")
     if not _column_exists(conn, "obras", "turnos"):
         # En qué turnos se trabaja la obra: ambos (24 hs), solo día (07-19) o solo noche (19-07).
         conn.execute("ALTER TABLE obras ADD COLUMN turnos TEXT NOT NULL DEFAULT 'ambos'")

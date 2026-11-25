@@ -588,6 +588,7 @@ ENDPOINT_PERMISO = {
     "agregar_demora": "demoras", "cerrar_demora": "demoras", "editar_demora": "demoras",
     "eliminar_demora": "demoras",
     "agregar_pausa_plan": "editar_tareas", "editar_pausa_plan": "editar_tareas", "eliminar_pausa_plan": "editar_tareas",
+    "cerrar_pausa_plan": "editar_tareas",
     "actualizar_personal": "personal", "actualizar_observaciones": "personal",
     "importar_reales_excel": "importar_reales",
     "subir_foto": "fotos", "eliminar_foto": "fotos",
@@ -2380,14 +2381,19 @@ def cerrar_demora(demora_id):
 # demora, y se ven rayadas en celeste en el cronograma.
 # ---------------------------------------------------------------------------
 def _leer_pausa_form():
-    ini = (request.form.get("fecha_inicio") or "").strip()
-    fin = (request.form.get("fecha_fin") or "").strip()
+    # Inicio vacío = empieza ahora. Fin vacío = pausa abierta, corre hasta ahora.
+    ini = (request.form.get("fecha_inicio") or "").strip() or now_local_str()
+    fin = (request.form.get("fecha_fin") or "").strip() or None
     motivo = request.form.get("motivo", "").strip()
-    a, b = _parse_dt(ini), _parse_dt(fin)
-    if not a or not b:
-        return None, "Completá el inicio y el fin de la pausa planificada."
-    if b <= a:
-        return None, "El fin de la pausa tiene que ser posterior al inicio."
+    a = _parse_dt(ini)
+    if not a:
+        return None, "La fecha de inicio de la pausa no es válida."
+    if fin:
+        b = _parse_dt(fin)
+        if not b:
+            return None, "La fecha de fin de la pausa no es válida."
+        if b <= a:
+            return None, "El fin de la pausa tiene que ser posterior al inicio."
     return (ini, fin, motivo), None
 
 
@@ -2425,6 +2431,23 @@ def editar_pausa_plan(pausa_id):
         db.commit()
         recompute_item_horas(db, p["item_id"])
         flash("Pausa planificada actualizada.", "success")
+    db.close()
+    return redirect(url_for("cosesa_item_detail", item_id=p["item_id"]) + "#pausas-plan")
+
+
+@app.route("/cosesa/pausas-plan/<int:pausa_id>/cerrar", methods=["POST"])
+@cosesa_required
+def cerrar_pausa_plan(pausa_id):
+    db = get_db()
+    p = db.execute("SELECT * FROM pausas_plan WHERE id = ?", (pausa_id,)).fetchone()
+    if p is None:
+        abort(404)
+    if not p["fecha_fin"]:
+        ahora = now_local_str()
+        db.execute("UPDATE pausas_plan SET fecha_fin = ? WHERE id = ?", (max(ahora, p["fecha_inicio"]), pausa_id))
+        db.commit()
+        recompute_item_horas(db, p["item_id"])
+        flash("Pausa planificada cerrada.", "success")
     db.close()
     return redirect(url_for("cosesa_item_detail", item_id=p["item_id"]) + "#pausas-plan")
 

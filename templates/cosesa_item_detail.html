@@ -239,19 +239,27 @@
 
 <div class="card" id="pausas-plan">
   <h2>Pausas planificadas</h2>
-  <p class="subtitle">Marcá los tiempos en que esta tarea <strong>no se trabaja a propósito</strong>, por ejemplo por un cambio de frente. En el cronograma se ven rayadas en celeste, y esas horas no cuentan ni como trabajo ni como demora.</p>
+  <p class="subtitle">Marcá los tiempos en que esta tarea <strong>no se trabaja a propósito</strong>, por ejemplo por un cambio de frente. En el cronograma se ven rayadas en celeste, y esas horas no cuentan ni como trabajo ni como demora. Si no cargás el fin, la pausa queda abierta y corre hasta ahora; después podés cerrarla o editar sus fechas.</p>
   {% if pausas_plan %}
   {% for p in pausas_plan %}
   <div style="border:1px solid #b9d9ee;background:#f4fafe;border-radius:var(--radius);padding:12px 14px;margin-bottom:10px;">
     <form method="post" action="{{ url_for('editar_pausa_plan', pausa_id=p['id']) }}" class="field-inline" style="align-items:flex-end;flex-wrap:wrap;margin-bottom:0;">
       <div><label>Inicio</label><input type="datetime-local" name="fecha_inicio" value="{{ p['fecha_inicio'] }}" required></div>
-      <div><label>Fin</label><input type="datetime-local" name="fecha_fin" value="{{ p['fecha_fin'] }}" required></div>
+      <div><label>Fin</label><input type="datetime-local" name="fecha_fin" value="{{ p['fecha_fin'] or '' }}"></div>
       <div style="flex:2;"><label>Motivo</label><input type="text" name="motivo" value="{{ p['motivo'] or '' }}" placeholder="Ej: cambio de frente"></div>
       <div style="margin-bottom:14px;white-space:nowrap;"><button class="btn btn-outline btn-sm" type="submit">Guardar</button></div>
     </form>
-    <form method="post" action="{{ url_for('eliminar_pausa_plan', pausa_id=p['id']) }}" onsubmit="return confirm('¿Eliminar esta pausa planificada?');" style="margin-top:6px;">
+    {% if not p['fecha_fin'] %}<p class="subtitle" style="margin:6px 0;"><span class="pill pill-pausado">Abierta</span> corriendo hasta ahora</p>{% endif %}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+    {% if not p['fecha_fin'] %}
+    <form method="post" action="{{ url_for('cerrar_pausa_plan', pausa_id=p['id']) }}">
+      <button class="btn btn-sm btn-success" type="submit">Cerrar pausa ahora</button>
+    </form>
+    {% endif %}
+    <form method="post" action="{{ url_for('eliminar_pausa_plan', pausa_id=p['id']) }}" onsubmit="return confirm('¿Eliminar esta pausa planificada?');">
       <button class="btn btn-sm btn-danger" type="submit">Eliminar</button>
     </form>
+    </div>
   </div>
   {% endfor %}
   {% else %}
@@ -261,8 +269,8 @@
   <h3>Agregar pausa planificada</h3>
   <form method="post" action="{{ url_for('agregar_pausa_plan', item_id=item['id']) }}">
     <div class="field-inline">
-      <div><label>Inicio de la pausa</label><input type="datetime-local" name="fecha_inicio" required></div>
-      <div><label>Fin de la pausa</label><input type="datetime-local" name="fecha_fin" required></div>
+      <div><label>Inicio de la pausa <span class="subtitle">(vacío = empieza ahora)</span></label><input type="datetime-local" name="fecha_inicio"></div>
+      <div><label>Fin de la pausa <span class="subtitle">(opcional: vacío = sigue abierta hasta ahora)</span></label><input type="datetime-local" name="fecha_fin"></div>
     </div>
     <label>Motivo</label>
     <input type="text" name="motivo" placeholder="Ej: Cambio de frente, traslado de equipos al sector B">
