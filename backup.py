@@ -24,7 +24,7 @@ Si no están configuradas, todas las funciones de este módulo no hacen nada
 — la app sigue funcionando igual que antes, solo sin backups.
 """
 import base64
-import io
+import json
 import os
 import shutil
 import sqlite3
@@ -81,18 +81,22 @@ def _snapshot_db(dest_path):
         src.close()
 
 
-def _zip_data_dir():
+def _zip_data_dir(dest_zip):
     """Comprime toda la carpeta DATA_DIR (base de datos + fotos subidas) en
-    un .zip en memoria y devuelve los bytes."""
-    buf = io.BytesIO()
+    el archivo dest_zip. Se escribe en disco, no en memoria: con las fotos el
+    zip pesa decenas de MB y armarlo en memoria (más su copia en base64 para
+    GitHub) hacía que el servidor se quedara sin memoria y se reiniciara."""
     db_abs = os.path.abspath(DB_PATH)
+    dest_abs = os.path.abspath(dest_zip)
     with tempfile.TemporaryDirectory() as tmp:
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        with zipfile.ZipFile(dest_zip, "w", zipfile.ZIP_DEFLATED) as zf:
             for root, _dirs, files in os.walk(DATA_DIR):
                 for name in files:
                     if name == ".init.lock" or name.endswith(("-wal", "-shm", "-journal")):
                         continue
                     full_path = os.path.join(root, name)
+                    if os.path.abspath(full_path) == dest_abs:
+                        continue
                     rel_path = os.path.relpath(full_path, DATA_DIR)
                     if os.path.abspath(full_path) == db_abs:
                         snap = os.path.join(tmp, "snapshot.db")
@@ -103,8 +107,30 @@ def _zip_data_dir():
                             zf.write(full_path, rel_path)
                         except FileNotFoundError:
                             pass  # la borraron justo en este momento
-    buf.seek(0)
-    return buf.read()
+
+
+def _cuerpo_put(zip_path, dest_json, message, branch, sha):
+    """Arma en disco el JSON que espera la API de GitHub, pasando el zip a
+    base64 de a pedazos (así nunca está entero en memoria)."""
+    with open(dest_json, "wb") as out:
+        out.write(b'{"message": ' + json.dumps(message).encode() + b', "branch": ' + json.dumps(branch).encode())
+        if sha:
+            out.write(b', "sha": ' + json.dumps(sha).encode())
+        out.write(b', "content": "')
+        with open(zip_path, "rb") as f:
+            while True:
+                pedazo = f.read(3 * 1024 * 1024)   # múltiplo de 3: el base64 queda continuo
+                if not pedazo:
+                    break
+                out.write(base64.b64encode(pedazo))
+        out.write(b'"}')
+
+
+def _log(msg):
+    print("[backup] " + msg, flush=True)
+
+
+ultimo_resultado = {"ok": None, "mensaje": "", "cuando": None, "mb": None}
 
 
 def backup_now():
@@ -129,31 +155,37 @@ def backup_now():
         return False, "La base no tiene ninguna obra: no se sube backup (para no pisar uno bueno con una base vacía)."
 
     with _backup_lock:
+        ok, mensaje, mb = False, "", None
         try:
-            zip_bytes = _zip_data_dir()
-            url = f"{GITHUB_API}/repos/{cfg['repo']}/contents/{BACKUP_PATH_IN_REPO}"
-            headers = _headers(cfg["token"])
+            with tempfile.TemporaryDirectory() as tmp:
+                zip_path = os.path.join(tmp, "latest.zip")
+                _zip_data_dir(zip_path)
+                mb = round(os.path.getsize(zip_path) / 1048576, 1)
+                url = f"{GITHUB_API}/repos/{cfg['repo']}/contents/{BACKUP_PATH_IN_REPO}"
+                headers = _headers(cfg["token"])
 
-            # Hace falta el sha del archivo anterior para poder sobreescribirlo.
-            sha = None
-            r = requests.get(url, headers=headers, params={"ref": cfg["branch"]}, timeout=30)
-            if r.status_code == 200:
-                sha = r.json().get("sha")
+                # Hace falta el sha del archivo anterior para poder sobreescribirlo
+                # (con archivos de más de 1 MB GitHub no manda el contenido, solo los datos).
+                sha = None
+                r = requests.get(url, headers=headers, params={"ref": cfg["branch"]}, timeout=30)
+                if r.status_code == 200:
+                    sha = r.json().get("sha")
 
-            payload = {
-                "message": f"backup automático ({time.strftime('%Y-%m-%d %H:%M:%S')})",
-                "content": base64.b64encode(zip_bytes).decode("ascii"),
-                "branch": cfg["branch"],
-            }
-            if sha:
-                payload["sha"] = sha
-
-            r = requests.put(url, headers=headers, json=payload, timeout=60)
-            if r.status_code in (200, 201):
-                return True, "Backup subido correctamente."
-            return False, f"GitHub respondió {r.status_code}: {r.text[:300]}"
+                body_path = os.path.join(tmp, "body.json")
+                _cuerpo_put(zip_path, body_path, f"backup automático ({time.strftime('%Y-%m-%d %H:%M:%S')})", cfg["branch"], sha)
+                h = dict(headers)
+                h["Content-Type"] = "application/json"
+                with open(body_path, "rb") as body:
+                    r = requests.put(url, headers=h, data=body, timeout=300)
+                if r.status_code in (200, 201):
+                    ok, mensaje = True, f"Backup subido correctamente ({mb} MB)."
+                else:
+                    mensaje = f"GitHub respondió {r.status_code}: {r.text[:300]}"
         except Exception as e:
-            return False, f"Error al hacer el backup: {e}"
+            mensaje = f"Error al hacer el backup: {e}"
+        ultimo_resultado.update(ok=ok, mensaje=mensaje, cuando=time.strftime("%Y-%m-%d %H:%M:%S"), mb=mb)
+        _log(mensaje)
+        return ok, mensaje
 
 
 def restore_latest():
@@ -176,22 +208,22 @@ def restore_latest():
         # y la restauración fallaba en silencio dejando la base vacía.
         headers_raw = dict(headers)
         headers_raw["Accept"] = "application/vnd.github.raw+json"
-        r = requests.get(url, headers=headers_raw, params={"ref": cfg["branch"]}, timeout=120)
+        r = requests.get(url, headers=headers_raw, params={"ref": cfg["branch"]}, timeout=300, stream=True)
         if r.status_code == 404:
             return False, "Todavía no hay ningún backup guardado (primera vez)."
         if r.status_code != 200:
             _restore_fallo = True
             return False, f"GitHub respondió {r.status_code} al buscar el backup."
 
-        zip_bytes = r.content
-        if not zip_bytes:
-            _restore_fallo = True
-            return False, "El backup bajó vacío."
         os.makedirs(DATA_DIR, exist_ok=True)
         with tempfile.TemporaryDirectory() as tmp:
             zip_path = os.path.join(tmp, "backup.zip")
             with open(zip_path, "wb") as f:
-                f.write(zip_bytes)
+                for pedazo in r.iter_content(1024 * 1024):
+                    f.write(pedazo)
+            if os.path.getsize(zip_path) == 0:
+                _restore_fallo = True
+                return False, "El backup bajó vacío."
             with zipfile.ZipFile(zip_path) as zf:
                 zf.extractall(DATA_DIR)
         return True, "Backup restaurado correctamente."
@@ -231,6 +263,7 @@ def iniciar_backup_periodico():
         ultimo_backup = time.time()
         cambio_desde = None             # desde cuándo hay cambios pendientes
         ultimo_cambio_visto = None
+        proximo_intento = 0             # después de un backup fallido se espera antes de reintentar
         while True:
             time.sleep(REVISION_SEGUNDOS)
             try:
@@ -247,7 +280,7 @@ def iniciar_backup_periodico():
                 demasiado = hay_pendiente and (ahora - cambio_desde) >= ESPERA_MAXIMA_SEGUNDOS
                 toca_seguridad = (ahora - ultimo_backup) >= INTERVALO_BACKUP_SEGUNDOS
 
-                if calmado or demasiado or toca_seguridad:
+                if (calmado or demasiado or toca_seguridad) and ahora >= proximo_intento:
                     ok, _msg = backup_now()
                     if ok:
                         ultimo_backup = time.time()
@@ -256,10 +289,11 @@ def iniciar_backup_periodico():
                         # el propio backup no modifica datos, pero por las dudas:
                         ultima_firma = _firma_datos()
                     else:
-                        # reintenta en el próximo ciclo sin perder lo pendiente
+                        # no pierde lo pendiente, pero espera 5 minutos antes de reintentar
+                        # (antes reintentaba cada 5 segundos y saturaba el servidor)
                         if cambio_desde is None:
                             cambio_desde = ahora
-                        ultimo_cambio_visto = ahora + 30  # espera ~40s antes de reintentar
+                        proximo_intento = time.time() + 300
             except Exception:
                 pass
 
