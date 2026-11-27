@@ -156,6 +156,8 @@ def _migrate_schema(conn):
     _migrate_preparacion(conn)
     import mantenimiento_app
     mantenimiento_app.migrate(conn)
+    import compras_app
+    compras_app.migrate(conn)
 
     if changed:
         conn.commit()

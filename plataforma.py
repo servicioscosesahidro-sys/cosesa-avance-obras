@@ -43,8 +43,8 @@ MODULOS = [
      "descripcion": "Inventario de materiales, repuestos e insumos.",
      "estado": "proximamente", "permiso": None},
     {"clave": "compras", "nombre": "Compras",
-     "descripcion": "Pedidos de compra, proveedores y seguimiento.",
-     "estado": "proximamente", "permiso": None},
+     "descripcion": "Solicitudes y órdenes de compra, recepción en depósito y gastos por centro de costos.",
+     "estado": "activo", "endpoint": "compras_app", "permiso": "modulo_compras"},
 ]
 
 

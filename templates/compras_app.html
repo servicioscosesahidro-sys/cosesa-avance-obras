@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compras · Plataforma COSESA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* VOICE: herramienta de trabajo, sobria y precisa, como el resto de la Plataforma COSESA.
+   IDEA: la orden de compra impresa: un formulario con membrete, número y firmas.
+   PICTURE: la tabla de órdenes y el formulario de la OC son la imagen.
+   COLOUR and TYPE: azul COSESA #1d2a4a, amarillo #f2c230 de acento, fondo claro; Inter.
+   LAYOUT: barra lateral de secciones, contenido en tarjetas, logo arriba a la derecha. */
+:root{color-scheme:light dark;
+--bg:light-dark(#f3f5f8,#11151d);--card:light-dark(#fff,#1a2030);--ink:light-dark(#1b2333,#e8ecf3);--soft:light-dark(#5b6678,#a7b1c2);
+--faint:light-dark(#8a93a3,#7d889a);--line:light-dark(#dfe4ec,#2b3447);--navy:#1d2a4a;--navy2:light-dark(#1d2a4a,#2c3d66);--gold:#f2c230;
+--ok:#1f8a4c;--okbg:light-dark(#e5f5eb,#173326);--warn:#b26a00;--warnbg:light-dark(#fff3dc,#3a2b12);--bad:#b42318;--badbg:light-dark(#fde8e6,#3d1c1a);
+--blue:#1f6fb5;--bluebg:light-dark(#e6f0fa,#17263a);--muted:light-dark(#eef1f5,#232b3c)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Inter,system-ui,sans-serif;overflow-x:clip}
+button,input,select,textarea{font:inherit;color:inherit}
+.app{display:grid;grid-template-columns:230px minmax(0,1fr);min-height:100vh}
+aside{background:var(--navy);color:#dfe6f3;padding:18px 12px;position:sticky;top:0;height:100vh;overflow-y:auto}
+aside .brand{font-weight:800;letter-spacing:.2px;color:#fff;font-size:17px;padding:4px 10px 2px}
+aside .sub{font-size:12px;color:#9fb0cc;padding:0 10px 16px}
+aside h4{font-size:11.5px;color:#8ea0c0;margin:16px 10px 6px;font-weight:700}
+aside a{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 10px;border-radius:9px;color:#e6ecf7;text-decoration:none;font-weight:500;cursor:pointer}
+aside a:hover{background:rgba(255,255,255,.07)} aside a.on{background:var(--gold);color:#1d2a4a;font-weight:700}
+.badge{background:rgba(255,255,255,.16);border-radius:20px;padding:0 8px;font-size:12px;font-weight:700}
+aside a.on .badge{background:rgba(29,42,74,.15)}
+main{padding:0 0 60px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px clamp(16px,3vw,32px);background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.top h1{font-size:22px;margin:0;line-height:1.15}.top .crumb{font-size:12px;color:var(--faint);font-weight:600}
+.top .r{display:flex;align-items:center;gap:14px}
+.logo{height:46px;width:auto;border-radius:6px;background:#fff;padding:3px 6px}
+.yo{font-size:12.5px;color:var(--soft);text-align:right}.yo input{width:150px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--bg);font-size:13px}
+.wrap{padding:22px clamp(16px,3vw,32px);max-width:1240px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:16px}
+.card h2{font-size:17px;margin:0 0 4px}.hint{color:var(--faint);font-size:13px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.row.sp{justify-content:space-between}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px 16px}
+label.f{display:block;font-size:12.5px;font-weight:600;color:var(--soft);margin-bottom:4px}
+input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--card);font-size:15px}
+input:focus,select:focus,textarea:focus{outline:2px solid #f2c23099;border-color:var(--gold)}
+textarea{min-height:70px;resize:vertical}
+.btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--card);border-radius:9px;padding:9px 14px;font-weight:600;cursor:pointer;white-space:nowrap;min-height:40px}
+.btn:hover{border-color:var(--navy2)}.btn.p{background:var(--navy);border-color:var(--navy);color:#fff}.btn.g{background:var(--gold);border-color:var(--gold);color:#1d2a4a}
+.btn.d{color:var(--bad)}.btn.s{padding:5px 10px;min-height:32px;font-size:13px}.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;font-size:12px;color:var(--faint);font-weight:700;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr.click{cursor:pointer}tr.click:hover td{background:var(--muted)}
+td.n,th.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.mono{font-variant-numeric:tabular-nums;font-weight:700;letter-spacing:.3px}
+.pill{display:inline-block;font-size:12px;font-weight:700;padding:2px 9px;border-radius:20px;white-space:nowrap}
+.pill.abierta,.pill.solicitada{background:var(--bluebg);color:var(--blue)}.pill.cerrada,.pill.aprobada{background:var(--okbg);color:var(--ok)}
+.pill.anulada,.pill.rechazada{background:var(--badbg);color:var(--bad)}.pill.gris{background:var(--muted);color:var(--soft)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 14px}.tab{border:1px solid var(--line);background:var(--card);border-radius:20px;padding:6px 13px;font-size:13.5px;font-weight:600;cursor:pointer}
+.tab.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.banner{border-radius:10px;padding:10px 14px;font-size:14px;margin-bottom:14px}
+.banner.info{background:var(--bluebg);color:var(--blue)}.banner.warn{background:var(--warnbg);color:var(--warn)}.banner.ok{background:var(--okbg);color:var(--ok)}.banner.bad{background:var(--badbg);color:var(--bad)}
+.lines td{padding:6px 6px}.lines input,.lines select{padding:7px 8px;font-size:14px}
+.tot{display:grid;grid-template-columns:auto 140px;gap:4px 18px;justify-content:end;margin-top:10px;font-size:14.5px}
+.tot b{font-size:17px}
+.empty{padding:30px;text-align:center;color:var(--faint)}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 18px}
+.kv div{font-size:14px}.kv span{display:block;font-size:12px;color:var(--faint);font-weight:600}
+.modal-bg{position:fixed;inset:0;background:rgba(10,15,28,.55);display:flex;align-items:flex-start;justify-content:center;padding:5vh 12px;z-index:50;overflow-y:auto}
+.modal{background:var(--card);border-radius:14px;max-width:620px;width:100%;padding:20px 22px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.modal h3{margin:0 0 12px;font-size:18px}.modal .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:10px 18px;border-radius:10px;font-weight:600;z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.toast.err{background:var(--bad)}
+.radio{display:flex;gap:10px;flex-wrap:wrap}.radio label{flex:1;min-width:150px;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;font-weight:600;display:flex;gap:8px;align-items:center}
+.radio label:has(input:checked){border-color:var(--gold);background:var(--warnbg)}.radio input{width:auto}
+.scroll{overflow-x:auto}
+.fig{position:relative;min-height:300px}.fig>svg{position:absolute;inset:0;width:100%;height:100%}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}.kpi span{display:block;font-size:12px;color:var(--faint);font-weight:600}.kpi b{font-size:clamp(18px,2.2vw,24px);font-variant-numeric:tabular-nums}
+.leg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--soft);margin-top:8px}.leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+table.mat td,table.mat th{white-space:nowrap;font-size:13px;padding:6px 8px}table.mat tr.sel td{background:var(--warnbg)}
+table.compacta{font-size:13.5px}table.compacta tr.sel td{background:var(--warnbg)}
+tr.filtros th{padding:4px 4px 8px;background:var(--muted)}tr.filtros .fc{font-size:12.5px;padding:4px 6px;border-radius:6px;min-width:0;width:100%;max-width:130px;font-weight:500}tr.filtros th{vertical-align:top}#fcLimpiar{display:block}
+@media(max-width:600px){tr.filtros{display:none}}table.compacta th{padding:6px 8px}table.compacta td{padding:6px 8px;white-space:nowrap;vertical-align:middle}
+table.compacta .pill{font-size:11.5px;padding:1px 8px}table.compacta tbody tr:nth-child(even) td{background:light-dark(#fafbfd,#1d2435)}
+.menu-btn{display:none}
+@media(max-width:860px){.app{grid-template-columns:1fr}aside{position:fixed;left:0;top:0;width:250px;z-index:40;transform:translateX(-100%);transition:transform .2s}
+aside.open{transform:none}.menu-btn{display:inline-flex}.yo{display:none}.logo{height:36px}}
+@media(max-width:600px){table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:10px;border-bottom:1px solid var(--line)}.stack td{display:flow-root;border:0;padding:3px 0;padding-inline-start:8em;text-align:start}.stack td::before{content:attr(data-l);float:inline-start;width:7.5em;margin-inline-start:-8em;white-space:normal;color:var(--faint);font-size:12px}.stack td:empty{display:none}.stack.compacta td{white-space:normal}}
+@media(prefers-reduced-motion:reduce){aside{transition:none}}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script>new MutationObserver(()=>{for(const c of document.querySelectorAll('.stack td:not([data-l])')){let i=0,p=c;while(p=p.previousElementSibling)i+=p.colSpan;c.dataset.l=c.closest('table').rows[0].cells[i]?.textContent||''}}).observe(document,{childList:true,subtree:true})</script>
+</head>
+<body>
+<div class="app">
+  <aside id="side">
+    <div class="brand">Compras</div>
+    <div class="sub"><a href="/inicio" id="aInicio" style="display:inline;padding:0;color:#9fb0cc;font-weight:500">← Plataforma COSESA</a></div>
+    <h4>Compras</h4>
+    <a data-v="solicitudes">Solicitudes de compra <span class="badge" id="bSol"></span></a>
+    <a data-v="ordenes">Órdenes de compra <span class="badge" id="bOc"></span></a>
+    <a data-v="nueva">+ Nueva orden de compra</a>
+    <h4>Depósito</h4>
+    <a data-v="deposito">Recepción de OC <span class="badge" id="bDep"></span></a>
+    <a data-v="ingresos">Ingresos por depósito</a>
+    <h4>Datos</h4>
+    <a data-v="proveedores">Proveedores</a>
+    <a data-v="articulos">Artículos</a>
+    <a data-v="centros">Centros de costos</a>
+    <a data-v="config">Configuración</a>
+  </aside>
+  <main>
+    <div class="top">
+      <div class="row"><button class="btn s menu-btn" id="menuBtn">☰</button><div><div class="crumb" id="crumb">COSESA · Compras</div><h1 id="titulo">Compras</h1></div></div>
+      <div class="r"><div class="yo" id="yoBox"></div><img class="logo" alt="COSESA" src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCADPAlgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD7KooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAoqt9usskfbLfIOD+9Xr+dL9usv+fu3/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qKbtp/WpxPxJuNNOr+H7HVbmGC0aeSaYyy7BtVMDntya0fDk/hKOS5fQr61nlSEvKI7tpSFHcgk45ropreCZg0sEUhHALoDj86SO2gjJ8uCJMjB2oBkUOqnBR10JVBqo56a/ecVo2lS6p8NYTC2y+d3vreTus28sp/p9DU/w2vH1i91vW5IjHJNLFAUPVDHGNw/76JrskVUUKihVHQAYApERI87EVcnJ2jGTVSr8ykmt/wAAhhuWUXfZfecp47t49T1fw9o0y74Z7tpplzjKxoT29yKy/iH4a0Oy8MuLay2TzzxQIxmc8s4B4Lc8Zr0AopYMVBYdCRyKSSNJABIisAQRkZwfWlTxEocttkFTCxnzX3f4HGXu2b4saPZKRs0/S5ZiPQsQg/QGs/wT4m8O6fFq9zqGs2UNxeanPMY2lG/aDtXgc9Fr0Py4/MMmxd5GC2BnHpmoRY2QfeLS3DZznylzn8qr28XHlkui/Nsh4aalzRa3f5JHJWU0mteJW8UGCWDS9NtJI7RpUKNOzcu+08hcDAz1rmrDwwl58MF1mKW6+3SRvemPz2MMvzltrR52kEV6yVBUqQCDwQe9IiIiBFVVUDAUDgChYlx+FdvuQPBqXxO+/wB7t/kcNq8sLW3hTxNaWudNsyXljgTIiSSPG4KOymtO+8Z6Q9r5WjXKapfzKRBb23zksehb+6B3JrpkRUQIihVHQKMAU2OCGJmaKGNGb7xVQCfrUurGVuZbba/PUpUJxvyy330+Wh57caS/hK18NajMr3Fvpry/b2iUtsMw5kAHOAePpXV2Pizw3f3MFrZa1ZXE85xFHHKCzHGenUcDvW0QCMEDFRRWlrFIZIraFHPVljAP54onVVRe/v8A0yqdB0n+7en9I88iu0j0Dx9riOv726lhRs/3EEYH5k1q6lps1j4U0TU7FC13osEb7RwZItgEifiOfqK68W0AiaLyIvLY5ZdgwT6kVLtG3bgY6Yqnibu9v6taxnHB2Vm+n43vc8skuLY/CaW5eZI01fUWcu52jDz85P8AurXTaEngc6nB/ZF5YzXoJMSxXhcnjnC7j29q6h7a3eIRPBE0Y6IUBA/Ckis7WJ98VtAjDusYB/SieIUk91q+vcKeFcJJuzsktuxzPj8ie88Oadkf6RqsbkeojBc/yFJ8U/33hy3sM4+3ajbW59wZAT+i11bxo7q7IrMn3SRkj6elEkaPt3orbTkZGcH1qI1uXl02NJ0HJT1+I4rVbqDw98Qm1fVG8nT72xW2S5IOyJ1bO1j2zWwfGPho29zNBrNncC2hM0ohkDkKOO3ckgY963ZESRCjorKeoYZBqKKytIkKR2kCIeoWMAH9KHUjK3MtUCpVINqDVnrscRoWi+JrtrjXxqtrZT6sFeSGay81o48fImdw6KeR6k1pfC7fB4dfSJnDTaZdS2rY44DZHHYYIrqwMcDpQiIhYqiqWOWIGMn3pzrucXFrt+AqeFVOSknt+v8AwRaWiisDqCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA/9k="></div>
+    </div>
+    <div class="wrap" id="view"><div class="empty">Cargando datos…</div></div>
+  </main>
+</div>
+<div id="modalRoot"></div>
+<script>
+{
+const LOGO = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCADPAlgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD7KooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAoqt9usskfbLfIOD+9Xr+dL9usv+fu3/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qKbtp/WpxPxJuNNOr+H7HVbmGC0aeSaYyy7BtVMDntya0fDk/hKOS5fQr61nlSEvKI7tpSFHcgk45ropreCZg0sEUhHALoDj86SO2gjJ8uCJMjB2oBkUOqnBR10JVBqo56a/ecVo2lS6p8NYTC2y+d3vreTus28sp/p9DU/w2vH1i91vW5IjHJNLFAUPVDHGNw/76JrskVUUKihVHQAYApERI87EVcnJ2jGTVSr8ykmt/wAAhhuWUXfZfecp47t49T1fw9o0y74Z7tpplzjKxoT29yKy/iH4a0Oy8MuLay2TzzxQIxmc8s4B4Lc8Zr0AopYMVBYdCRyKSSNJABIisAQRkZwfWlTxEocttkFTCxnzX3f4HGXu2b4saPZKRs0/S5ZiPQsQg/QGs/wT4m8O6fFq9zqGs2UNxeanPMY2lG/aDtXgc9Fr0Py4/MMmxd5GC2BnHpmoRY2QfeLS3DZznylzn8qr28XHlkui/Nsh4aalzRa3f5JHJWU0mteJW8UGCWDS9NtJI7RpUKNOzcu+08hcDAz1rmrDwwl58MF1mKW6+3SRvemPz2MMvzltrR52kEV6yVBUqQCDwQe9IiIiBFVVUDAUDgChYlx+FdvuQPBqXxO+/wB7t/kcNq8sLW3hTxNaWudNsyXljgTIiSSPG4KOymtO+8Z6Q9r5WjXKapfzKRBb23zksehb+6B3JrpkRUQIihVHQKMAU2OCGJmaKGNGb7xVQCfrUurGVuZbba/PUpUJxvyy330+Wh57caS/hK18NajMr3Fvpry/b2iUtsMw5kAHOAePpXV2Pizw3f3MFrZa1ZXE85xFHHKCzHGenUcDvW0QCMEDFRRWlrFIZIraFHPVljAP54onVVRe/v8A0yqdB0n+7en9I88iu0j0Dx9riOv726lhRs/3EEYH5k1q6lps1j4U0TU7FC13osEb7RwZItgEifiOfqK68W0AiaLyIvLY5ZdgwT6kVLtG3bgY6Yqnibu9v6taxnHB2Vm+n43vc8skuLY/CaW5eZI01fUWcu52jDz85P8AurXTaEngc6nB/ZF5YzXoJMSxXhcnjnC7j29q6h7a3eIRPBE0Y6IUBA/Ckis7WJ98VtAjDusYB/SieIUk91q+vcKeFcJJuzsktuxzPj8ie88Oadkf6RqsbkeojBc/yFJ8U/33hy3sM4+3ajbW59wZAT+i11bxo7q7IrMn3SRkj6elEkaPt3orbTkZGcH1qI1uXl02NJ0HJT1+I4rVbqDw98Qm1fVG8nT72xW2S5IOyJ1bO1j2zWwfGPho29zNBrNncC2hM0ohkDkKOO3ckgY963ZESRCjorKeoYZBqKKytIkKR2kCIeoWMAH9KHUjK3MtUCpVINqDVnrscRoWi+JrtrjXxqtrZT6sFeSGay81o48fImdw6KeR6k1pfC7fB4dfSJnDTaZdS2rY44DZHHYYIrqwMcDpQiIhYqiqWOWIGMn3pzrucXFrt+AqeFVOSknt+v8AwRaWiisDqCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA/9k=";
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = p => (p||"x") + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const hoy = () => { const d = new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
+const ahora = () => { const d = new Date(); return hoy()+" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); };
+const fFecha = s => { if(!s) return "—"; const [y,m,d] = String(s).slice(0,10).split("-"); return d && m && y ? d+"/"+m+"/"+y : s; };
+const num = v => { const n = Number(String(v??"").replace(/\./g,"").replace(",",".")); return isFinite(n) ? n : 0; };
+const numIn = v => { if(typeof v === "number") return v; const s = String(v??"").trim(); if(!s) return 0; return /,\d{1,4}$/.test(s) ? num(s) : (Number(s.replace(/,/g,"")) || 0); };
+const money = (n, mon) => (mon === "USD" ? "US$ " : "$ ") + Number(n||0).toLocaleString("es-AR",{minimumFractionDigits:2,maximumFractionDigits:2});
+const qty = n => Number(n||0).toLocaleString("es-AR",{maximumFractionDigits:3});
+const ocNum = n => "OC" + String(n).padStart(7,"0");
+const norm = s => String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+let yo = "";
+let USER = null, ME = { id:null, name:"" };
+const NOMBRES = {};
+const quien = () => ME.name || yo || "Sin nombre";
+/* Firma de aprobación: se guarda el id de la cuenta y se muestra su nombre actual */
+function aprobadorDe(o){
+  if(o.aprobacion){ const a = o.aprobacion; const n = a.nombre || NOMBRES[a.userId] || a.userId || "Usuario"; return { nombre: n, iniciales: siglasPara(n), fecha: a.fecha, legado:false }; }
+  if(o.aprobo) return { nombre: o.aprobo.nombre, iniciales: o.aprobo.iniciales, fecha: "", legado:true };
+  return null;
+}
+/* Siglas de una persona: las de su ficha de comprador si la tiene (CG, JS…), si no sus iniciales */
+function siglasPara(n){ const c = (S.m.compradores||[]).find(x => norm(x.nombre) === norm(n)); return c ? siglasComprador(c) : inicialesNombre(n); }
+function inicialesNombre(n){ return String(n||"").trim().split(/\s+/).filter(Boolean).map(w => w[0]).join("").toUpperCase().slice(0,4); }
+async function resolverNombres(){ return; 
+}
+
+function toast(msg, err){ document.querySelectorAll(".toast").forEach(x => x.remove()); const t = document.createElement("div"); t.className = "toast"+(err?" err":""); t.textContent = msg; document.body.appendChild(t); setTimeout(()=>t.remove(), 3200); }
+function modal(html, wide){ $("#modalRoot").innerHTML = '<div class="modal-bg"><div class="modal" style="'+(wide?"max-width:860px":"")+'">'+html+'</div></div>'; return $("#modalRoot .modal"); }
+function cerrarModal(){ $("#modalRoot").innerHTML = ""; }
+
+/* ---------------- Datos ---------------- */
+const MAESTROS = {
+  proveedores: { titulo:"Proveedores", campos:[["codigo","Código"],["razon","Razón social"],["cuit","CUIT"],["condIva","Condición IVA"],["direccion","Dirección"],["localidad","Localidad"],["telefono","Teléfono"],["email","Email"],["contacto","Contacto"]],
+    sin:{codigo:["codigo","cod","id","nro","numero proveedor","cod proveedor"],razon:["razon social","razon","nombre","proveedor","denominacion","empresa"],cuit:["cuit","cuil","cuit/cuil","nro cuit","documento"],condIva:["condicion iva","cond iva","iva","condicion frente al iva","situacion iva"],direccion:["direccion","domicilio","calle"],localidad:["localidad","ciudad","provincia"],telefono:["telefono","tel","celular","telefonos"],email:["email","mail","correo","e-mail"],contacto:["contacto","persona de contacto","vendedor"]},
+    clave:"cuit", req:"razon" },
+  articulos: { titulo:"Artículos", campos:[["codigo","Código"],["descripcion","Descripción"],["unidad","Unidad"],["rubro","Rubro"]],
+    sin:{codigo:["codigo","cod","sku","articulo","cod articulo","item"],descripcion:["descripcion","detalle","nombre","producto","articulo descripcion"],unidad:["unidad","um","u.m.","unidad de medida","medida"],rubro:["rubro","familia","categoria","grupo"]},
+    clave:"codigo", req:"descripcion" },
+  centros: { titulo:"Centros de costos", campos:[["codigo","Código"],["nombre","Nombre"],["responsable","Responsable"],["activo","Activo"]],
+    sin:{codigo:["codigo","cod","centro","cc","centro de costo","centro de costos","nro"],nombre:["nombre","descripcion","detalle","denominacion"],responsable:["responsable","encargado"],activo:["activo","estado","habilitado"]},
+    clave:"codigo", req:"nombre" },
+  depositos: { titulo:"Depósitos", campos:[["codigo","Código (01, 02…)"],["nombre","Nombre"],["centroId","Centro de costos"],["direccion","Dirección"]], clave:"codigo", req:"nombre" },
+  compradores: { titulo:"Compradores", campos:[["nombre","Nombre"],["siglas","Siglas (CG, JS…)"],["email","Email"]], clave:"nombre", req:"nombre" },
+  aprobadores: { titulo:"Aprobadores", campos:[["nombre","Nombre"],["iniciales","Iniciales"]], clave:"nombre", req:"nombre" },
+  formasPago: { titulo:"Formas de pago", campos:[["nombre","Nombre"],["detalle","Detalle"]], clave:"nombre", req:"nombre" }
+};
+const S = { m:{}, sol:[], oc:[], cfg:{ proxNumero:11 }, listo:{m:false,sol:false,oc:false} };
+Object.keys(MAESTROS).forEach(k => S.m[k] = []);
+let DB = null, modoLocal = false;
+const CHUNK = 450;
+const tabId = uid("tab");
+
+function guardarLocal(){ try{ localStorage.setItem("compras_local", JSON.stringify({m:S.m,sol:S.sol,oc:S.oc,cfg:S.cfg})); }catch(e){} }
+function cargarLocal(){ try{ const d = JSON.parse(localStorage.getItem("compras_local")||"null"); if(d){ S.m = Object.assign(S.m, d.m||{}); S.sol = d.sol||[]; S.oc = d.oc||[]; S.cfg = Object.assign(S.cfg, d.cfg||{}); } }catch(e){} }
+
+/* ---- Datos en el servidor de la Plataforma COSESA (compras_app.py) ---- */
+const API = "/compras/api";
+const VERS = {}, RAW = { maestros:{}, solicitudes:{}, ordenes:{} };
+let SEQ = 0, PERM = { aprobar:false, admin:false }, URLS = {}, sincronizando = false;
+const ADMIN_MAESTROS = ["centros","depositos","compradores","formasPago","aprobadores"];
+const puedeM = tipo => PERM.admin || !ADMIN_MAESTROS.includes(tipo);
+async function api(metodo, url, body){
+  let r;
+  try{ r = await fetch(url, { method: metodo, credentials:"same-origin", headers: body ? {"Content-Type":"application/json","Accept":"application/json"} : {"Accept":"application/json"}, body: body ? JSON.stringify(body) : undefined }); }
+  catch(e){ throw new Error("Sin conexión con el servidor"); }
+  if(r.redirected && /\/login/.test(r.url)){ location.href = r.url; throw new Error("Tu sesión venció"); }
+  let d = null; try{ d = await r.json(); }catch(e){}
+  if(!r.ok || !d || d.ok === false){ const err = new Error((d && d.error) || ("Error del servidor ("+r.status+")")); err.status = r.status; throw err; }
+  return d;
+}
+function aplicarDocs(docs){
+  docs.forEach(x => { if(!RAW[x.col]) return; const k = x.col+"/"+x.id; if(x.borrado){ delete RAW[x.col][x.id]; delete VERS[k]; } else { RAW[x.col][x.id] = x.data; VERS[k] = x.v; } });
+  const nuevo = {}; Object.keys(MAESTROS).forEach(k => nuevo[k] = []); const cnt = {};
+  Object.values(RAW.maestros).sort((a,b) => (a.parte||0)-(b.parte||0)).forEach(x => { if(nuevo[x.tipo]){ nuevo[x.tipo].push(...(x.items||[])); cnt[x.tipo] = Math.max(cnt[x.tipo]||0, (x.parte||0)+1); } });
+  S.m = nuevo; S._chunks = cnt; S.sol = Object.values(RAW.solicitudes); S.oc = Object.values(RAW.ordenes);
+}
+async function sincronizar(){
+  if(sincronizando) return; sincronizando = true;
+  try{
+    const d = await api("GET", API+"/datos?desde="+SEQ);
+    if(d.completo){ RAW.maestros = {}; RAW.solicitudes = {}; RAW.ordenes = {}; }
+    const cambio = d.docs.length > 0 || d.completo || S.cfg.proxNumero !== d.prox_oc;
+    aplicarDocs(d.docs);
+    SEQ = d.seq; S.cfg.proxNumero = d.prox_oc;
+    ME = { id: d.usuario.username, name: d.usuario.nombre }; PERM = { aprobar: !!d.usuario.aprobar, admin: !!d.usuario.admin }; URLS = d.urls || {};
+    const primera = !S.listo.oc; S.listo.m = S.listo.sol = S.listo.oc = true;
+    if(primera) pintarUsuario();
+    if(cambio) render();
+  }catch(e){ if(!S.listo.oc) $("#view").innerHTML = '<div class="banner bad">No se pudieron leer los datos de Compras: '+esc(e.message)+'. Recargá la página.</div>'; }
+  finally{ sincronizando = false; }
+}
+async function escribir(col, id, data){
+  try{ const r = await api("POST", API+"/doc", { col, id, data, v: VERS[col+"/"+id] || 0 }); VERS[col+"/"+id] = r.v; RAW[col][id] = r.data; aplicarDocs([]); return r; }
+  catch(e){ if(e.status === 409) await sincronizar(); throw e; }
+}
+async function guardarMaestro(tipo){
+  const items = S.m[tipo], partes = Math.max(1, Math.ceil(items.length / CHUNK)), viejos = S._chunks[tipo] || 0;
+  try{
+    for(let i=0;i<partes;i++) await escribir("maestros", tipo+"-"+i, { tipo, parte:i, items: items.slice(i*CHUNK, (i+1)*CHUNK) });
+    for(let i=partes;i<viejos;i++){ await api("POST", API+"/borrar", { col:"maestros", id: tipo+"-"+i }); delete RAW.maestros[tipo+"-"+i]; }
+    aplicarDocs([]);
+  }catch(e){ toast(e.message, true); await sincronizar(); render(true); throw e; }
+}
+S._chunks = {};
+async function guardarDoc(col, obj){
+  try{ await escribir(col, obj.id, JSON.parse(JSON.stringify(obj))); render(); }
+  catch(e){ toast(e.message, true); throw e; }
+}
+async function reservarNumero(){ const d = await api("POST", API+"/oc-numero"); S.cfg.proxNumero = d.n + 1; return d.n; }
+function pintarUsuario(){
+  $("#yoBox").innerHTML = '<b style="color:var(--ink)"></b><br><a href="#" id="lInicio">Inicio</a> · <a href="#" id="lSalir">Salir</a>';
+  $("#yoBox b").textContent = ME.name;
+  if(URLS.inicio){ $("#aInicio").href = URLS.inicio; $("#lInicio").href = URLS.inicio; }
+  $("#lSalir").href = URLS.logout || "/logout";
+}
+function iniciarDatos(){
+  sincronizar();
+  setInterval(() => { if(!document.hidden) sincronizar(); }, 10000);
+  document.addEventListener("visibilitychange", () => { if(!document.hidden) sincronizar(); });
+}
+
+/* ---------------- Navegación ---------------- */
+let vista = (location.hash||"").slice(1) || "ordenes";
+let sub = null; // { tipo:"oc"|"sol"|"ocform"|"solform", id, modo }
+try{ const sv = JSON.parse(sessionStorage.getItem("compras_sub")||"null"); if(sv) sub = sv; }catch(e){}
+function ir(v, s){ vista = v; sub = s || null; try{ sessionStorage.setItem("compras_sub", JSON.stringify(sub)); }catch(e){} if(location.hash.slice(1) !== v){ try{ history.replaceState(null, "", "#"+v); }catch(e){} } $("#side").classList.remove("open"); render(true); window.scrollTo(0,0); }
+document.querySelectorAll("aside a[data-v]").forEach(a => a.onclick = () => a.dataset.v === "nueva" ? ir("ordenes", {tipo:"ocform"}) : ir(a.dataset.v));
+window.addEventListener("hashchange", () => { const v = location.hash.slice(1); if(v && v !== vista){ vista = v; sub = null; render(); } });
+$("#menuBtn").onclick = () => $("#side").classList.toggle("open");
+
+const VISTAS = {
+  solicitudes: ["Solicitudes de compra", vSolicitudes], ordenes: ["Órdenes de compra", vOrdenes], deposito: ["Recepción de OC (depósito)", vDeposito],
+  proveedores: ["Proveedores", () => vMaestro("proveedores")], articulos: ["Artículos", () => vMaestro("articulos")],
+  centros: ["Centros de costos", vCentros], config: ["Configuración", vConfig], ingresos: ["Ingresos por depósito", vIngresos], gastos: ["Centros de costos", () => { vista = "centros"; ccTab = "gastos"; vCentros(); }]
+};
+function render(forzar){
+  if(!S.listo.oc && !modoLocal) return;
+  if(!forzar && document.querySelector("#view [data-editando]")) { pintarBadges(); return; }
+  if(!VISTAS[vista]) vista = "ordenes";
+  const nuevaOn = !!(sub && sub.tipo === "ocform" && !sub.id);
+  document.querySelectorAll("aside a[data-v]").forEach(a => a.classList.toggle("on", a.dataset.v === "nueva" ? nuevaOn : (a.dataset.v === vista && !nuevaOn)));
+  $("#titulo").textContent = VISTAS[vista][0];
+  $("#crumb").textContent = "COSESA · Compras" + (modoLocal ? " · modo local (sin guardar en la nube)" : "");
+  VISTAS[vista][1]();
+  pintarBadges();
+  resolverNombres().catch(() => {});
+}
+function pintarBadges(){
+  $("#bSol").textContent = S.sol.filter(s => s.estado === "solicitada").length || "";
+  const ab = S.oc.filter(o => o.estado === "abierta").length;
+  $("#bOc").textContent = ab || ""; $("#bDep").textContent = ab || "";
+}
+
+/* ---------------- Ayudas de maestros ---------------- */
+const prov = id => S.m.proveedores.find(p => p.id === id);
+const centro = id => S.m.centros.find(c => c.id === id);
+const depo = id => S.m.depositos.find(d => d.id === id);
+const depTxt = d => d ? (d.codigo ? d.codigo+" · " : "")+d.nombre : "—";
+const depCod = id => { const d = depo(id); return d ? (d.codigo || d.nombre) : "?"; };
+const depsOrdenados = () => S.m.depositos.slice().sort((a,b) => String(a.codigo||a.nombre).localeCompare(String(b.codigo||b.nombre), "es", {numeric:true}));
+/* Reparto de un ítem entre depósitos: [{depositoId, cantidad}]. Sin reparto = todo al depósito de la OC */
+const repartoDe = (it, o) => (it.dist && it.dist.length) ? it.dist : [{ depositoId: o.depositoId, cantidad: it.cantidad }];
+const origenesDe = l => !l || !l.origen ? [] : (Array.isArray(l.origen) ? l.origen : [l.origen]);
+/* Centro de costos al que va el gasto de una parte de un ítem: si el ítem se reparte entre varios depósitos, el del depósito; si no, el del ítem o el de la OC */
+function centroDeParte(o, l, dep){ const d = depo(dep); return (((l.dist||[]).length > 1 && d && d.centroId) || l.centroId || o.centroId || ""); }
+/* Imputaciones de gasto de una OC: [{centroId, monto (sin IVA), fecha}]. base "recibido": por remito/factura cargado (fecha del remito); "comprometido": todo a la fecha de emisión */
+function imputaciones(o, base){
+  const out = [], its = o.items || [], pr = l => Number(l.precio) || 0;
+  const todo = fecha => its.forEach(l => repartoDe(l, o).forEach(d => out.push({ centroId: centroDeParte(o, l, d.depositoId), monto: Number(d.cantidad||0) * pr(l), fecha })));
+  if(base === "comprometido"){ todo(o.fecha); return out; }
+  const recs = o.recepciones || [];
+  // Solo se imputa lo recibido con remito o factura. (Las OC de ejemplo, que no tienen remitos, se toman completas a la fecha de cierre)
+  if(!recs.length){ if(o.ejemplo && o.estado === "cerrada") todo(String((o.cierre && o.cierre.fecha) || o.fecha).slice(0,10)); return out; }
+  recs.forEach(r => { const dist = r.dist || Object.fromEntries(Object.entries(r.cantidades||{}).map(([lid,v]) => [lid, {[o.depositoId]: v}]));
+    Object.entries(dist).forEach(([lid, deps]) => { const l = its.find(i => i.lid === lid); if(!l) return;
+      Object.entries(deps).forEach(([dep, q]) => out.push({ centroId: centroDeParte(o, l, dep), monto: Number(q||0) * pr(l), fecha: r.fecha || o.fecha })); }); });
+  return out;
+}
+const centrosDeOc = o => { const c = []; (o.items||[]).forEach(l => repartoDe(l, o).forEach(d => { const k = centroDeParte(o, l, d.depositoId); if(k && !c.includes(k)) c.push(k); })); if(!c.length && o.centroId) c.push(o.centroId); return c; };
+const ccCod = id => { const c = centro(id); return c ? (c.codigo || c.nombre) : "—"; };
+const centrosTxtOc = o => { const c = centrosDeOc(o); return c.length > 1 ? "Varios: "+c.map(ccCod).join("; ") : centroTxt(c[0] || o.centroId); };
+const abrevDeps = it => (it.dist && it.dist.length > 1) ? "(Dep. "+it.dist.map(d => depCod(d.depositoId)).join("; ")+")" : "";
+/* Siglas del comprador: inicial del nombre + inicial del apellido (CG, JS, IL). Si se repiten, se suma la 2da letra del apellido (JSA). */
+const CONECTORES = ["de","del","la","las","los","y"];
+function partesNombre(n){ return String(n||"").trim().split(/\s+/).filter(w => w && !CONECTORES.includes(w.toLowerCase())); }
+function siglasAuto(nombre, idPropio){
+  const p = partesNombre(nombre); if(!p.length) return "";
+  const ini = p[0], ap = p.length > 1 ? p[p.length-1] : "";
+  const usadas = S.m.compradores.filter(c => c.id !== idPropio).map(siglasComprador);
+  let sg = (ini[0] + (ap[0]||"")).toUpperCase();
+  for(let k=1; usadas.includes(sg) && k < Math.max(ap.length, 2); k++) sg = (ini[0] + ap[0] + (ap[k]||ini[k]||String(k))).toUpperCase();
+  return sg;
+}
+function siglasComprador(c){ if(!c) return ""; if(c.siglas) return String(c.siglas).toUpperCase(); const p = partesNombre(c.nombre); return (((p[0]||"")[0]||"") + ((p.length>1 ? p[p.length-1] : "")[0]||"")).toUpperCase(); }
+const siglasDe = id => siglasComprador(S.m.compradores.find(c => c.id === id)) || "—";
+const nombreDe = (tipo, id) => { const x = S.m[tipo].find(y => y.id === id); return x ? (tipo === "depositos" ? depTxt(x) : (x.nombre || x.razon || x.descripcion)) : "—"; };
+const centroTxt = id => { const c = centro(id); return c ? (c.codigo ? c.codigo+" · " : "")+c.nombre : "—"; };
+const provTxt = id => { const p = prov(id); return p ? p.razon + (p.cuit ? " ("+p.cuit+")" : "") : "—"; };
+const opts = (tipo, sel, vacio) => (vacio!==false ? '<option value="">'+(vacio||"Elegí…")+'</option>' : '') + S.m[tipo].map(x => '<option value="'+esc(x.id)+'" '+(x.id===sel?"selected":"")+'>'+esc(tipo==="centros" ? (x.codigo?x.codigo+" · ":"")+x.nombre : tipo==="proveedores" ? x.razon+(x.cuit?" · "+x.cuit:"") : tipo==="aprobadores" ? x.nombre+" ("+(x.iniciales||"")+")" : tipo==="depositos" ? depTxt(x) : tipo==="compradores" ? siglasComprador(x)+" · "+x.nombre : x.nombre)+'</option>').join("");
+const iniciales = a => a ? (a.iniciales || a.nombre.split(/\s+/).map(w=>w[0]).join("").toUpperCase()) : "";
+
+/* Selector con búsqueda (datalist) para listas largas */
+function buscador(tipo, idSel, inputId, placeholder){
+  const lista = S.m[tipo];
+  const txt = x => tipo==="proveedores" ? x.razon+(x.cuit?" · "+x.cuit:"") : tipo==="centros" ? (x.codigo?x.codigo+" · ":"")+x.nombre : (x.codigo?x.codigo+" · ":"")+(x.descripcion||x.nombre);
+  const sel = lista.find(x => x.id === idSel);
+  return '<input id="'+inputId+'" list="'+inputId+'L" placeholder="'+esc(placeholder||"Escribí para buscar…")+'" value="'+esc(sel?txt(sel):"")+'" data-id="'+esc(idSel||"")+'">'+
+    '<datalist id="'+inputId+'L">'+lista.map(x => '<option value="'+esc(txt(x))+'"></option>').join("")+'</datalist>';
+}
+function leerBuscador(tipo, inputId){
+  const el = document.getElementById(inputId), v = el.value.trim(); if(!v) return "";
+  const txt = x => tipo==="proveedores" ? x.razon+(x.cuit?" · "+x.cuit:"") : tipo==="centros" ? (x.codigo?x.codigo+" · ":"")+x.nombre : (x.codigo?x.codigo+" · ":"")+(x.descripcion||x.nombre);
+  const x = S.m[tipo].find(y => txt(y) === v) || S.m[tipo].find(y => norm(txt(y)).includes(norm(v)));
+  return x ? x.id : null;
+}
+
+/* ---------------- Solicitudes ---------------- */
+let filtroSol = "solicitada";
+function vSolicitudes(){
+  if(sub && sub.tipo === "solform") return formSolicitud(sub.id);
+  const nArt = itemsSolicitados().length, nEst = itemsConOc().filter(x => x.est !== "recibido").length;
+  const tabsTop = '<div class="tabs" style="margin-bottom:16px">'+[["solicitudes","Solicitudes"],["articulos","Artículos solicitados ("+nArt+")"],["estados","Estados ("+nEst+" sin recibir)"]].map(([k,t]) => '<button class="tab '+(solTab===k?"on":"")+'" data-st="'+k+'" style="font-size:14.5px;padding:8px 16px">'+t+'</button>').join("")+'</div>';
+  const wireTop = () => document.querySelectorAll("[data-st]").forEach(b => b.onclick = () => { solTab = b.dataset.st; render(); });
+  if(solTab === "articulos"){ $("#view").innerHTML = tabsTop + vArticulosSolicitados(); wireTop(); wireArticulosSolicitados(); return; }
+  if(solTab === "estados"){ $("#view").innerHTML = tabsTop + vEstadosItems(); wireTop(); wireEstadosItems(); return; }
+  const lista = S.sol.filter(s => filtroSol === "todas" || s.estado === filtroSol).sort((a,b) => (b.creada||"").localeCompare(a.creada||""));
+  const n = e => S.sol.filter(s => e==="todas" || s.estado===e).length;
+  $("#view").innerHTML = tabsTop + '<div class="row sp" style="margin-bottom:6px;"><div class="tabs">'+
+    [["solicitada","Solicitadas"],["aprobada","Aprobadas"],["rechazada","Rechazadas"],["todas","Todas"]].map(([k,t]) => '<button class="tab '+(filtroSol===k?"on":"")+'" data-fs="'+k+'">'+t+' ('+n(k)+')</button>').join("")+
+    '</div><button class="btn p" id="nSol">+ Nueva solicitud</button></div>'+
+    '<div class="card scroll" style="padding:6px 10px;">'+(lista.length ? '<table class="stack"><thead><tr><th>N°</th><th>Fecha</th><th>Solicitante</th><th>Centro de costos</th><th>Artículos</th><th>Estado</th><th>OC</th></tr></thead><tbody>'+
+      lista.map(s => '<tr class="click" data-sol="'+esc(s.id)+'"><td class="mono">'+esc(s.numero)+'</td><td>'+fFecha(s.fecha)+'</td><td>'+esc(s.solicitante)+'</td><td>'+esc(centroTxt(s.centroId))+'</td><td>'+esc((s.items||[]).map(i=>i.descripcion).slice(0,2).join(", "))+((s.items||[]).length>2?" y "+(s.items.length-2)+" más":"")+'</td><td>'+pillSol(s)+'</td><td class="mono">'+esc([...new Set((s.items||[]).map(i => { const o = ocDeItem(s, i); return o ? o.numero : null; }).filter(Boolean))].join(", "))+'</td></tr>').join("")+'</tbody></table>'
+      : '<div class="empty">No hay solicitudes en esta pestaña.</div>')+'</div>';
+  wireTop();
+  document.querySelectorAll("[data-fs]").forEach(b => b.onclick = () => { filtroSol = b.dataset.fs; render(); });
+  $("#nSol").onclick = () => ir("solicitudes", {tipo:"solform"});
+  document.querySelectorAll("[data-sol]").forEach(r => r.onclick = () => ir("solicitudes", {tipo:"solform", id:r.dataset.sol}));
+}
+/* ---- Artículos de solicitudes y su OC ---- */
+let solTab = "solicitudes", selItems = new Set(), fArt = { q:"", centro:"" }, fEst = { q:"", estado:"" };
+function ocDeItem(s, it){
+  // OC vigente (no anulada) del artículo: por vínculo del ítem, o la OC de toda la solicitud (forma anterior)
+  const ref = it.oc ? S.oc.find(o => o.id === it.oc.id) : (s.ocNumero ? S.oc.find(o => o.numero === s.ocNumero) : null);
+  return ref && ref.estado !== "anulada" ? ref : null;
+}
+function lineaDeOc(o, s, it){ return (o.items||[]).find(l => origenesDe(l).some(x => x.solId === s.id && x.lid === it.lid)) || (o.items||[]).find(l => l.descripcion === it.descripcion); }
+function estadoItem(o, s, it){
+  if(o.estado === "cerrada") return "recibido";
+  const l = lineaDeOc(o, s, it); if(!l) return "pendiente";
+  const rec = (o.recepciones||[]).reduce((a,r) => a + Number((r.cantidades||{})[l.lid]||0), 0);
+  return rec >= l.cantidad ? "recibido" : rec > 0 ? "parcial" : "pendiente";
+}
+function itemsSolicitados(){ const out = []; S.sol.filter(s => s.estado === "aprobada").forEach(s => (s.items||[]).forEach(it => { if(!ocDeItem(s, it)) out.push({ s, it, k: s.id+"|"+it.lid }); })); return out; }
+function itemsConOc(){ const out = []; S.sol.forEach(s => (s.items||[]).forEach(it => { const o = ocDeItem(s, it); if(o) out.push({ s, it, o, est: estadoItem(o, s, it) }); })); return out; }
+function baseDesdeItems(keys, avisar){
+  const sel = keys.map(k => { const [sid, lid] = k.split("|"); const s = S.sol.find(x => x.id === sid); const it = s && (s.items||[]).find(i => i.lid === lid); return s && it ? { s, it } : null; }).filter(Boolean);
+  const cuenta = (lst, f) => { const c = {}; lst.forEach(x => { const v = f(x); if(v) c[v] = (c[v]||0) + Number(x.it.cantidad||1); }); return Object.entries(c).sort((a,b) => b[1]-a[1]); };
+  const centros = cuenta(sel, x => x.s.centroId), deps = cuenta(sel, x => x.s.depositoId), provs = cuenta(sel, x => x.s.proveedorId);
+  const depBase = deps[0] ? deps[0][0] : "", ccBase = centros[0] ? centros[0][0] : "";
+  // Artículos iguales (mismo artículo y unidad) de distintas solicitudes se juntan en un solo ítem
+  const grupos = [], porClave = {};
+  sel.forEach(x => { const k = (x.it.articuloId || norm((x.it.codigo||"")+" "+x.it.descripcion))+"|"+norm(x.it.unidad||"");
+    if(!porClave[k]){ porClave[k] = { lista: [] }; grupos.push(porClave[k]); } porClave[k].lista.push(x); });
+  const avisos = [];
+  const items = grupos.map(g => {
+    const x0 = g.lista[0].it, total = g.lista.reduce((a,x) => a + Number(x.it.cantidad||0), 0);
+    const porDep = {}; g.lista.forEach(x => { const d = x.s.depositoId || depBase; porDep[d] = (porDep[d]||0) + Number(x.it.cantidad||0); });
+    const dl = Object.entries(porDep).map(([depositoId, cantidad]) => ({ depositoId, cantidad }));
+    const dist = (dl.length === 1 && dl[0].depositoId === depBase) ? [] : dl;
+    const ccs = cuenta(g.lista, x => x.s.centroId);
+    const cc = ccs[0] ? ccs[0][0] : "";
+    if(ccs.length > 1 && dl.length < 2) avisos.push("<b>"+esc(x0.descripcion)+"</b> viene de solicitudes con distintos centros de costos ("+ccs.map(c => esc(ccCod(c[0]))).join(", ")+") pero va a un solo depósito: quedó en "+esc(ccCod(cc))+". Revisalo.");
+    const obs = [...new Set(g.lista.map(x => x.it.obs).filter(Boolean))].join(" · ");
+    return { lid: uid("l"), articuloId: x0.articuloId || null, codigo: x0.codigo || "", descripcion: x0.descripcion, unidad: x0.unidad, cantidad: total, precio: "", obs,
+      centroId: cc && cc !== ccBase ? cc : "", origen: g.lista.map(x => ({ solId: x.s.id, lid: x.it.lid, cantidad: Number(x.it.cantidad||0) })), dist };
+  });
+  const juntados = grupos.filter(g => g.lista.length > 1).length;
+  if(juntados) avisos.unshift(juntados+" artículo(s) estaban en varias solicitudes: se juntaron en un solo ítem sumando las cantidades y repartiendo entre los depósitos de cada solicitud.");
+  if(avisos.length) avisar(avisos.join("<br>"));
+  const necesita = sel.map(x => x.s.necesita).filter(Boolean).sort()[0] || "";
+  return { centroId: ccBase, depositoId: depBase, proveedorId: provs[0] ? provs[0][0] : "", entrega: necesita,
+    obs: "Solicitudes: "+[...new Set(sel.map(x => x.s.numero))].join(", "), items };
+}
+async function marcarItemsConOc(o){
+  const porSol = {};
+  (o.items||[]).forEach(l => origenesDe(l).forEach(x => (porSol[x.solId] = porSol[x.solId] || []).push(x.lid)));
+  for(const [sid, lids] of Object.entries(porSol)){
+    const s = S.sol.find(x => x.id === sid); if(!s) continue;
+    const so = JSON.parse(JSON.stringify(s));
+    (so.items||[]).forEach(it => { if(lids.includes(it.lid)) it.oc = { id: o.id, numero: o.numero }; });
+    if((so.items||[]).every(it => it.oc)) so.ocNumero = so.ocNumero || o.numero;
+    (so.log = so.log || []).push({ fecha: ahora(), por: quien(), accion: lids.length+" artículo(s) pasaron a la "+o.numero });
+    await guardarDoc("solicitudes", so);
+  }
+  selItems = new Set();
+}
+const pillItem = e => '<span class="pill '+({recibido:"cerrada",parcial:"solicitada",pendiente:"gris"}[e])+'">'+({recibido:"Recibido",parcial:"Parcial",pendiente:"Pendiente"}[e])+'</span>';
+function vArticulosSolicitados(){
+  const todos = itemsSolicitados();
+  [...selItems].forEach(k => { if(!todos.some(x => x.k === k)) selItems.delete(k); });
+  const q = norm(fArt.q);
+  const lista = todos.filter(x => (!fArt.centro || x.s.centroId === fArt.centro) && (!q || norm([x.it.codigo, x.it.descripcion, x.s.numero, x.s.solicitante, x.it.obs].join(" ")).includes(q)))
+    .sort((a,b) => ({Urgente:0,Normal:1,Baja:2}[a.s.prioridad]??1) - ({Urgente:0,Normal:1,Baja:2}[b.s.prioridad]??1) || (a.s.necesita||"9").localeCompare(b.s.necesita||"9"));
+  const centrosEnLista = [...new Set(todos.map(x => x.s.centroId).filter(Boolean))];
+  return '<div class="banner info">Artículos de solicitudes <b>aprobadas</b> que todavía no tienen orden de compra. Tildá los que quieras comprar juntos y tocá <b>"Generar OC"</b>; al emitirla pasan a la pestaña <b>Estados</b>.</div>'+
+    '<div class="row sp" style="margin-bottom:10px"><div class="row"><input id="faQ" placeholder="Buscar artículo, solicitud o solicitante" value="'+esc(fArt.q)+'" style="width:300px">'+
+      '<select id="faC" style="width:240px"><option value="">Todos los centros de costos</option>'+centrosEnLista.map(c => '<option value="'+esc(c)+'" '+(c===fArt.centro?"selected":"")+'>'+esc(centroTxt(c))+'</option>').join("")+'</select></div>'+
+      '<button class="btn g" id="genSel" '+(selItems.size?"":"disabled")+'>Generar OC con '+selItems.size+' artículo(s)</button></div>'+
+    '<div class="card scroll" style="padding:6px 10px">'+(lista.length ? '<table class="stack compacta"><thead><tr><th><input type="checkbox" id="selTodo" style="width:auto" '+(lista.length && lista.every(x => selItems.has(x.k))?"checked":"")+'></th><th>Artículo</th><th class="n">Cant.</th><th>Unidad</th><th>Solicitud</th><th>Solicitante</th><th>C. costos</th><th>Depósito</th><th>Se necesita</th><th>Prioridad</th></tr></thead><tbody>'+
+      lista.map(x => '<tr data-k="'+esc(x.k)+'" class="click'+(selItems.has(x.k)?" sel":"")+'"><td><input type="checkbox" class="chk" style="width:auto" '+(selItems.has(x.k)?"checked":"")+'></td>'+
+        '<td title="'+esc(x.it.obs||"")+'"><b>'+esc(x.it.codigo ? x.it.codigo+" · " : "")+'</b>'+esc(x.it.descripcion)+(x.it.obs?' <span class="hint">· '+esc(x.it.obs.slice(0,30))+'</span>':'')+'</td><td class="n">'+qty(x.it.cantidad)+'</td><td>'+esc(x.it.unidad)+'</td>'+
+        '<td class="mono"><a href="#solicitudes" data-versol="'+esc(x.s.id)+'" style="color:inherit">'+esc(x.s.numero)+'</a></td><td>'+esc(x.s.solicitante)+'</td><td title="'+esc(centroTxt(x.s.centroId))+'">'+esc((centro(x.s.centroId)||{}).codigo||"—")+'</td>'+
+        '<td>'+esc((depo(x.s.depositoId)||{}).codigo||"—")+'</td><td>'+fFecha(x.s.necesita)+'</td><td>'+(x.s.prioridad==="Urgente"?'<span class="pill rechazada">Urgente</span>':esc(x.s.prioridad||"Normal"))+'</td></tr>').join("")+'</tbody></table>'
+      : '<div class="empty">No hay artículos pendientes de comprar'+(fArt.q||fArt.centro?" con ese filtro":"")+'.</div>')+'</div>';
+}
+function wireArticulosSolicitados(){
+  const pos = el => el && el.selectionStart;
+  $("#faQ").oninput = e => { fArt.q = e.target.value; const p = pos(e.target); render(); const el = $("#faQ"); el.focus(); el.setSelectionRange(p,p); };
+  $("#faC").onchange = e => { fArt.centro = e.target.value; render(); };
+  document.querySelectorAll("tr[data-k]").forEach(tr => tr.onclick = e => { if(e.target.closest("a")) return; const k = tr.dataset.k; selItems.has(k) ? selItems.delete(k) : selItems.add(k); render(); });
+  document.querySelectorAll("[data-versol]").forEach(a => a.onclick = e => { e.preventDefault(); e.stopPropagation(); ir("solicitudes", {tipo:"solform", id:a.dataset.versol}); });
+  const st = $("#selTodo"); if(st) st.onchange = e => { document.querySelectorAll("tr[data-k]").forEach(tr => e.target.checked ? selItems.add(tr.dataset.k) : selItems.delete(tr.dataset.k)); render(); };
+  $("#genSel").onclick = () => ir("ordenes", {tipo:"ocform", desdeItems:[...selItems]});
+}
+function vEstadosItems(){
+  const q = norm(fEst.q);
+  const lista = itemsConOc().filter(x => (!fEst.estado || x.est === fEst.estado) && (!q || norm([x.it.codigo, x.it.descripcion, x.s.numero, x.o.numero, provTxt(x.o.proveedorId)].join(" ")).includes(q)))
+    .sort((a,b) => ordenOc(a.o, b.o));
+  const n = e => itemsConOc().filter(x => !e || x.est === e).length;
+  return '<div class="row sp" style="margin-bottom:10px"><input id="feQ" placeholder="Buscar artículo, OC, solicitud o proveedor" value="'+esc(fEst.q)+'" style="width:320px">'+
+    '<div class="tabs" style="margin:0">'+[["","Todos"],["pendiente","Pendientes"],["parcial","Parciales"],["recibido","Recibidos"]].map(([k,t]) => '<button class="tab '+(fEst.estado===k?"on":"")+'" data-fe="'+k+'">'+t+' ('+n(k)+')</button>').join("")+'</div></div>'+
+    '<div class="card scroll" style="padding:6px 10px">'+(lista.length ? '<table class="stack compacta"><thead><tr><th>N° OC</th><th>Comp.</th><th>Estado</th><th>Artículo</th><th class="n">Cant.</th><th>Unidad</th><th>Solicitud</th><th>Proveedor</th><th>Fecha OC</th></tr></thead><tbody>'+
+      lista.map(x => '<tr><td class="mono"><a href="#ordenes" data-veroc="'+esc(x.o.id)+'" style="color:var(--blue);font-weight:800">'+esc(x.o.numero)+'</a></td><td class="mono" title="'+esc(nombreDe("compradores", x.o.compradorId))+'">'+esc(siglasDe(x.o.compradorId))+'</td><td>'+pillItem(x.est)+'</td>'+
+        '<td>'+esc(x.it.codigo ? x.it.codigo+" · " : "")+esc(x.it.descripcion)+'</td><td class="n">'+qty(x.it.cantidad)+'</td><td>'+esc(x.it.unidad)+'</td><td class="mono"><a href="#solicitudes" data-versol="'+esc(x.s.id)+'" style="color:inherit">'+esc(x.s.numero)+'</a></td>'+
+        '<td title="'+esc(provTxt(x.o.proveedorId))+'">'+esc(((prov(x.o.proveedorId)||{}).razon||"—").slice(0,28))+'</td><td>'+fFecha(x.o.fecha)+'</td></tr>').join("")+'</tbody></table>'
+      : '<div class="empty">Todavía no hay artículos con orden de compra'+(fEst.q||fEst.estado?" con ese filtro":"")+'.</div>')+'</div>';
+}
+function wireEstadosItems(){
+  $("#feQ").oninput = e => { fEst.q = e.target.value; const p = e.target.selectionStart; render(); const el = $("#feQ"); el.focus(); el.setSelectionRange(p,p); };
+  document.querySelectorAll("[data-fe]").forEach(b => b.onclick = () => { fEst.estado = b.dataset.fe; render(); });
+  document.querySelectorAll("[data-veroc]").forEach(a => a.onclick = e => { e.preventDefault(); ir("ordenes", {tipo:"oc", id:a.dataset.veroc}); });
+  document.querySelectorAll("[data-versol]").forEach(a => a.onclick = e => { e.preventDefault(); ir("solicitudes", {tipo:"solform", id:a.dataset.versol}); });
+}
+const pillSol = s => '<span class="pill '+s.estado+'">'+({solicitada:"Solicitada",aprobada:"Aprobada",rechazada:"Rechazada"}[s.estado]||s.estado)+'</span>';
+
+function lineasEditor(items, conPrecio){
+  const arts = S.m.articulos;
+  return '<div class="scroll"><table class="lines"><thead><tr><th style="min-width:260px">Artículo'+(conPrecio?' / observación':'')+'</th><th style="width:100px" class="n">Cantidad</th><th style="width:90px">Unidad</th>'+
+    (conPrecio ? '<th style="width:130px" class="n">Precio unit.</th><th style="width:130px" class="n">Subtotal</th><th style="width:170px">Depósitos / C. costos</th>' : '<th>Observación</th>')+'<th style="width:40px"></th></tr></thead><tbody id="lin">'+
+    (items.length ? items : [{}]).map(it => filaLinea(it, conPrecio)).join("")+'</tbody></table></div>'+
+    '<datalist id="artL">'+arts.map(a => '<option value="'+esc((a.codigo?a.codigo+" · ":"")+a.descripcion)+'"></option>').join("")+'</datalist>'+
+    '<button class="btn s" id="addLin" style="margin-top:8px;">+ Agregar artículo</button>';
+}
+function filaLinea(it, conPrecio){
+  const a = S.m.articulos.find(x => x.id === it.articuloId);
+  const txt = a ? (a.codigo?a.codigo+" · ":"")+a.descripcion : (it.descripcion||"");
+  return '<tr data-l="'+esc(it.lid||uid("l"))+'" data-dist="'+esc(JSON.stringify(it.dist||[]))+'" data-orig="'+esc(it.origen ? JSON.stringify(it.origen) : "")+'"><td><input class="lArt" list="artL" value="'+esc(txt)+'" placeholder="Código o descripción del artículo">'+
+    (conPrecio ? '<input class="lObs" value="'+esc(it.obs||"")+'" placeholder="Observación del ítem (opcional)" style="margin-top:5px;font-size:13px;padding:5px 8px">' : '')+'</td>'+
+    '<td><input class="lCant" inputmode="decimal" value="'+esc(it.cantidad ?? "")+'" style="text-align:right"></td>'+
+    '<td><input class="lUn" value="'+esc(it.unidad || (a&&a.unidad) || "")+'" placeholder="un"></td>'+
+    (conPrecio ? '<td><input class="lPre" inputmode="decimal" value="'+esc(it.precio ?? "")+'" style="text-align:right"></td><td class="n lSub">—</td><td><button class="btn s lDist" type="button" style="width:100%;justify-content:center">'+resumenDist(it.dist)+'</button>'+selCentroLinea(it)+'</td>' : '<td><input class="lObs" value="'+esc(it.obs||"")+'"></td>')+
+    '<td><button class="btn s d lDel" title="Quitar">✕</button></td></tr>';
+}
+function selCentroLinea(it){
+  const multi = (it.dist||[]).length > 1;
+  return '<select class="lCC" title="Centro de costos del ítem" style="margin-top:5px;font-size:12.5px;padding:4px 6px" '+(multi?"disabled":"")+'><option value="">'+(multi ? "Según cada depósito" : "C. costos de la OC")+'</option>'+
+    S.m.centros.map(c => '<option value="'+esc(c.id)+'" '+(c.id===it.centroId?"selected":"")+'>'+esc(c.codigo || c.nombre)+'</option>').join("")+'</select>';
+}
+function ajustarCentroLinea(tr, nd){
+  const sel = tr.querySelector(".lCC"); if(!sel) return;
+  const multi = nd.length > 1; sel.disabled = multi; sel.options[0].textContent = multi ? "Según cada depósito" : "C. costos de la OC";
+  if(multi) sel.value = "";
+  else if(nd.length === 1){ const d = depo(nd[0].depositoId); if(d && d.centroId) sel.value = d.centroId; }
+}
+function resumenDist(dist){ return (dist && dist.length > 1) ? esc(dist.length+" depósitos: "+dist.map(d => depCod(d.depositoId)).join(", ")) : (dist && dist.length === 1 ? esc("Dep. "+depCod(dist[0].depositoId)) : "Depósito de la OC"); }
+/* Modal para repartir la cantidad de un ítem entre depósitos */
+function modalDist(tr){
+  const cant = numIn(tr.querySelector(".lCant").value), un = tr.querySelector(".lUn").value || "un";
+  const desc = tr.querySelector(".lArt").value || "Ítem";
+  let dist = []; try{ dist = JSON.parse(tr.dataset.dist || "[]"); }catch(e){}
+  const val = id => { const d = dist.find(x => x.depositoId === id); return d ? d.cantidad : ""; };
+  const m = modal('<h3>Repartir entre depósitos</h3><p><b>'+esc(desc)+'</b> · total a comprar: <b>'+qty(cant)+' '+esc(un)+'</b></p>'+
+    '<p class="hint">El proveedor no ve este detalle: en la OC sale abreviado, por ejemplo "(Dep. 01; 02; 08)". Si no repartís, todo va al depósito de la OC. Si repartís entre varios, el gasto se imputa al centro de costos de cada depósito, en proporción a la cantidad.</p>'+
+    '<div class="scroll"><table><tbody>'+depsOrdenados().map(d => '<tr><td>'+esc(depTxt(d))+(d.centroId ? ' <span class="hint">· '+esc(ccCod(d.centroId))+'</span>' : ' <span class="hint">· sin centro</span>')+'</td><td style="width:140px"><input class="dq" data-d="'+esc(d.id)+'" inputmode="decimal" value="'+esc(val(d.id))+'" style="text-align:right"></td></tr>').join("")+'</tbody></table></div>'+
+    '<div class="row sp" style="margin-top:10px"><span id="dSum" class="hint"></span><button class="btn s" id="dLimpiar">Sin reparto</button></div>'+
+    '<div class="acts"><button class="btn" id="mNo">Cancelar</button><button class="btn p" id="mSi">Aplicar</button></div>');
+  const suma = () => { let t = 0; m.querySelectorAll(".dq").forEach(i => t += numIn(i.value)); return t; };
+  const pintar = () => { const t = suma(); const ok = Math.abs(t - cant) < 1e-9; m.querySelector("#dSum").innerHTML = 'Repartido: <b>'+qty(t)+'</b> de '+qty(cant)+' '+esc(un)+(t && !ok ? ' · <span style="color:var(--bad)">'+(t>cant?"sobran ":"faltan ")+qty(Math.abs(cant-t))+'</span>' : (ok && t ? ' · <span style="color:var(--ok)">completo</span>' : '')); };
+  m.querySelectorAll(".dq").forEach(i => i.oninput = pintar); pintar();
+  m.querySelector("#mNo").onclick = cerrarModal;
+  m.querySelector("#dLimpiar").onclick = () => { m.querySelectorAll(".dq").forEach(i => i.value = ""); pintar(); };
+  m.querySelector("#mSi").onclick = () => {
+    const nd = []; m.querySelectorAll(".dq").forEach(i => { const v = numIn(i.value); if(v > 0) nd.push({ depositoId: i.dataset.d, cantidad: v }); });
+    const t = nd.reduce((a,b) => a + b.cantidad, 0);
+    if(nd.length && Math.abs(t - cant) > 1e-9){ toast("El reparto tiene que sumar "+qty(cant)+" (suma "+qty(t)+")", true); return; }
+    tr.dataset.dist = JSON.stringify(nd); tr.querySelector(".lDist").innerHTML = resumenDist(nd); ajustarCentroLinea(tr, nd); cerrarModal();
+  };
+}
+function wireLineas(conPrecio, onChange){
+  const tb = $("#lin");
+  const upd = () => { if(onChange) onChange(); };
+  tb.addEventListener("input", e => {
+    if(e.target.classList.contains("lArt")){
+      const v = e.target.value; const a = S.m.articulos.find(x => (x.codigo?x.codigo+" · ":"")+x.descripcion === v);
+      if(a){ const un = e.target.closest("tr").querySelector(".lUn"); if(!un.value) un.value = a.unidad || ""; }
+    }
+    upd();
+  });
+  tb.addEventListener("click", e => { if(e.target.closest(".lDist")){ const tr = e.target.closest("tr"); if(!(numIn(tr.querySelector(".lCant").value) > 0)){ toast("Primero poné la cantidad", true); return; } modalDist(tr); return; }
+    if(e.target.classList.contains("lDel")){ const trs = tb.querySelectorAll("tr"); if(trs.length > 1) e.target.closest("tr").remove(); else trs[0].querySelectorAll("input").forEach(i => i.value = ""); upd(); } });
+  $("#addLin").onclick = () => { tb.insertAdjacentHTML("beforeend", filaLinea({}, conPrecio)); tb.lastElementChild.querySelector(".lArt").focus(); };
+  upd();
+}
+function leerLineas(conPrecio){
+  const out = [];
+  document.querySelectorAll("#lin tr").forEach(tr => {
+    const v = tr.querySelector(".lArt").value.trim(); if(!v) return;
+    const a = S.m.articulos.find(x => (x.codigo?x.codigo+" · ":"")+x.descripcion === v);
+    let origen = null; try{ origen = tr.dataset.orig ? JSON.parse(tr.dataset.orig) : null; }catch(e){}
+    const it = { lid: tr.dataset.l, origen, articuloId: a ? a.id : null, codigo: a ? (a.codigo||"") : "", descripcion: a ? a.descripcion : v,
+      cantidad: numIn(tr.querySelector(".lCant").value), unidad: tr.querySelector(".lUn").value.trim() || (a&&a.unidad) || "un" };
+    it.obs = tr.querySelector(".lObs") ? tr.querySelector(".lObs").value.trim() : "";
+    if(conPrecio){ it.precio = numIn(tr.querySelector(".lPre").value); try{ it.dist = JSON.parse(tr.dataset.dist || "[]"); }catch(e){ it.dist = []; } const cc = tr.querySelector(".lCC"); it.centroId = cc ? cc.value : ""; }
+    out.push(it);
+  });
+  return out;
+}
+
+function formSolicitud(id){
+  const s = id ? S.sol.find(x => x.id === id) : null;
+  if(id && !s){ ir("solicitudes"); return; }
+  const editable = !s || s.estado !== "aprobada" || !s.ocNumero;
+  const bloqueada = s && s.estado === "aprobada";
+  $("#view").innerHTML = '<div data-editando="1"></div><div class="row" style="margin-bottom:12px;"><button class="btn s" id="volver">← Solicitudes</button>'+(s ? '<span class="mono">'+esc(s.numero)+'</span> '+pillSol(s) : '<b>Nueva solicitud de compra</b>')+'</div>'+
+    (s && s.estado !== "solicitada" ? '<div class="banner '+(s.estado==="aprobada"?"ok":"bad")+'">'+(s.estado==="aprobada" ? 'Aprobada por <b>'+esc(s.decision.nombre)+'</b> ('+esc(s.decision.iniciales)+') el '+esc(s.decision.fecha) : 'Rechazada por <b>'+esc(s.decision.nombre)+'</b> el '+esc(s.decision.fecha))+(s.decision.comentario ? ' · '+esc(s.decision.comentario) : '')+(s.ocNumero ? ' · Generó la <b>'+esc(s.ocNumero)+'</b>' : '')+'</div>' : '')+
+    '<div class="card"><div class="grid">'+
+      '<div><label class="f">Solicitante</label><input id="sSolicitante" value="'+esc(s ? s.solicitante : quien())+'"></div>'+
+      '<div><label class="f">Fecha</label><input type="date" id="sFecha" value="'+esc(s ? s.fecha : hoy())+'"></div>'+
+      '<div><label class="f">Fecha en que se necesita</label><input type="date" id="sNecesita" value="'+esc(s ? s.necesita||"" : "")+'"></div>'+
+      '<div><label class="f">Prioridad</label><select id="sPrio">'+["Normal","Urgente","Baja"].map(p => '<option '+(s&&s.prioridad===p?"selected":"")+'>'+p+'</option>').join("")+'</select></div>'+
+      '<div><label class="f">Centro de costos</label>'+buscador("centros", s&&s.centroId, "sCentro")+'</div>'+
+      '<div><label class="f">Depósito de entrega</label><select id="sDepo">'+opts("depositos", s&&s.depositoId)+'</select></div>'+
+      '<div><label class="f">Proveedor sugerido (opcional)</label>'+buscador("proveedores", s&&s.proveedorId, "sProv")+'</div>'+
+    '</div></div>'+
+    '<div class="card"><h2>Artículos solicitados</h2><p class="hint">Elegí artículos de la base (escribí código o descripción). Si todavía no está cargado, escribilo igual: queda como artículo sin codificar.</p>'+lineasEditor(s ? s.items||[] : [], false)+'</div>'+
+    '<div class="card"><label class="f">Motivo / observaciones</label><textarea id="sObs">'+esc(s ? s.obs||"" : "")+'</textarea></div>'+
+    '<div class="row">'+
+      (!bloqueada ? '<button class="btn p" id="sGuardar">'+(s ? "Guardar cambios" : "Crear solicitud")+'</button>' : '')+
+      (s && s.estado === "solicitada" && PERM.aprobar ? '<button class="btn ok" id="sAprobar">Aprobar</button><button class="btn d" id="sRechazar">Rechazar</button>' : '')+
+      (s && s.estado === "rechazada" ? '<button class="btn" id="sReenviar">Volver a solicitada</button>' : '')+
+      (s && s.estado === "aprobada" && (s.items||[]).some(i => !ocDeItem(s, i)) ? '<button class="btn g" id="sGenOC">Generar OC con '+((s.items||[]).some(i => ocDeItem(s, i)) ? "los artículos que faltan" : "esta solicitud")+'</button>' : '')+
+      (s && s.ocNumero ? '<button class="btn" id="sVerOC">Ver '+esc(s.ocNumero)+'</button>' : '')+
+    '</div>';
+  wireLineas(false);
+  if(bloqueada) document.querySelectorAll("#view .card input, #view .card select, #view .card textarea, #view .card button").forEach(e => e.disabled = true);
+  $("#volver").onclick = () => ir("solicitudes");
+  const leer = () => {
+    const centroId = leerBuscador("centros", "sCentro"); if(centroId === null){ toast("El centro de costos no está en la lista", true); return null; }
+    const provId = leerBuscador("proveedores", "sProv"); if(provId === null){ toast("El proveedor no está en la lista", true); return null; }
+    const items = leerLineas(false); if(!items.length){ toast("Agregá al menos un artículo", true); return null; }
+    if(items.some(i => !(i.cantidad > 0))){ toast("Revisá las cantidades", true); return null; }
+    const solicitante = $("#sSolicitante").value.trim(); if(!solicitante){ toast("Indicá el solicitante", true); return null; }
+    return { solicitante, fecha: $("#sFecha").value || hoy(), necesita: $("#sNecesita").value, prioridad: $("#sPrio").value, centroId, depositoId: $("#sDepo").value, proveedorId: provId, items, obs: $("#sObs").value.trim() };
+  };
+  const g = $("#sGuardar"); if(g) g.onclick = async () => {
+    const d = leer(); if(!d) return;
+    const obj = s ? Object.assign(JSON.parse(JSON.stringify(s)), d) : Object.assign({ id: uid("s"), numero: "SC-"+String(S.sol.reduce((a,x) => Math.max(a, Number(String(x.numero||"").replace(/\D/g,""))||0), 0)+1).padStart(4,"0"), estado:"solicitada", creada: ahora(), creadaPor: quien() }, d);
+    (obj.log = obj.log || []).push({ fecha: ahora(), por: quien(), accion: s ? "Editó la solicitud" : "Creó la solicitud" });
+    g.disabled = true; await guardarDoc("solicitudes", obj); toast(s ? "Solicitud guardada" : "Solicitud "+obj.numero+" creada"); ir("solicitudes", {tipo:"solform", id: obj.id});
+  };
+  const decidir = (aprobar) => {
+    const m = modal('<h3>'+(aprobar?"Aprobar":"Rechazar")+' '+esc(s.numero)+'</h3><div class="banner info">'+(aprobar?"Aprueba":"Rechaza")+': <b>'+esc(quien())+'</b> ('+esc(siglasPara(quien()))+') · queda registrado con tu usuario de la plataforma.</div>'+
+      '<label class="f" style="margin-top:10px">'+(aprobar?"Comentario (opcional)":"Motivo del rechazo")+'</label><textarea id="mCom"></textarea>'+
+      '<div class="acts"><button class="btn" id="mNo">Cancelar</button><button class="btn '+(aprobar?"ok":"d")+'" id="mSi">'+(aprobar?"Aprobar":"Rechazar")+'</button></div>');
+    m.querySelector("#mNo").onclick = cerrarModal;
+    m.querySelector("#mSi").onclick = async () => {
+      const ap = { id: ME.id, nombre: quien(), iniciales: siglasPara(quien()) };
+      const com = m.querySelector("#mCom").value.trim(); if(!aprobar && !com){ toast("Indicá el motivo del rechazo", true); return; }
+      const d = leer(); if(!d) return;
+      const obj = Object.assign(JSON.parse(JSON.stringify(s)), d, { estado: aprobar ? "aprobada" : "rechazada", decision: { aprobadorId: ap.id, nombre: ap.nombre, iniciales: iniciales(ap), fecha: ahora(), comentario: com, registro: quien() } });
+      (obj.log = obj.log || []).push({ fecha: ahora(), por: quien(), accion: (aprobar?"Aprobada por ":"Rechazada por ")+ap.nombre });
+      await guardarDoc("solicitudes", obj); cerrarModal(); toast("Solicitud "+(aprobar?"aprobada":"rechazada")); ir("solicitudes", {tipo:"solform", id: s.id});
+    };
+  };
+  if($("#sAprobar")) $("#sAprobar").onclick = () => decidir(true);
+  if($("#sRechazar")) $("#sRechazar").onclick = () => decidir(false);
+  if($("#sReenviar")) $("#sReenviar").onclick = async () => { const obj = JSON.parse(JSON.stringify(s)); obj.estado = "solicitada"; delete obj.decision; (obj.log=obj.log||[]).push({fecha:ahora(),por:quien(),accion:"Volvió a solicitada"}); await guardarDoc("solicitudes", obj); ir("solicitudes",{tipo:"solform",id:s.id}); };
+  if($("#sGenOC")) $("#sGenOC").onclick = () => ir("ordenes", {tipo:"ocform", desdeSol: s.id});
+  if($("#sVerOC")) $("#sVerOC").onclick = () => { const o = S.oc.find(x => x.numero === s.ocNumero); if(o) ir("ordenes", {tipo:"oc", id:o.id}); };
+}
+
+/* ---------------- Órdenes de compra ---------------- */
+let filtroOc = "abierta", buscaOc = "";
+const pillOc = o => '<span class="pill '+o.estado+'">'+({abierta:"Abierta · emitida",cerrada:"Cerrada",anulada:"Anulada"}[o.estado]||o.estado)+'</span>'+
+  (o.estado !== "anulada" ? (aprobadorDe(o) ? ' <span class="pill aprobada" title="Aprobada">✓ Aprobada</span>' : ' <span class="pill gris">Sin aprobar</span>') : '');
+const totalOc = o => { const sub = (o.items||[]).reduce((s,i) => s + (i.cantidad||0)*(i.precio||0), 0); const iva = sub * (Number(o.iva)||0)/100; return { sub, iva, total: sub+iva }; };
+function contenidoOc(o){ return norm([o.numero, provTxt(o.proveedorId), (prov(o.proveedorId)||{}).codigo, ...(o.items||[]).map(i => (i.codigo||"")+" "+i.descripcion), ...centrosDeOc(o).map(centroTxt), o.obs].join(" ")); }
+const ordenOc = (a,b) => (b.fecha||"").localeCompare(a.fecha||"") || b.numero.localeCompare(a.numero);
+/* Filtros por columna de la lista de OC */
+const FC = { compras:{}, dep:{} };
+function aplicarFiltrosCol(lista, f, modo){
+  const has = (txt, q) => !q || norm(txt).includes(norm(q));
+  return lista.filter(o => {
+    const its = o.items || [], apr = aprobadorDe(o);
+    if(!has(o.numero, f.num)) return false;
+    if(f.mes && (o.fecha||"").slice(0,7) !== f.mes) return false;
+    if(f.comp && siglasDe(o.compradorId) !== f.comp) return false;
+    if(!has(provTxt(o.proveedorId)+" "+((prov(o.proveedorId)||{}).codigo||""), f.prov)) return false;
+    if(!has(its.map(i => (i.codigo||"")+" "+i.descripcion+" "+(i.obs||"")).join(" "), f.cont)) return false;
+    if(modo === "dep"){ if(f.dep && !(o.depositoId === f.dep || its.some(i => (i.dist||[]).some(d => d.depositoId === f.dep)))) return false; }
+    else if(f.cc && !centrosDeOc(o).includes(f.cc)) return false;
+    if(f.tmin && totalOc(o).total < numIn(f.tmin)) return false;
+    if(f.tmax && totalOc(o).total > numIn(f.tmax)) return false;
+    if(f.estado && o.estado !== f.estado) return false;
+    if(f.aprob === "si" && !apr) return false;
+    if(f.aprob === "no" && (apr || o.estado === "anulada")) return false;
+    return true;
+  });
+}
+function filaFiltros(base, f, modo){
+  const sel = (k, opciones, todos) => '<select class="fc" data-f="'+k+'"><option value="">'+(todos||"Todos")+'</option>'+opciones.map(([v,t]) => '<option value="'+esc(v)+'" '+(f[k]===v?"selected":"")+'>'+esc(t)+'</option>').join("")+'</select>';
+  const txt = (k, ph) => '<input class="fc" data-f="'+k+'" placeholder="'+esc(ph)+'" value="'+esc(f[k]||"")+'">';
+  const meses = [...new Set(base.map(o => (o.fecha||"").slice(0,7)).filter(Boolean))].sort().reverse().map(m => [m, MESES[Number(m.slice(5))-1]+" "+m.slice(2,4)]);
+  const comps = [...new Set(base.map(o => siglasDe(o.compradorId)).filter(x => x && x !== "—"))].sort().map(x => [x,x]);
+  const ccs = [...new Set(base.flatMap(o => centrosDeOc(o)).filter(Boolean))].map(id => [id, (centro(id)||{}).codigo || centroTxt(id)]).sort((a,b) => a[1].localeCompare(b[1]));
+  const dps = depsOrdenados().map(d => [d.id, d.codigo || d.nombre]);
+  const hay = Object.values(f).some(Boolean);
+  return '<tr class="filtros">'+
+    '<th>'+txt("num","N°")+'</th><th>'+sel("mes", meses, "Todas")+'</th><th>'+sel("comp", comps)+'</th><th>'+txt("prov","Proveedor")+'</th><th>'+txt("cont","Artículo")+'</th>'+
+    (modo==="dep" ? '<th>'+sel("dep", dps)+'</th>' : '<th>'+sel("cc", ccs)+'</th><th><div style="display:flex;gap:3px"><input class="fc" data-f="tmin" placeholder="mín" value="'+esc(f.tmin||"")+'" inputmode="decimal"><input class="fc" data-f="tmax" placeholder="máx" value="'+esc(f.tmax||"")+'" inputmode="decimal"></div></th>')+
+    '<th>'+sel("estado", [["abierta","Abierta"],["cerrada","Cerrada"],["anulada","Anulada"]])+'</th><th>'+sel("aprob", [["si","Aprobadas"],["no","Pendientes"]])+(hay ? '<button class="btn s" id="fcLimpiar" title="Quitar filtros" style="margin-top:4px;min-height:26px;padding:2px 8px">✕ Limpiar</button>' : '')+'</th></tr>';
+}
+function wireFiltrosCol(modo){
+  const f = FC[modo === "dep" ? "dep" : "compras"];
+  document.querySelectorAll(".fc").forEach(el => {
+    const k = el.dataset.f;
+    const go = () => { f[k] = el.value; const focoTxt = el.tagName === "INPUT"; const pos = focoTxt ? el.selectionStart : 0; render();
+      if(focoTxt){ const n = document.querySelector('.fc[data-f="'+k+'"]'); if(n){ n.focus(); try{ n.setSelectionRange(pos,pos); }catch(e){} } } };
+    if(el.tagName === "SELECT") el.onchange = go; else el.oninput = go;
+    el.onclick = e => e.stopPropagation();
+  });
+  const l = $("#fcLimpiar"); if(l) l.onclick = e => { e.stopPropagation(); Object.keys(f).forEach(k => delete f[k]); render(); };
+}
+function tablaOcs(lista, modo, conFiltros){
+  const base = lista, f = conFiltros ? FC[modo === "dep" ? "dep" : "compras"] : null;
+  if(f) lista = aplicarFiltrosCol(lista, f, modo);
+  if(!lista.length && !f) return '<div class="empty">No hay órdenes de compra con ese criterio.</div>';
+  const corto = (t, n) => { t = String(t||""); return t.length > n ? t.slice(0, n-1)+"…" : t; };
+  const estadoCorto = o => '<span class="pill '+o.estado+'">'+({abierta:"Abierta",cerrada:"Cerrada",anulada:"Anulada"}[o.estado]||o.estado)+'</span>'+((o.recepciones||[]).length && o.estado==="abierta" ? ' <span class="hint" title="Remitos / facturas cargados">'+o.recepciones.length+' rem.</span>' : '');
+  return '<table class="stack compacta"><thead><tr><th>N° OC</th><th>Fecha</th><th title="Comprador">Comp.</th><th>Proveedor</th><th>Contenido</th>'+(modo==="dep"?'<th>Depósito</th>':'<th>C. costos</th>')+(modo==="dep"?'':'<th class="n">Total</th>')+'<th>Estado</th><th title="Aprobó">Aprob.</th></tr>'+(f ? filaFiltros(base, f, modo) : '')+'</thead><tbody>'+
+    (!lista.length ? '<tr><td colspan="10" class="empty">Ninguna OC coincide con los filtros.</td></tr>' : '')+
+    lista.map(o => { const p = prov(o.proveedorId) || {}, its = o.items || [], cont = its.map(i => i.descripcion).join(", "), apr = aprobadorDe(o), c = centro(o.centroId), d = depo(o.depositoId);
+      const multi = its.some(i => i.dist && i.dist.length > 1);
+      return '<tr class="click" data-oc="'+esc(o.id)+'"><td class="mono">'+esc(o.numero)+(o.ejemplo ? ' <span class="pill gris" title="Orden de ejemplo">ej.</span>' : '')+'</td><td>'+fFecha(o.fecha).replace(/\/(\d{2})(\d{2})$/, "/$2")+'</td><td class="mono" title="'+esc(nombreDe("compradores", o.compradorId))+'">'+esc(siglasDe(o.compradorId))+'</td>'+
+        '<td title="'+esc(provTxt(o.proveedorId))+'">'+esc(corto(p.razon||"—", 26))+'</td><td title="'+esc(cont)+'">'+esc(corto(cont, 34))+(its.length>1?' <span class="hint">('+its.length+')</span>':'')+'</td>'+
+        (modo==="dep" ? '<td title="'+esc(nombreDe("depositos", o.depositoId))+'">'+esc(multi ? "Varios" : (d ? (d.codigo || d.nombre) : "—"))+'</td>' : (() => { const cs = centrosDeOc(o); return '<td title="'+esc(cs.map(centroTxt).join(" / "))+'">'+esc(cs.length > 1 ? cs.map(ccCod).join("; ") : (c ? (c.codigo || c.nombre) : "—"))+'</td>'; })())+
+        (modo==="dep" ? '' : '<td class="n">'+money(totalOc(o).total, o.moneda)+'</td>')+
+        '<td>'+estadoCorto(o)+'</td><td>'+(o.estado==="anulada" ? '—' : apr ? '<span style="color:var(--ok);font-weight:700" title="'+esc(apr.nombre)+'">✓ '+esc(apr.iniciales)+'</span>' : '<span class="hint">Pend.</span>')+'</td></tr>'; }).join("")+'</tbody></table>';
+}
+function vOrdenes(){
+  if(sub && sub.tipo === "ocform") return formOc(sub.id, sub.desdeSol, sub.desdeItems);
+  if(sub && sub.tipo === "oc") return detalleOc(sub.id, "compras");
+  const q = norm(buscaOc);
+  const lista = S.oc.filter(o => (filtroOc==="todas" || o.estado===filtroOc) && (!q || contenidoOc(o).includes(q))).sort(ordenOc);
+  const n = e => S.oc.filter(o => e==="todas" || o.estado===e).length;
+  const aprobadasSinOc = S.sol.filter(s => s.estado === "aprobada" && (s.items||[]).some(i => !ocDeItem(s, i)));
+  $("#view").innerHTML = (aprobadasSinOc.length ? '<div class="banner info">Hay <b>'+aprobadasSinOc.length+'</b> solicitud(es) aprobada(s) con artículos esperando su orden de compra. <a href="#solicitudes" id="verAprob" style="color:inherit;font-weight:700">Ver</a></div>' : '')+
+    '<div class="row sp"><div class="tabs">'+[["abierta","Abiertas"],["cerrada","Cerradas"],["anulada","Anuladas"],["todas","Todas"]].map(([k,t]) => '<button class="tab '+(filtroOc===k?"on":"")+'" data-fo="'+k+'">'+t+' ('+n(k)+')</button>').join("")+'</div>'+
+    '<div class="row"><input id="bq" placeholder="Buscar por número, proveedor o artículo" value="'+esc(buscaOc)+'" style="width:300px"><button class="btn p" id="nOc">+ Nueva OC</button></div></div>'+
+    '<div class="card scroll" style="padding:6px 10px;">'+tablaOcs(lista, "compras", true)+'</div>';
+  if($("#verAprob")) $("#verAprob").onclick = e => { e.preventDefault(); solTab = "articulos"; ir("solicitudes"); };
+  document.querySelectorAll("[data-fo]").forEach(b => b.onclick = () => { filtroOc = b.dataset.fo; render(); });
+  $("#bq").oninput = e => { buscaOc = e.target.value; const pos = e.target.selectionStart; render(); const el = $("#bq"); el.focus(); el.setSelectionRange(pos,pos); };
+  $("#nOc").onclick = () => ir("ordenes", {tipo:"ocform"});
+  wireFiltrosCol("compras");
+  document.querySelectorAll("[data-oc]").forEach(r => r.onclick = () => ir("ordenes", {tipo:"oc", id:r.dataset.oc}));
+}
+
+function formOc(id, desdeSol, desdeItems){
+  const o = id ? S.oc.find(x => x.id === id) : null;
+  const s = desdeSol ? S.sol.find(x => x.id === desdeSol) : null;
+  let base = o || (s ? { proveedorId: s.proveedorId, centroId: s.centroId, depositoId: s.depositoId, items: (s.items||[]).filter(i => !ocDeItem(s, i)).map(i => Object.assign({}, i, {precio:"", lid: uid("l"), origen:{solId:s.id, lid:i.lid}, dist:[]})), obs: s.obs ? "Solicitud "+s.numero+": "+s.obs : "", aprobadorId: s.decision && s.decision.aprobadorId, entrega: s.necesita } : {});
+  let avisoMix = "";
+  if(!o && !s && desdeItems && desdeItems.length) base = baseDesdeItems(desdeItems, m => avisoMix = m);
+  const compr = S.m.compradores.find(c => c.nombre === quien());
+  $("#view").innerHTML = '<div data-editando="1"></div><div class="row" style="margin-bottom:12px;"><button class="btn s" id="volver">← '+(o?"Volver a la OC":"Órdenes de compra")+'</button><b>'+(o ? "Editar "+esc(o.numero) : "Nueva orden de compra")+'</b>'+(s ? ' <span class="pill aprobada">desde '+esc(s.numero)+'</span>' : '')+(desdeItems && desdeItems.length && !o ? ' <span class="pill aprobada">'+desdeItems.length+' artículo(s) de solicitudes</span>' : '')+'</div>'+
+    (avisoMix ? '<div class="banner info">'+avisoMix+'</div>' : '')+
+    '<div class="card"><div class="grid">'+
+      '<div style="grid-column:span 2"><label class="f">Proveedor</label>'+buscador("proveedores", base.proveedorId, "oProv", "Razón social o CUIT")+'</div>'+
+      '<div><label class="f">Comprador que confecciona la OC</label><select id="oComp">'+opts("compradores", base.compradorId || (compr&&compr.id))+'</select></div>'+
+      '<div><label class="f">Fecha de emisión</label><input type="date" id="oFecha" value="'+esc(base.fecha || hoy())+'"></div>'+
+      '<div><label class="f">Centro de costos de la OC</label>'+buscador("centros", base.centroId, "oCentro")+'</div>'+
+      '<div><label class="f">Depósito de entrega</label><select id="oDepo">'+opts("depositos", base.depositoId)+'</select></div>'+
+      '<div><label class="f">Forma de pago</label><select id="oPago">'+opts("formasPago", base.formaPagoId)+'</select></div>'+
+      '<div><label class="f">Entrega</label><select id="oModo"><option value="entrega" '+(base.modoEntrega!=="retiro"?"selected":"")+'>El proveedor entrega en COSESA</option><option value="retiro" '+(base.modoEntrega==="retiro"?"selected":"")+'>COSESA retira del proveedor</option></select></div>'+
+      '<div><label class="f">Fecha de entrega / retiro</label><input type="date" id="oEntrega" value="'+esc(base.entrega || "")+'"></div>'+
+      '<div><label class="f">Moneda</label><select id="oMon"><option value="ARS">Pesos (ARS)</option><option value="USD" '+(base.moneda==="USD"?"selected":"")+'>Dólares (USD)</option></select></div>'+
+      '<div><label class="f">IVA</label><select id="oIva">'+[["21","21 %"],["10.5","10,5 %"],["27","27 %"],["0","Sin IVA / exento"]].map(([v,t]) => '<option value="'+v+'" '+(String(base.iva ?? "21")===v?"selected":"")+'>'+t+'</option>').join("")+'</select></div>'+
+    '</div></div>'+
+    '<div class="card"><h2>Artículos</h2><p class="hint">Precios unitarios sin IVA. Cada artículo puede ir a otro centro de costos (debajo del botón de depósitos). Si un artículo se reparte entre varios depósitos, su gasto se imputa al centro de costos de cada depósito, en proporción a la cantidad.</p>'+lineasEditor(base.items || [], true)+'<div class="tot" id="totales"></div></div>'+
+    '<div class="card"><label class="f">Observaciones / condiciones (salen en la OC)</label><textarea id="oObs">'+esc(base.obs || "")+'</textarea>'+
+      '<label class="f" style="margin-top:12px">Anotaciones (al final de la OC)</label><textarea id="oNotas" placeholder="Lo que necesites anotar. Si lo dejás vacío, en el PDF queda un recuadro con renglones para escribir a mano.">'+esc(base.notas || "")+'</textarea></div>'+
+    '<div class="row"><button class="btn g" id="oEmitir">'+(o ? "Guardar cambios" : "Emitir orden de compra")+'</button><span class="hint">'+(o ? (aprobadorDe(o) ? "Ojo: si guardás cambios, la OC pierde la aprobación y hay que volver a aprobarla." : "") : "Al emitirla se le asigna el número "+esc(ocNum(S.cfg.proxNumero||1))+" (o el siguiente libre) y queda abierta.")+'</span></div>';
+  const recalc = () => {
+    let sub = 0;
+    document.querySelectorAll("#lin tr").forEach(tr => { const st = numIn(tr.querySelector(".lCant").value) * numIn(tr.querySelector(".lPre").value); sub += st; tr.querySelector(".lSub").textContent = st ? money(st, $("#oMon").value) : "—"; });
+    const iva = sub * Number($("#oIva").value)/100, mon = $("#oMon").value;
+    $("#totales").innerHTML = '<span>Subtotal</span><span class="n">'+money(sub,mon)+'</span><span>IVA '+esc($("#oIva").selectedOptions[0].textContent)+'</span><span class="n">'+money(iva,mon)+'</span><b>Total</b><b class="n">'+money(sub+iva,mon)+'</b>';
+  };
+  wireLineas(true, recalc); $("#oIva").onchange = recalc; $("#oMon").onchange = recalc;
+  $("#volver").onclick = () => o ? ir("ordenes", {tipo:"oc", id:o.id}) : (s ? ir("solicitudes", {tipo:"solform", id:s.id}) : (desdeItems ? (solTab = "articulos", ir("solicitudes")) : ir("ordenes")));
+  $("#oEmitir").onclick = async (ev) => {
+    const proveedorId = leerBuscador("proveedores", "oProv"); if(!proveedorId){ toast("Elegí un proveedor de la lista", true); return; }
+    const centroId = leerBuscador("centros", "oCentro"); if(!centroId){ toast("Elegí un centro de costos de la lista", true); return; }
+    const d = { proveedorId, centroId, compradorId: $("#oComp").value, fecha: $("#oFecha").value || hoy(), depositoId: $("#oDepo").value, formaPagoId: $("#oPago").value,
+      entrega: $("#oEntrega").value, modoEntrega: $("#oModo").value, moneda: $("#oMon").value, iva: Number($("#oIva").value), items: leerLineas(true), obs: $("#oObs").value.trim(), notas: $("#oNotas").value.trim() };
+    if(!d.compradorId){ toast("Elegí el comprador", true); return; }
+    if(!d.depositoId){ toast("Elegí el depósito", true); return; }
+    if(!d.formaPagoId){ toast("Elegí la forma de pago", true); return; }
+    if(!d.items.length){ toast("Agregá al menos un artículo", true); return; }
+    if(d.items.some(i => !(i.cantidad > 0))){ toast("Revisá las cantidades", true); return; }
+    const malRep = d.items.find(i => i.dist && i.dist.length && Math.abs(i.dist.reduce((a,b) => a + b.cantidad, 0) - i.cantidad) > 1e-9);
+    if(malRep){ toast("El reparto de \""+malRep.descripcion+"\" no suma la cantidad ("+qty(malRep.cantidad)+"). Tocá su botón de depósitos y corregilo.", true); return; }
+    ev.target.disabled = true;
+    try{
+      if(o){
+        let motivo = null;
+        if(o.reabierta){ ev.target.disabled = false; motivo = await pedirMotivoModificacion(o); if(!motivo) return; ev.target.disabled = true; }
+        const obj = Object.assign(JSON.parse(JSON.stringify(o)), d); (obj.log=obj.log||[]).push({fecha:ahora(),por:quien(),accion:"Editó la OC"+(motivo?": "+motivo:"")});
+        if(motivo){ (obj.modificaciones = obj.modificaciones || []).push({ fecha: ahora(), por: quien(), motivo }); }
+        if(obj.aprobacion || obj.aprobo){ delete obj.aprobacion; delete obj.aprobo; obj._quitarPorEdicion = true; obj.log.push({fecha:ahora(),por:quien(),accion:"Se quitó la aprobación porque la OC se modificó: hay que volver a aprobarla"}); }
+        await guardarDoc("ordenes", obj); toast(o.numero+" guardada"); ir("ordenes", {tipo:"oc", id:o.id});
+      } else {
+        const n = await reservarNumero();
+        const obj = Object.assign({ id: ocNum(n), numero: ocNum(n), estado: "abierta", emitida: ahora(), emitidaPor: quien(), solicitudId: s ? s.id : null, solicitudNumero: s ? s.numero : null, recepciones: [], log: [{fecha:ahora(),por:quien(),accion:"Emitió la OC"}] }, d);
+        await guardarDoc("ordenes", obj);
+        await marcarItemsConOc(obj);
+        ir("ordenes", {tipo:"oc", id: obj.id});
+        preguntarPdf(obj);
+      }
+    }catch(e){ ev.target.disabled = false; toast(e.message || "No se pudo guardar", true); }
+  };
+}
+/* Una OC que se había cerrado y se reabrió: al guardar cambios hay que justificar la modificación */
+function pedirMotivoModificacion(o){
+  return new Promise(res => {
+    const m = modal('<h3>Modificar '+esc(o.numero)+'</h3><p>Esta orden de compra <b>estaba cerrada</b>. Al guardar, en la OC va a quedar al pie la leyenda <b>"MODIFICADA"</b> con la fecha, quién la modificó y el motivo.</p>'+
+      '<label class="f">Motivo de la modificación</label><textarea id="mMot" placeholder="Ej: el proveedor entregó 280 en lugar de 300, se ajusta la cantidad"></textarea>'+
+      '<div class="acts"><button class="btn" id="mNo">Cancelar</button><button class="btn g" id="mSi">Confirmar modificación</button></div>');
+    m.querySelector("#mNo").onclick = () => { cerrarModal(); res(null); };
+    m.querySelector("#mSi").onclick = () => { const v = m.querySelector("#mMot").value.trim(); if(!v){ toast("Escribí el motivo de la modificación", true); return; } cerrarModal(); res(v); };
+  });
+}
+function preguntarPdf(o){
+  const m = modal('<h3>'+esc(o.numero)+' emitida</h3><p>La orden de compra quedó <b>abierta</b> y <b>pendiente de aprobación</b>. ¿Querés descargarla en PDF para archivarla?</p><div class="acts"><button class="btn" id="mNo">Ahora no</button><button class="btn g" id="mSi">Descargar PDF</button></div>');
+  m.querySelector("#mNo").onclick = cerrarModal;
+  m.querySelector("#mSi").onclick = () => { cerrarModal(); descargarPdf(o); };
+}
+
+function detalleOc(id, modo){
+  const o = S.oc.find(x => x.id === id);
+  if(!o){ ir(modo==="dep"?"deposito":"ordenes"); return; }
+  const p = prov(o.proveedorId) || {}, t = totalOc(o);
+  const recib = {}; (o.recepciones||[]).forEach(r => Object.entries(r.cantidades||{}).forEach(([k,v]) => recib[k] = (recib[k]||0) + Number(v||0)));
+  const recDep = recibidoPorDeposito(o);
+  $("#view").innerHTML = '<div class="row sp" style="margin-bottom:12px;"><div class="row"><button class="btn s" id="volver">← '+(modo==="dep"?"Recepción":"Órdenes de compra")+'</button><span class="mono" style="font-size:20px">'+esc(o.numero)+'</span>'+pillOc(o)+'</div>'+
+    '<div class="row">'+
+      '<button class="btn" id="pdf">Descargar PDF</button>'+
+      (o.estado === "abierta" && modo !== "dep" && !aprobadorDe(o) && PERM.aprobar ? '<button class="btn g" id="aprobar">✓ Aprobar OC</button>' : '')+
+      (o.estado === "abierta" && modo !== "dep" && o.aprobacion && (o.aprobacion.userId === ME.id || PERM.aprobar) ? '<button class="btn" id="desaprobar">Quitar aprobación</button>' : '')+
+      (o.estado === "abierta" && modo !== "dep" ? '<button class="btn" id="editar">Editar</button><button class="btn d" id="anular">Anular</button>' : '')+
+      (o.estado === "cerrada" && modo !== "dep" ? '<button class="btn" id="reabrir">Reabrir para modificar</button>' : '')+
+      (o.estado === "abierta" ? '<button class="btn p" id="remito">Cargar remito / factura</button><button class="btn ok" id="cerrar" '+((o.recepciones||[]).length?"":"disabled title=\"Primero cargá el remito o la factura\"")+'>Cerrar OC</button>' : '')+
+    '</div></div>'+
+    (o.estado !== "anulada" ? (aprobadorDe(o) ? '<div class="banner ok">✓ Aprobada por <b>'+esc(aprobadorDe(o).nombre)+'</b> ('+esc(aprobadorDe(o).iniciales)+')'+(aprobadorDe(o).fecha ? ' el '+esc(aprobadorDe(o).fecha) : '')+'</div>' : '<div class="banner warn">Pendiente de aprobación.'+(modo !== "dep" ? ' Quien la aprueba toca <b>"Aprobar OC"</b>: queda su usuario como firma.' : '')+'</div>') : '')+
+    ((o.modificaciones||[]).length ? '<div class="banner warn"><b>MODIFICADA</b> · '+o.modificaciones.map(x => esc(x.fecha)+' por '+esc(x.por)+': '+esc(x.motivo)).join('<br>')+'</div>' : '')+
+    (o.reabierta && !(o.modificaciones||[]).length && o.estado === "abierta" ? '<div class="banner info">Reabierta después de haber estado cerrada: al guardar cambios se pide el motivo.</div>' : '')+
+    (o.ejemplo ? '<div class="banner info">Orden de compra <b>de ejemplo</b>, cargada para ver los gráficos. Se borra desde Configuración.</div>' : '')+
+    (o.estado === "cerrada" ? '<div class="banner ok">Cerrada el '+esc(o.cierre.fecha)+' por '+esc(o.cierre.por)+' con <b>'+(o.cierre.tipo==="factura"?"factura":"remito")+' N° '+esc(o.cierre.numero)+'</b>'+(o.cierre.obs?" · "+esc(o.cierre.obs):"")+(o.cierre.noRecibido && o.cierre.noRecibido.length ? '<br>Se cerró sin recibir (no se imputa a centros de costos): '+o.cierre.noRecibido.map(x => { const it = (o.items||[]).find(l => l.lid === x.lid) || {}; return esc(it.descripcion||"?")+' '+qty(x.cantidad)+' '+esc(it.unidad||""); }).join(", ") : '')+'</div>' : '')+
+    (o.estado === "anulada" ? '<div class="banner bad">Anulada el '+esc(o.anulacion.fecha)+' por '+esc(o.anulacion.por)+' · '+esc(o.anulacion.motivo)+'</div>' : '')+
+    '<div class="card"><div class="kv">'+
+      '<div><span>Proveedor</span><b>'+esc(p.razon||"—")+'</b><br>'+esc([p.cuit, p.condIva].filter(Boolean).join(" · "))+'</div>'+
+      '<div><span>Fecha de emisión</span>'+fFecha(o.fecha)+'</div>'+
+      '<div><span>Comprador</span>'+esc(nombreDe("compradores", o.compradorId))+'</div>'+
+      '<div><span>Aprobó</span>'+(aprobadorDe(o) ? esc(aprobadorDe(o).iniciales)+" · "+esc(aprobadorDe(o).nombre) : "Pendiente")+'</div>'+
+      '<div><span>Centro de costos</span>'+esc(centrosTxtOc(o))+'</div>'+
+      '<div><span>Depósito de entrega</span>'+esc(nombreDe("depositos", o.depositoId))+'</div>'+
+      '<div><span>Forma de pago</span>'+esc(nombreDe("formasPago", o.formaPagoId))+'</div>'+
+      '<div><span>Entrega</span>'+(o.modoEntrega==="retiro" ? "COSESA retira del proveedor" : "El proveedor entrega en COSESA")+'</div>'+
+      '<div><span>Fecha de entrega / retiro</span>'+fFecha(o.entrega)+'</div>'+
+      (o.solicitudNumero ? '<div><span>Solicitud de compra</span>'+esc(o.solicitudNumero)+'</div>' : '')+
+    '</div></div>'+
+    '<div class="card scroll"><table class="stack"><thead><tr><th>Código</th><th>Artículo</th><th class="n">Cantidad</th><th>Unidad</th><th>Depósitos (pedido / recibido)</th><th>C. costos</th><th class="n">Recibido</th>'+(modo==="dep"?'':'<th class="n">Precio unit.</th><th class="n">Subtotal</th>')+'</tr></thead><tbody>'+
+      (o.items||[]).map(i => '<tr><td>'+esc(i.codigo||"—")+'</td><td>'+esc(i.descripcion)+(i.obs ? '<div class="hint">'+esc(i.obs)+'</div>' : '')+'</td><td class="n">'+qty(i.cantidad)+'</td><td>'+esc(i.unidad)+'</td>'+
+        '<td style="font-size:13px">'+repartoDe(i, o).map(d => '<div style="white-space:nowrap">'+esc(depCod(d.depositoId))+': '+qty(d.cantidad)+' / <b>'+qty(((recDep[i.lid]||{})[d.depositoId])||0)+'</b></div>').join("")+
+          Object.keys(recDep[i.lid]||{}).filter(dep => !repartoDe(i,o).some(d => d.depositoId === dep)).map(dep => '<div style="white-space:nowrap">'+esc(depCod(dep))+': — / <b>'+qty(recDep[i.lid][dep])+'</b></div>').join("")+'</td>'+
+        '<td style="font-size:13px">'+((i.dist||[]).length > 1 ? repartoDe(i, o).map(d => '<div style="white-space:nowrap">'+esc(depCod(d.depositoId))+' → '+esc(ccCod(centroDeParte(o, i, d.depositoId)))+'</div>').join("") : esc(ccCod(centroDeParte(o, i, o.depositoId))))+'</td>'+
+        '<td class="n">'+(recib[i.lid] ? qty(recib[i.lid]) : "—")+'</td>'+(modo==="dep"?'':'<td class="n">'+money(i.precio,o.moneda)+'</td><td class="n">'+money(i.cantidad*i.precio,o.moneda)+'</td>')+'</tr>').join("")+
+    '</tbody></table>'+(modo==="dep"?'':'<div class="tot"><span>Subtotal</span><span class="n">'+money(t.sub,o.moneda)+'</span><span>IVA '+esc(o.iva)+' %</span><span class="n">'+money(t.iva,o.moneda)+'</span><b>Total</b><b class="n">'+money(t.total,o.moneda)+'</b></div>')+'</div>'+
+    (o.obs ? '<div class="card"><span class="hint">Observaciones</span><div style="white-space:pre-wrap">'+esc(o.obs)+'</div></div>' : '')+
+    (o.notas ? '<div class="card"><span class="hint">Anotaciones</span><div style="white-space:pre-wrap">'+esc(o.notas)+'</div></div>' : '')+
+    '<div class="card"><h2>Remitos y facturas recibidos</h2>'+((o.recepciones||[]).length ? '<table class="stack"><thead><tr><th>Tipo</th><th>Número</th><th>Fecha</th><th>Recibió</th><th>Observaciones</th></tr></thead><tbody>'+
+      o.recepciones.map(r => '<tr><td>'+(r.tipo==="factura"?"Factura":"Remito")+'</td><td class="mono">'+esc(r.numero)+'</td><td>'+fFecha(r.fecha)+'</td><td>'+esc(r.recibio)+'</td><td>'+esc(r.obs||"")+'</td></tr>').join("")+'</tbody></table>' : '<p class="hint">Todavía no se cargó ningún remito ni factura.</p>')+'</div>'+
+    '<details class="card"><summary style="cursor:pointer;font-weight:600">Historial</summary><ul>'+(o.log||[]).map(l => '<li>'+esc(l.fecha)+' · '+esc(l.por)+' · '+esc(l.accion)+'</li>').join("")+'</ul></details>';
+  $("#volver").onclick = () => ir(modo==="dep" ? "deposito" : "ordenes");
+  $("#pdf").onclick = () => descargarPdf(o);
+  if($("#editar")) $("#editar").onclick = () => ir("ordenes", {tipo:"ocform", id:o.id});
+  if($("#reabrir")) $("#reabrir").onclick = () => {
+    const m = modal('<h3>Reabrir '+esc(o.numero)+'</h3><p>La OC está cerrada y no se puede editar. Si la reabrís, vuelve a quedar <b>abierta</b> para modificarla; al guardar los cambios te va a pedir el motivo, y en la OC queda la leyenda <b>"MODIFICADA"</b>. Después la cerrás de nuevo.</p>'+
+      '<div class="acts"><button class="btn" id="mNo">Cancelar</button><button class="btn g" id="mSi">Reabrir</button></div>');
+    m.querySelector("#mNo").onclick = cerrarModal;
+    m.querySelector("#mSi").onclick = async () => {
+      const obj = JSON.parse(JSON.stringify(o)); obj.estado = "abierta"; obj.reabierta = true;
+      (obj.cierresAnteriores = obj.cierresAnteriores || []).push(obj.cierre); delete obj.cierre;
+      obj.log.push({ fecha: ahora(), por: quien(), accion: "Reabrió la OC (estaba cerrada) para modificarla" });
+      await guardarDoc("ordenes", obj); cerrarModal(); toast(o.numero+" reabierta"); ir("ordenes", {tipo:"ocform", id:o.id});
+    };
+  };
+  if($("#aprobar")) $("#aprobar").onclick = () => {
+    const nombre = quien();
+    const m = modal('<h3>Aprobar '+esc(o.numero)+'</h3><p>Vas a aprobar esta orden de compra por <b>'+money(totalOc(o).total, o.moneda)+'</b> a <b>'+esc(provTxt(o.proveedorId))+'</b>.</p>'+
+      '<div class="banner info">Firma: <b>'+esc(nombre)+'</b> ('+esc(inicialesNombre(nombre))+') · '+esc(ahora())+'<br><span style="font-size:12.5px">'+'Queda registrada con tu usuario de la plataforma.'+'</span></div>'+
+      '<div class="acts"><button class="btn" id="mNo">Cancelar</button><button class="btn ok" id="mSi">Aprobar y firmar</button></div>');
+    m.querySelector("#mNo").onclick = cerrarModal;
+    m.querySelector("#mSi").onclick = async ev => {
+      ev.target.disabled = true;
+      const obj = JSON.parse(JSON.stringify(o));
+      obj.aprobacion = { userId: ME.id, nombre: ME.name, fecha: ahora() };
+      (obj.log = obj.log || []).push({ fecha: ahora(), por: nombre, accion: "Aprobó la OC" });
+      if(ME.id && ME.name) NOMBRES[ME.id] = ME.name;
+      try{ await guardarDoc("ordenes", obj); cerrarModal(); toast(o.numero+" aprobada"); render(); }
+      catch(e){ ev.target.disabled = false; toast("No se pudo aprobar: "+(e.message||e.code), true); }
+    };
+  };
+  if($("#desaprobar")) $("#desaprobar").onclick = async () => {
+    const obj = JSON.parse(JSON.stringify(o)); delete obj.aprobacion; (obj.log = obj.log || []).push({ fecha: ahora(), por: quien(), accion: "Quitó la aprobación" });
+    await guardarDoc("ordenes", obj); toast("Se quitó la aprobación"); render();
+  };
+  if($("#anular")) $("#anular").onclick = () => {
+    const m = modal('<h3>Anular '+esc(o.numero)+'</h3><p>La OC queda anulada y no se puede recibir ni cerrar. El número no se vuelve a usar.</p><label class="f">Motivo</label><textarea id="mMot"></textarea><div class="acts"><button class="btn" id="mNo">Cancelar</button><button class="btn d" id="mSi">Anular OC</button></div>');
+    m.querySelector("#mNo").onclick = cerrarModal;
+    m.querySelector("#mSi").onclick = async () => { const mot = m.querySelector("#mMot").value.trim(); if(!mot){ toast("Indicá el motivo", true); return; }
+      const obj = JSON.parse(JSON.stringify(o)); obj.estado = "anulada"; obj.anulacion = { motivo: mot, fecha: ahora(), por: quien() }; obj.log.push({fecha:ahora(),por:quien(),accion:"Anuló la OC: "+mot});
+      await guardarDoc("ordenes", obj); cerrarModal(); toast(o.numero+" anulada"); render(); };
+  };
+  if($("#remito")) $("#remito").onclick = () => modalRemito(o, recib);
+  if($("#cerrar")) $("#cerrar").onclick = () => modalCerrar(o);
+}
+function recibidoPorDeposito(o){
+  const out = {};
+  (o.recepciones||[]).forEach(r => {
+    if(r.dist) Object.entries(r.dist).forEach(([lid, deps]) => Object.entries(deps).forEach(([dep, v]) => { (out[lid] = out[lid] || {})[dep] = (out[lid][dep]||0) + Number(v||0); }));
+    else Object.entries(r.cantidades||{}).forEach(([lid, v]) => { (out[lid] = out[lid] || {})[o.depositoId] = (out[lid][o.depositoId]||0) + Number(v||0); });
+  });
+  return out;
+}
+function modalRemito(o, recib){
+  const recDep = recibidoPorDeposito(o);
+  const m = modal('<h3>Cargar remito o factura · '+esc(o.numero)+'</h3><p class="hint">Es el documento que entrega el proveedor con el material. Si no hay remito, cargá la factura.</p>'+
+    '<div class="radio"><label><input type="radio" name="rt" value="remito" checked> Remito</label><label><input type="radio" name="rt" value="factura"> Factura</label></div>'+
+    '<div class="grid" style="margin-top:12px"><div><label class="f">Número</label><input id="rNum" placeholder="0001-00012345"></div><div><label class="f">Fecha</label><input type="date" id="rFecha" value="'+hoy()+'"></div><div><label class="f">Recibió</label><input id="rRec" value="'+esc(quien())+'"></div></div>'+
+'<h4 style="margin:14px 0 2px">Cantidades recibidas por depósito</h4><p class="hint" style="margin:0 0 6px">Viene cargado con lo pendiente de cada depósito. Si llegó un parcial, corregí las cantidades y repartilas a mano entre los depósitos.</p>'+
+    '<div class="scroll"><table><thead><tr><th>Artículo / depósito</th><th class="n">Pedido</th><th class="n">Ya recibido</th><th class="n" style="width:120px">Recibe ahora</th></tr></thead><tbody>'+
+      (o.items||[]).map(i => { const rd = recDep[i.lid] || {};
+        const deps = repartoDe(i, o).map(d => d.depositoId); Object.keys(rd).forEach(dep => { if(!deps.includes(dep)) deps.push(dep); });
+        return '<tr><td colspan="4" style="background:var(--muted);font-weight:700">'+esc(i.descripcion)+' <span class="hint">· pedido '+qty(i.cantidad)+' '+esc(i.unidad)+' · recibido '+qty(recib[i.lid]||0)+'</span></td></tr>'+
+          deps.map(dep => { const plan = (repartoDe(i, o).find(d => d.depositoId === dep) || {}).cantidad || 0, ya = rd[dep] || 0, pend = Math.max(0, plan - ya);
+            return '<tr><td style="padding-left:22px">'+esc(nombreDe("depositos", dep))+'</td><td class="n">'+qty(plan)+'</td><td class="n">'+qty(ya)+'</td><td><input class="rq" data-l="'+esc(i.lid)+'" data-d="'+esc(dep)+'" inputmode="decimal" value="'+pend+'" style="text-align:right"></td></tr>'; }).join("")+
+          '<tr><td style="padding-left:22px" colspan="3"><select class="rOtro" data-l="'+esc(i.lid)+'" style="max-width:280px;font-size:13px;padding:5px 8px"><option value="">+ Otro depósito…</option>'+depsOrdenados().filter(d => !deps.includes(d.id)).map(d => '<option value="'+esc(d.id)+'">'+esc(depTxt(d))+'</option>').join("")+'</select></td><td></td></tr>';
+      }).join("")+
+    '</tbody></table></div><label class="f" style="margin-top:10px">Observaciones</label><textarea id="rObs"></textarea>'+
+    '<div class="acts"><button class="btn" id="mNo">Cancelar</button><button class="btn p" id="mSi">Guardar</button></div>', true);
+  m.querySelector("#mNo").onclick = cerrarModal;
+  m.querySelectorAll(".rOtro").forEach(sel => sel.onchange = () => { if(!sel.value) return;
+    const tr = sel.closest("tr"); tr.insertAdjacentHTML("beforebegin", '<tr><td style="padding-left:22px">'+esc(nombreDe("depositos", sel.value))+'</td><td class="n">—</td><td class="n">0</td><td><input class="rq" data-l="'+esc(sel.dataset.l)+'" data-d="'+esc(sel.value)+'" inputmode="decimal" value="" style="text-align:right"></td></tr>');
+    sel.querySelector('option[value="'+sel.value+'"]').remove(); sel.value = ""; });
+  m.querySelector("#mSi").onclick = async () => {
+    const numero = m.querySelector("#rNum").value.trim(); if(!numero){ toast("Indicá el número del remito o la factura", true); return; }
+    const cantidades = {}, dist = {};
+    m.querySelectorAll(".rq").forEach(i => { const v = numIn(i.value); if(v > 0){ cantidades[i.dataset.l] = (cantidades[i.dataset.l]||0) + v; (dist[i.dataset.l] = dist[i.dataset.l] || {})[i.dataset.d] = v; } });
+    if(!Object.keys(cantidades).length){ toast("No cargaste ninguna cantidad recibida", true); return; }
+    const r = { id: uid("r"), tipo: m.querySelector("input[name=rt]:checked").value, numero, fecha: m.querySelector("#rFecha").value || hoy(), recibio: m.querySelector("#rRec").value.trim() || quien(), obs: m.querySelector("#rObs").value.trim(), cantidades, dist, cargado: ahora() };
+    const obj = JSON.parse(JSON.stringify(o)); (obj.recepciones = obj.recepciones || []).push(r); obj.log.push({fecha:ahora(),por:quien(),accion:"Cargó "+r.tipo+" N° "+numero});
+    await guardarDoc("ordenes", obj); cerrarModal(); toast((r.tipo==="factura"?"Factura":"Remito")+" cargado"); render();
+  };
+}
+function modalCerrar(o){
+  const docs = o.recepciones || [];
+  const recT = {}; docs.forEach(r => Object.entries(r.cantidades||{}).forEach(([lid,v]) => recT[lid] = (recT[lid]||0) + Number(v||0)));
+  const falt = (o.items||[]).map(i => ({ i, f: Math.max(0, Number(i.cantidad||0) - (recT[i.lid]||0)) })).filter(x => x.f > 0);
+  const mFalt = falt.reduce((a,x) => a + x.f * (Number(x.i.precio)||0), 0);
+  const m = modal('<h3>Cerrar '+esc(o.numero)+'</h3>'+
+    (falt.length ? '<div class="banner warn">Quedan artículos <b>sin recibir</b>: '+falt.map(x => esc(x.i.descripcion)+' ('+qty(x.f)+' '+esc(x.i.unidad)+')').join(", ")+'. Al cerrar, eso se da por no entregado y <b>no se imputa a ningún centro de costos</b> ('+money(mFalt, o.moneda)+' sin IVA). Solo queda imputado lo recibido.</div>' : '')+
+    '<p>¿Con qué documento se cierra la orden de compra?</p>'+
+    '<div class="radio"><label><input type="radio" name="ct" value="remito" checked> Remito</label><label><input type="radio" name="ct" value="factura"> Factura</label></div>'+
+    '<label class="f" style="margin-top:12px">Documento</label><select id="cDoc"></select>'+
+    '<label class="f" style="margin-top:10px">Observaciones (opcional)</label><textarea id="cObs"></textarea>'+
+    '<div class="acts"><button class="btn" id="mNo">Cancelar</button><button class="btn ok" id="mSi">Cerrar OC</button></div>');
+  const llenar = () => { const t = m.querySelector("input[name=ct]:checked").value; const l = docs.filter(d => d.tipo === t);
+    m.querySelector("#cDoc").innerHTML = l.length ? l.map(d => '<option value="'+esc(d.id)+'">'+(t==="factura"?"Factura":"Remito")+' N° '+esc(d.numero)+' · '+fFecha(d.fecha)+'</option>').join("") : '<option value="">No hay '+(t==="factura"?"facturas cargadas":"remitos cargados")+'</option>'; };
+  m.querySelectorAll("input[name=ct]").forEach(r => r.onchange = llenar);
+  if(!docs.some(d => d.tipo === "remito") && docs.some(d => d.tipo === "factura")) m.querySelector("input[value=factura]").checked = true;
+  llenar();
+  m.querySelector("#mNo").onclick = cerrarModal;
+  m.querySelector("#mSi").onclick = async () => {
+    const d = docs.find(x => x.id === m.querySelector("#cDoc").value); if(!d){ toast("Primero cargá ese documento", true); return; }
+    const obj = JSON.parse(JSON.stringify(o)); obj.estado = "cerrada"; obj.cierre = { tipo: d.tipo, numero: d.numero, docId: d.id, fecha: ahora(), por: quien(), obs: m.querySelector("#cObs").value.trim() };
+    if(falt.length) obj.cierre.noRecibido = falt.map(x => ({ lid: x.i.lid, cantidad: x.f }));
+    obj.log.push({fecha:ahora(),por:quien(),accion:"Cerró la OC con "+d.tipo+" N° "+d.numero+(falt.length ? " · sin recibir (no se imputa): "+falt.map(x => x.i.descripcion+" "+qty(x.f)).join(", ") : "")});
+    await guardarDoc("ordenes", obj); cerrarModal(); toast(o.numero+" cerrada"); render();
+  };
+}
+
+/* ---------------- Depósito ---------------- */
+let buscaDep = "", depEstado = "abierta";
+function vDeposito(){
+  if(sub && sub.tipo === "oc") return detalleOc(sub.id, "dep");
+  const q = norm(buscaDep);
+  const lista = S.oc.filter(o => (depEstado==="todas" ? o.estado !== "anulada" : o.estado===depEstado) && (!q || contenidoOc(o).includes(q))).sort(ordenOc);
+  $("#view").innerHTML = '<div class="card"><h2>Buscar orden de compra</h2><p class="hint">Por número de OC, proveedor (razón social, CUIT o código) o contenido (artículo).</p>'+
+    '<input id="dq" placeholder="Ej: OC0000011, Ferretería, guantes…" value="'+esc(buscaDep)+'" style="font-size:17px;padding:12px 14px;margin-top:6px"></div>'+
+    '<div class="tabs">'+[["abierta","Abiertas (para recibir)"],["cerrada","Cerradas"],["todas","Todas"]].map(([k,t]) => '<button class="tab '+(depEstado===k?"on":"")+'" data-de="'+k+'">'+t+'</button>').join("")+'</div>'+
+    '<div class="card scroll" style="padding:6px 10px;">'+tablaOcs(lista, "dep", true)+'</div>';
+  $("#dq").oninput = e => { buscaDep = e.target.value; const pos = e.target.selectionStart; render(); const el = $("#dq"); el.focus(); el.setSelectionRange(pos,pos); };
+  document.querySelectorAll("[data-de]").forEach(b => b.onclick = () => { depEstado = b.dataset.de; render(); });
+  document.querySelectorAll("[data-oc]").forEach(r => r.onclick = () => ir("deposito", {tipo:"oc", id:r.dataset.oc}));
+  wireFiltrosCol("dep");
+}
+
+/* ---------------- Ingresos por depósito (lo que después gestiona Control de stock) ---------------- */
+let ingDep = "", ingQ = "";
+function vIngresos(){
+  const filas = {};
+  S.oc.filter(o => o.estado !== "anulada").forEach(o => (o.recepciones||[]).forEach(r => {
+    const dist = r.dist || Object.fromEntries(Object.entries(r.cantidades||{}).map(([lid,v]) => [lid, {[o.depositoId]: v}]));
+    Object.entries(dist).forEach(([lid, deps]) => { const it = (o.items||[]).find(i => i.lid === lid); if(!it) return;
+      Object.entries(deps).forEach(([dep, v]) => { const k = (it.articuloId || norm(it.descripcion))+"|"+dep;
+        const f = filas[k] = filas[k] || { codigo: it.codigo, descripcion: it.descripcion, unidad: it.unidad, dep, cant: 0, ocs: new Set(), ultima: "" };
+        f.cant += Number(v||0); f.ocs.add(o.numero); if((r.fecha||"") > f.ultima) f.ultima = r.fecha || ""; }); });
+  }));
+  const q = norm(ingQ);
+  const lista = Object.values(filas).filter(f => (!ingDep || f.dep === ingDep) && (!q || norm(f.codigo+" "+f.descripcion).includes(q)))
+    .sort((a,b) => String(depCod(a.dep)).localeCompare(String(depCod(b.dep)), "es", {numeric:true}) || a.descripcion.localeCompare(b.descripcion));
+  $("#view").innerHTML = '<div class="banner info">Lo que entró a cada depósito con los remitos y facturas de las OC. Es la base que después va a manejar la app <b>Control de stock</b> (consumos, salidas y saldo).</div>'+
+    '<div class="row" style="margin-bottom:12px"><select id="iDep" style="max-width:280px"><option value="">Todos los depósitos</option>'+depsOrdenados().map(d => '<option value="'+esc(d.id)+'" '+(d.id===ingDep?"selected":"")+'>'+esc(depTxt(d))+'</option>').join("")+'</select>'+
+    '<input id="iQ" placeholder="Buscar artículo" value="'+esc(ingQ)+'" style="max-width:300px"></div>'+
+    '<div class="card scroll" style="padding:6px 10px">'+(lista.length ? '<table class="stack"><thead><tr><th>Depósito</th><th>Código</th><th>Artículo</th><th class="n">Ingresado</th><th>Unidad</th><th>OC</th><th>Último ingreso</th></tr></thead><tbody>'+
+      lista.map(f => '<tr><td>'+esc(nombreDe("depositos", f.dep))+'</td><td>'+esc(f.codigo||"—")+'</td><td>'+esc(f.descripcion)+'</td><td class="n"><b>'+qty(f.cant)+'</b></td><td>'+esc(f.unidad)+'</td><td class="mono" style="font-size:12.5px">'+esc([...f.ocs].join(", "))+'</td><td>'+fFecha(f.ultima)+'</td></tr>').join("")+'</tbody></table>'
+      : '<div class="empty">Todavía no ingresó nada'+(ingDep?" a este depósito":"")+'.</div>')+'</div>';
+  $("#iDep").onchange = e => { ingDep = e.target.value; render(); };
+  $("#iQ").oninput = e => { ingQ = e.target.value; const pos = e.target.selectionStart; render(); const el = $("#iQ"); el.focus(); el.setSelectionRange(pos,pos); };
+}
+
+/* ---------------- Centros de costos: gastos y balance + listado ---------------- */
+let ccTab = "gastos";
+function vCentros(){
+  if(ccTab === "gastos") vGastos(); else vMaestro("centros");
+  $("#view").insertAdjacentHTML("afterbegin", '<div class="tabs">'+[["gastos","Gastos y balance"],["lista","Listado e importación"]].map(([k,t]) => '<button class="tab '+(ccTab===k?"on":"")+'" data-cct="'+k+'">'+t+'</button>').join("")+'</div>');
+  document.querySelectorAll("[data-cct]").forEach(b => b.onclick = () => { ccTab = b.dataset.cct; render(); });
+}
+/* ---------------- Gastos por centro de costos ---------------- */
+const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+const PALETA = ["#1d4ed8","#e0a100","#0f9d6b","#c2410c","#7c3aed","#0891b2","#94a3b8"];
+let gAnio = null, gMon = "ARS", gIva = false, gAgr = "mes", gSoloAprob = false, gCentro = "", gBase = "recibido";
+function montoOc(o){ const t = totalOc(o); return gIva ? t.total : t.sub; }
+function vGastos(){
+  const anios = [...new Set(S.oc.flatMap(o => [o.fecha, ...(o.recepciones||[]).map(r => r.fecha)]).map(f => (f||"").slice(0,4)).filter(Boolean))].sort().reverse();
+  if(!gAnio) gAnio = anios[0] || hoy().slice(0,4);
+  const nP = gAgr === "mes" ? 12 : 4, etiquetas = gAgr === "mes" ? MESES : ["T1","T2","T3","T4"];
+  const per = f => { const m = Number(String(f).slice(5,7)) - 1; return gAgr === "mes" ? m : Math.floor(m/3); };
+  const porC = {}, ocsSet = new Set();
+  let pendiente = 0;
+  S.oc.filter(o => o.estado !== "anulada" && (o.moneda||"ARS") === gMon && (!gSoloAprob || aprobadorDe(o))).forEach(o => {
+    const f = gIva ? 1 + (Number(o.iva)||0)/100 : 1;
+    imputaciones(o, gBase).forEach(im => { if(!String(im.fecha||"").startsWith(gAnio) || !im.monto) return;
+      const k = im.centroId || "_"; const r = porC[k] = porC[k] || { id:k, v:Array(nP).fill(0), total:0, ocs:[] }; const m = im.monto * f;
+      r.v[per(im.fecha)] += m; r.total += m; if(!r.ocs.includes(o)) r.ocs.push(o); ocsSet.add(o); });
+    if(gBase === "recibido" && o.estado === "abierta" && (o.fecha||"").startsWith(gAnio)){ const comp = imputaciones(o, "comprometido").reduce((a,b) => a + b.monto, 0), rec = imputaciones(o, "recibido").reduce((a,b) => a + b.monto, 0); pendiente += Math.max(0, comp - rec) * f; }
+  });
+  const ocs = [...ocsSet];
+  const filas = Object.values(porC).sort((a,b) => b.total - a.total);
+  const total = filas.reduce((a,b) => a + b.total, 0);
+  const porPer = Array(nP).fill(0); filas.forEach(f => f.v.forEach((x,i) => porPer[i] += x));
+  const hoyP = gAnio === hoy().slice(0,4) ? per(hoy()) : nP-1;
+  const conGasto = porPer.slice(0, hoyP+1).filter(x => x > 0).length || 1;
+  const nomC = id => id === "_" ? "Sin centro de costos" : centroTxt(id);
+  if(gCentro && !porC[gCentro]) gCentro = "";
+  const sel = gCentro ? porC[gCentro] : null;
+  let series;
+  if(sel) series = [{ name: nomC(sel.id), color: PALETA[0], values: sel.v }];
+  else { series = filas.slice(0,6).map((f,i) => ({ name: nomC(f.id), color: PALETA[i], values: f.v }));
+    if(filas.length > 6){ const otros = Array(nP).fill(0); filas.slice(6).forEach(f => f.v.forEach((x,i) => otros[i] += x)); series.push({ name: "Otros ("+(filas.length-6)+")", color: PALETA[6], values: otros }); } }
+  const acumBase = sel ? sel.v : porPer; let ac = 0; const acum = acumBase.map((x,i) => { ac += x; return i <= hoyP ? ac : null; });
+  const pct = x => total ? (x*100/total).toLocaleString("es-AR",{maximumFractionDigits:1})+" %" : "—";
+  const mny = x => money(x, gMon);
+  const mayor = filas[0];
+  $("#view").innerHTML =
+    '<div class="row" style="margin-bottom:14px;gap:8px">'+
+      '<select id="gA" style="width:110px">'+(anios.length ? anios : [gAnio]).map(a => '<option '+(a===gAnio?"selected":"")+'>'+esc(a)+'</option>').join("")+'</select>'+
+      '<div class="tabs" style="margin:0">'+[["mes","Por mes"],["tri","Por trimestre"]].map(([k,t]) => '<button class="tab '+(gAgr===k?"on":"")+'" data-ga="'+k+'">'+t+'</button>').join("")+'</div>'+
+      '<div class="tabs" style="margin:0">'+[["recibido","Imputado (remitos)"],["comprometido","Comprometido (OC emitidas)"]].map(([k,t]) => '<button class="tab '+(gBase===k?"on":"")+'" data-gb="'+k+'">'+t+'</button>').join("")+'</div>'+
+      '<div class="tabs" style="margin:0">'+[["ARS","Pesos"],["USD","Dólares"]].map(([k,t]) => '<button class="tab '+(gMon===k?"on":"")+'" data-gm="'+k+'">'+t+'</button>').join("")+'</div>'+
+      '<label class="row" style="gap:6px;font-size:13.5px;font-weight:600"><input type="checkbox" id="gI" style="width:auto" '+(gIva?"checked":"")+'> Con IVA</label>'+
+      '<label class="row" style="gap:6px;font-size:13.5px;font-weight:600"><input type="checkbox" id="gS" style="width:auto" '+(gSoloAprob?"checked":"")+'> Solo OC aprobadas</label>'+
+    '</div>'+
+    '<div class="kpis">'+
+      '<div class="kpi"><span>Total '+esc(gAnio)+(sel ? " · "+esc(nomC(sel.id)) : "")+'</span><b>'+mny(sel ? sel.total : total)+'</b></div>'+
+      '<div class="kpi"><span>'+(gAgr==="mes"?"Promedio mensual":"Promedio trimestral")+'</span><b>'+mny((sel ? sel.v.slice(0,hoyP+1).reduce((a,b)=>a+b,0) : porPer.slice(0,hoyP+1).reduce((a,b)=>a+b,0)) / Math.max(1, sel ? (sel.v.slice(0,hoyP+1).filter(x=>x>0).length||1) : conGasto))+'</b></div>'+
+      '<div class="kpi"><span>'+(sel ? "Participación en el total" : "Centro con más gasto")+'</span><b>'+(sel ? pct(sel.total) : (mayor ? esc(nomC(mayor.id).split(" · ")[0]) : "—"))+'</b>'+(!sel && mayor ? '<div class="hint">'+mny(mayor.total)+' · '+pct(mayor.total)+'</div>' : '')+'</div>'+
+      (gBase === "recibido" && !sel ? '<div class="kpi"><span>Comprometido sin recibir</span><b>'+mny(pendiente)+'</b><div class="hint">OC abiertas de '+esc(gAnio)+'</div></div>' : '<div class="kpi"><span>Órdenes de compra</span><b>'+(sel ? sel.ocs.length : ocs.length)+'</b></div>')+
+    '</div>'+
+    '<div class="card"><div class="row sp"><div><h2>'+(sel ? "Gasto de "+esc(nomC(sel.id)) : "Gasto por centro de costos")+' · '+esc(gAnio)+'</h2><p class="hint" style="margin:0">'+(gBase==="recibido" ? "Se imputa al cargar el remito o la factura, a la fecha del remito, por lo recibido en cada depósito" : "Todo lo pedido en las OC, a la fecha de emisión")+' · '+(gIva?"con IVA":"sin IVA")+' · cada ítem a su centro de costos (si va a varios depósitos, al centro de cada depósito). La línea es el acumulado del año.</p></div>'+(sel ? '<button class="btn s" id="gTodos">← Ver todos los centros</button>' : '')+'</div>'+
+      '<div class="fig" id="gFig"></div><div class="leg">'+series.map(x => '<span><i style="background:'+x.color+'"></i>'+esc(x.name)+'</span>').join("")+'<span><i style="background:transparent;border:2px solid var(--ink);height:3px;border-radius:0"></i>Acumulado</span></div></div>'+
+    '<div class="card scroll" style="padding:8px 10px"><h2 style="margin:6px 4px 8px">Balance por centro de costos</h2><p class="hint" style="margin:-4px 4px 8px">Montos por '+(gAgr==="mes"?"mes":"trimestre")+' en miles de '+(gMon==="USD"?"dólares":"pesos")+'; el total, completo. Tocá un centro para ver su gráfico y sus órdenes.</p>'+(filas.length ?
+      '<table class="mat"><thead><tr><th>Centro de costos</th>'+etiquetas.map(e => '<th class="n">'+e+'</th>').join("")+'<th class="n">Total</th><th class="n">%</th></tr></thead><tbody>'+
+      filas.map(f => '<tr class="click '+(f.id===gCentro?"sel":"")+'" data-gc="'+esc(f.id)+'"><td><b>'+esc(nomC(f.id))+'</b></td>'+f.v.map(x => '<td class="n" title="'+esc(mny(x))+'">'+(x ? Math.round(x/1000).toLocaleString("es-AR") : '<span class="hint">—</span>')+'</td>').join("")+'<td class="n"><b>'+mny(f.total)+'</b></td><td class="n">'+pct(f.total)+'</td></tr>').join("")+
+      '<tr><td><b>Total</b></td>'+porPer.map(x => '<td class="n" title="'+esc(mny(x))+'"><b>'+(x ? Math.round(x/1000).toLocaleString("es-AR") : "—")+'</b></td>').join("")+'<td class="n"><b>'+mny(total)+'</b></td><td class="n">100 %</td></tr></tbody></table>'
+      : '<div class="empty">No hay gastos '+(gBase==="recibido"?"imputados por remitos":"comprometidos")+' en '+esc(gAnio)+' en '+(gMon==="USD"?"dólares":"pesos")+'.'+(gBase==="recibido"?' Probá con "Comprometido (OC emitidas)".':'')+'</div>')+'</div>'+
+    (sel ? '<div class="card scroll" style="padding:6px 10px"><h2 style="margin:6px 4px">Órdenes de '+esc(nomC(sel.id))+'</h2>'+tablaOcs(sel.ocs.slice().sort(ordenOc))+'</div>' : '');
+  $("#gA").onchange = e => { gAnio = e.target.value; render(); };
+  document.querySelectorAll("[data-ga]").forEach(b => b.onclick = () => { gAgr = b.dataset.ga; render(); });
+  document.querySelectorAll("[data-gm]").forEach(b => b.onclick = () => { gMon = b.dataset.gm; render(); });
+  document.querySelectorAll("[data-gb]").forEach(b => b.onclick = () => { gBase = b.dataset.gb; render(); });
+  $("#gI").onchange = e => { gIva = e.target.checked; render(); };
+  $("#gS").onchange = e => { gSoloAprob = e.target.checked; render(); };
+  document.querySelectorAll("[data-gc]").forEach(r => r.onclick = () => { gCentro = gCentro === r.dataset.gc ? "" : r.dataset.gc; render(); window.scrollTo({top:0, behavior:"smooth"}); });
+  if($("#gTodos")) $("#gTodos").onclick = () => { gCentro = ""; render(); };
+  document.querySelectorAll("#view [data-oc]").forEach(r => r.onclick = () => ir("ordenes", {tipo:"oc", id:r.dataset.oc}));
+  dibujarBarras($("#gFig"), etiquetas, series, acum);
+}
+let roGastos = null;
+function dibujarBarras(cont, etiquetas, series, acum){
+  const svgNS = "http://www.w3.org/2000/svg";
+  const draw = () => {
+    const W = cont.clientWidth, H = cont.clientHeight; if(!W) return;
+    const angosto = W < 520, pl = angosto ? 44 : 70, pr = angosto ? 40 : 62, pt = 14, pb = 26;
+    const n = etiquetas.length, tot = etiquetas.map((_,i) => series.reduce((a,s) => a + s.values[i], 0));
+    const maxB = Math.max(1, ...tot), maxA = Math.max(1, ...acum.filter(v => v != null));
+    const cw = (W - pl - pr) / n, bw = Math.min(46, cw * 0.62), y = v => pt + (H-pt-pb) * (1 - v/maxB), ya = v => pt + (H-pt-pb) * (1 - v/maxA);
+    const fmtK = v => v >= 1e6 ? (v/1e6).toLocaleString("es-AR",{maximumFractionDigits:1})+" M" : v >= 1e3 ? Math.round(v/1e3).toLocaleString("es-AR")+" k" : Math.round(v).toLocaleString("es-AR");
+    let h = '';
+    for(let k=0;k<=4;k++){ const v = maxB*k/4, yy = y(v); h += '<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+yy+'" y2="'+yy+'" stroke="currentColor" stroke-opacity=".12"/>';
+      h += '<text x="'+(pl-6)+'" y="'+(yy+4)+'" text-anchor="end" font-size="11" fill="currentColor" fill-opacity=".6">'+fmtK(v)+'</text>';
+      h += '<text x="'+(W-pr+6)+'" y="'+(ya(maxA*k/4)+4)+'" font-size="11" fill="currentColor" fill-opacity=".6">'+fmtK(maxA*k/4)+'</text>'; }
+    etiquetas.forEach((e,i) => { const x0 = pl + cw*i + (cw-bw)/2; let base = 0;
+      series.forEach(s => { const v = s.values[i]; if(v > 0){ const y1 = y(base+v), y0 = y(base); h += '<rect x="'+x0+'" y="'+y1+'" width="'+bw+'" height="'+Math.max(0.5, y0-y1)+'" fill="'+s.color+'"><title>'+esc(s.name)+' · '+esc(e)+': '+esc(money(v, gMon))+'</title></rect>'; base += v; } });
+      h += '<text x="'+(pl + cw*i + cw/2)+'" y="'+(H-8)+'" text-anchor="middle" font-size="11" fill="currentColor" fill-opacity=".7">'+esc(angosto && n > 6 ? e[0] : e)+'</text>'; });
+    const pts = acum.map((v,i) => v == null ? null : (pl + cw*i + cw/2)+","+ya(v)).filter(Boolean).join(" ");
+    h += '<polyline points="'+pts+'" fill="none" stroke="currentColor" stroke-width="2" stroke-opacity=".85"/>';
+    acum.forEach((v,i) => { if(v == null) return; h += '<circle cx="'+(pl + cw*i + cw/2)+'" cy="'+ya(v)+'" r="3" fill="currentColor"><title>Acumulado a '+esc(etiquetas[i])+': '+esc(money(v, gMon))+'</title></circle>'; });
+    cont.innerHTML = '<svg xmlns="'+svgNS+'" style="color:var(--ink)">'+h+'</svg>';
+  };
+  if(roGastos) roGastos.disconnect();
+  roGastos = new ResizeObserver(draw); roGastos.observe(cont); draw();
+}
+
+/* ---------------- Maestros ---------------- */
+let buscaM = "";
+function vMaestro(tipo){
+  const M = MAESTROS[tipo], q = norm(buscaM);
+  const lista = S.m[tipo].filter(x => !q || norm(M.campos.map(c => x[c[0]]).join(" ")).includes(q));
+  const vis = lista.slice(0, 300);
+  $("#view").innerHTML = '<div class="row sp" style="margin-bottom:12px;"><input id="mq" placeholder="Buscar en '+esc(M.titulo.toLowerCase())+'" value="'+esc(buscaM)+'" style="max-width:340px">'+
+    (puedeM(tipo) ? '<div class="row"><button class="btn" id="mImp">Importar Excel</button><button class="btn p" id="mNew">+ Agregar</button></div>' : '<span class="hint">Solo lo cambia un administrador de Compras.</span>')+'</div>'+
+    '<div class="card scroll" style="padding:6px 10px;"><div class="hint" style="padding:6px 4px">'+S.m[tipo].length+' cargados'+(lista.length>300?' · mostrando 300 de '+lista.length+' (usá el buscador)':'')+'</div>'+
+    (vis.length ? '<table class="stack"><thead><tr>'+M.campos.map(c => '<th>'+esc(c[1])+'</th>').join("")+'<th></th></tr></thead><tbody>'+
+      vis.map(x => '<tr>'+M.campos.map(c => '<td>'+esc(c[0]==="centroId" ? (x.centroId ? centroTxt(x.centroId) : "—") : (x[c[0]]??""))+'</td>').join("")+(puedeM(tipo) ? '<td style="white-space:nowrap"><button class="btn s" data-ed="'+esc(x.id)+'">Editar</button> <button class="btn s d" data-del="'+esc(x.id)+'">✕</button></td>' : '<td></td>')+'</tr>').join("")+'</tbody></table>'
+      : '<div class="empty">Todavía no hay '+esc(M.titulo.toLowerCase())+' cargados. Agregalos uno por uno o importá un Excel.</div>')+'</div>';
+  $("#mq").oninput = e => { buscaM = e.target.value; const pos = e.target.selectionStart; render(); const el = $("#mq"); el.focus(); el.setSelectionRange(pos,pos); };
+  if($("#mNew")) $("#mNew").onclick = () => editarMaestro(tipo, null);
+  if($("#mImp")) $("#mImp").onclick = () => importarExcel(tipo);
+  document.querySelectorAll("[data-ed]").forEach(b => b.onclick = () => editarMaestro(tipo, b.dataset.ed));
+  document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => borrarMaestro(tipo, b.dataset.del));
+}
+function enUso(tipo, id){
+  const campo = { proveedores:"proveedorId", centros:"centroId", depositos:"depositoId", compradores:"compradorId", aprobadores:"aprobadorId", formasPago:"formaPagoId" }[tipo];
+  if(tipo === "articulos") return S.oc.some(o => (o.items||[]).some(i => i.articuloId === id)) || S.sol.some(s => (s.items||[]).some(i => i.articuloId === id));
+  if(tipo === "centros" && (S.m.depositos.some(d => d.centroId === id) || S.oc.some(o => (o.items||[]).some(i => i.centroId === id)))) return true;
+  if(tipo === "depositos" && S.oc.some(o => (o.items||[]).some(i => (i.dist||[]).some(d => d.depositoId === id)))) return true;
+  return campo ? (S.oc.some(o => o[campo] === id) || S.sol.some(s => s[campo] === id)) : false;
+}
+function borrarMaestro(tipo, id){
+  if(enUso(tipo, id)){ toast("No se puede borrar: está usado en solicitudes u órdenes de compra", true); return; }
+  const x = S.m[tipo].find(y => y.id === id);
+  const m = modal('<h3>Eliminar</h3><p>¿Eliminar <b>'+esc(x.razon||x.nombre||x.descripcion)+'</b>?</p><div class="acts"><button class="btn" id="mNo">Cancelar</button><button class="btn d" id="mSi">Eliminar</button></div>');
+  m.querySelector("#mNo").onclick = cerrarModal;
+  m.querySelector("#mSi").onclick = async () => { S.m[tipo] = S.m[tipo].filter(y => y.id !== id); cerrarModal(); await guardarMaestro(tipo); toast("Eliminado"); render(); };
+}
+function editarMaestro(tipo, id, despues){
+  const M = MAESTROS[tipo], x = id ? S.m[tipo].find(y => y.id === id) : {};
+  const m = modal('<h3>'+(id?"Editar":"Agregar")+' · '+esc(M.titulo)+'</h3><div class="grid">'+M.campos.map(([k,t]) => '<div><label class="f">'+esc(t)+(k===M.req?" *":"")+'</label>'+(k==="centroId" ? '<select data-k="centroId">'+opts("centros", x.centroId, "Sin centro de costos")+'</select><div class="hint" style="margin-top:3px">Lo que entra a este depósito repartido desde una OC se imputa a este centro.</div>' : '<input data-k="'+k+'" value="'+esc(x[k]??"")+'">')+'</div>').join("")+'</div>'+
+    '<div class="acts"><button class="btn" id="mNo">Cancelar</button><button class="btn p" id="mSi">Guardar</button></div>');
+  m.querySelector("#mNo").onclick = cerrarModal;
+  m.querySelector("#mSi").onclick = async () => {
+    const d = {}; m.querySelectorAll("[data-k]").forEach(i => d[i.dataset.k] = i.value.trim());
+    if(!d[M.req]){ toast("Completá "+M.campos.find(c=>c[0]===M.req)[1], true); return; }
+    if(tipo === "aprobadores" && !d.iniciales) d.iniciales = d.nombre.split(/\s+/).map(w=>w[0]).join("").toUpperCase();
+    if(tipo === "compradores"){
+      d.siglas = (d.siglas || siglasAuto(d.nombre, id)).toUpperCase().replace(/[^A-ZÑ]/g,"");
+      if(S.m.compradores.some(c => c.id !== id && siglasComprador(c) === d.siglas)){ toast("Las siglas "+d.siglas+" ya son de otro comprador: agregá una tercera letra", true); return; }
+    }
+    if(d[M.clave] && S.m[tipo].some(y => y.id !== id && norm(y[M.clave]) === norm(d[M.clave]))){ toast("Ya existe uno con ese "+M.campos.find(c=>c[0]===M.clave)[1], true); return; }
+    if(id) Object.assign(x, d); else S.m[tipo].push(Object.assign({ id: uid(tipo.slice(0,2)) }, d));
+    cerrarModal(); await guardarMaestro(tipo); toast("Guardado"); if(despues) despues(); else render();
+  };
+}
+function importarExcel(tipo){
+  const M = MAESTROS[tipo];
+  const m = modal('<h3>Importar '+esc(M.titulo.toLowerCase())+' desde Excel</h3><p class="hint">Archivo .xlsx, .xls o .csv con una fila de títulos. Columnas que reconoce: '+M.campos.map(c => esc(c[1])).join(", ")+'.</p>'+
+    '<input type="file" id="iFile" accept=".xlsx,.xls,.csv"><div id="iPrev" style="margin-top:12px"></div>'+
+    '<div class="acts"><button class="btn" id="mNo">Cancelar</button><button class="btn p" id="mSi" disabled>Importar</button></div>', true);
+  let filas = [];
+  m.querySelector("#mNo").onclick = cerrarModal;
+  m.querySelector("#iFile").onchange = async e => {
+    const f = e.target.files[0]; if(!f) return;
+    try{
+      let rows;
+      if(/\.csv$/i.test(f.name) && typeof XLSX === "undefined") rows = parseCsv(await f.text());
+      else { if(typeof XLSX === "undefined") throw new Error("No se pudo cargar el lector de Excel. Probá con un .csv"); const wb = XLSX.read(await f.arrayBuffer(), {type:"array"}); rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:"", raw:false}); }
+      if(!rows.length) throw new Error("El archivo no tiene filas");
+      const heads = Object.keys(rows[0]); const mapa = {};
+      heads.forEach(h => { const nh = norm(h).replace(/[^a-z0-9/ .-]/g," ").replace(/\s+/g," ").trim(); for(const [k, syn] of Object.entries(M.sin||{})) if(!mapa[k] && syn.some(s => nh === s)) { mapa[k] = h; return; } });
+      heads.forEach(h => { const nh = norm(h); for(const [k, syn] of Object.entries(M.sin||{})) if(!mapa[k] && !Object.values(mapa).includes(h) && syn.some(s => nh.includes(s))) { mapa[k] = h; return; } });
+      if(!mapa[M.req]) throw new Error("No encontré la columna de "+M.campos.find(c=>c[0]===M.req)[1]+". Columnas del archivo: "+heads.join(", "));
+      filas = rows.map(r => { const o = {}; Object.entries(mapa).forEach(([k,h]) => o[k] = String(r[h]??"").trim()); return o; }).filter(o => o[M.req]);
+      const existentes = filas.filter(f => f[M.clave] && S.m[tipo].some(y => norm(y[M.clave]) === norm(f[M.clave]))).length;
+      m.querySelector("#iPrev").innerHTML = '<div class="banner info">'+filas.length+' filas leídas · '+(filas.length-existentes)+' nuevas · '+existentes+' ya existen (se actualizan)</div>'+
+        '<p class="hint">Columnas: '+Object.entries(mapa).map(([k,h]) => esc(M.campos.find(c=>c[0]===k)[1])+' ← "'+esc(h)+'"').join(" · ")+'</p>'+
+        '<div class="scroll"><table><thead><tr>'+M.campos.map(c => '<th>'+esc(c[1])+'</th>').join("")+'</tr></thead><tbody>'+filas.slice(0,5).map(f => '<tr>'+M.campos.map(c => '<td>'+esc(f[c[0]]||"")+'</td>').join("")+'</tr>').join("")+'</tbody></table></div>';
+      m.querySelector("#mSi").disabled = false;
+    }catch(err){ m.querySelector("#iPrev").innerHTML = '<div class="banner bad">'+esc(err.message)+'</div>'; m.querySelector("#mSi").disabled = true; }
+  };
+  m.querySelector("#mSi").onclick = async ev => {
+    ev.target.disabled = true; ev.target.textContent = "Importando…";
+    let nuevos = 0, act = 0;
+    filas.forEach(f => { const ex = f[M.clave] ? S.m[tipo].find(y => norm(y[M.clave]) === norm(f[M.clave])) : null;
+      if(ex){ Object.keys(f).forEach(k => { if(f[k]) ex[k] = f[k]; }); act++; } else { S.m[tipo].push(Object.assign({ id: uid(tipo.slice(0,2)) }, f)); nuevos++; } });
+    try{ await guardarMaestro(tipo); cerrarModal(); toast(nuevos+" agregados, "+act+" actualizados"); render(); }
+    catch(e){ ev.target.disabled = false; ev.target.textContent = "Importar"; toast("No se pudo guardar: "+(e.message||e.code), true); }
+  };
+}
+function parseCsv(txt){
+  const sep = (txt.split("\n")[0].match(/;/g)||[]).length > (txt.split("\n")[0].match(/,/g)||[]).length ? ";" : ",";
+  const lines = []; let row = [], cur = "", q = false;
+  for(let i=0;i<txt.length;i++){ const c = txt[i];
+    if(q){ if(c === '"' && txt[i+1] === '"'){ cur += '"'; i++; } else if(c === '"') q = false; else cur += c; }
+    else if(c === '"') q = true; else if(c === sep){ row.push(cur); cur = ""; } else if(c === "\n"){ row.push(cur.replace(/\r$/,"")); lines.push(row); row = []; cur = ""; } else cur += c; }
+  if(cur || row.length){ row.push(cur); lines.push(row); }
+  const h = lines.shift() || []; return lines.filter(l => l.some(v => v.trim())).map(l => Object.fromEntries(h.map((k,i) => [k.trim(), l[i]||""])));
+}
+
+/* ---------------- Configuración ---------------- */
+function vConfig(){
+  const adm = PERM.admin;
+  const bloque = (tipo, desc) => { const M = MAESTROS[tipo]; return '<div class="card"><div class="row sp"><div><h2>'+esc(M.titulo)+'</h2><p class="hint" style="margin:0">'+desc+'</p></div>'+(adm ? '<button class="btn s p" data-add="'+tipo+'">+ Agregar</button>' : '')+'</div>'+
+    (S.m[tipo].length ? '<table style="margin-top:8px"><tbody>'+(tipo==="depositos" ? depsOrdenados() : S.m[tipo]).map(x => '<tr><td><b>'+esc(tipo==="depositos" ? depTxt(x) : tipo==="compradores" ? siglasComprador(x)+" · "+x.nombre : x.nombre)+'</b>'+
+      (tipo==="depositos" ? '<div class="hint">Centro de costos: '+esc(x.centroId ? centroTxt(x.centroId) : "sin asignar")+'</div>' : (x.detalle||x.direccion||x.email?'<div class="hint">'+esc(x.detalle||x.direccion||x.email)+'</div>':''))+'</td>'+
+      (adm ? '<td style="text-align:right;white-space:nowrap"><button class="btn s" data-ced="'+tipo+'|'+esc(x.id)+'">Editar</button> <button class="btn s d" data-cdel="'+tipo+'|'+esc(x.id)+'">✕</button></td>' : '')+'</tr>').join("")+'</tbody></table>' : '<p class="hint">No hay cargados todavía.</p>')+'</div>'; };
+  $("#view").innerHTML = (adm ? '' : '<div class="banner info">Estos datos los cambia un administrador de Compras.</div>')+
+    '<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">'+
+    bloque("depositos","Adónde se entrega lo comprado. Cada depósito se asocia a un centro de costos.")+bloque("compradores","Quién confecciona la OC. Las siglas (CG, JS…) salen en el listado de OC.")+bloque("formasPago","Se eligen dentro de cada OC.")+
+    '<div class="card"><h2>Quién aprueba</h2><p class="hint" style="margin:0">Aprueban solicitudes y órdenes de compra los usuarios de la plataforma con el permiso <b>"Aprobar o rechazar solicitudes de compra y aprobar (firmar) órdenes de compra"</b>. Se asigna en Usuarios de la plataforma. En la OC figura "Aprobó:" con sus siglas.</p></div></div>'+
+    '<div class="card"><h2>Numeración de órdenes de compra</h2><p class="hint">Formato OC + 7 dígitos. La próxima OC que se emita va a ser <b class="mono">'+esc(ocNum(S.cfg.proxNumero||1))+'</b>.</p>'+
+      (adm ? '<div class="row"><input id="cfN" type="number" min="1" value="'+(S.cfg.proxNumero||1)+'" style="width:160px"><button class="btn" id="cfG">Guardar número</button></div>' : '')+'</div>';
+  document.querySelectorAll("[data-add]").forEach(b => b.onclick = () => editarMaestro(b.dataset.add, null));
+  document.querySelectorAll("[data-ced]").forEach(b => { const [t,i] = b.dataset.ced.split("|"); b.onclick = () => editarMaestro(t, i); });
+  document.querySelectorAll("[data-cdel]").forEach(b => { const [t,i] = b.dataset.cdel.split("|"); b.onclick = () => borrarMaestro(t, i); });
+  if($("#cfG")) $("#cfG").onclick = async () => { const n = Math.max(1, Math.round(Number($("#cfN").value)||1));
+    try{ const d = await api("POST", API+"/oc-numero/proximo", { prox: n }); S.cfg.proxNumero = d.prox_oc; toast("La próxima OC será "+ocNum(n)); render(); }
+    catch(e){ toast(e.message, true); } };
+}
+
+/* ---------------- PDF ---------------- */
+async function descargarPdf(o){
+  if(!window.jspdf){ toast("No se pudo cargar el generador de PDF", true); return; }
+  try{ await resolverNombres(); }catch(e){}
+  const { jsPDF } = window.jspdf; const doc = new jsPDF({ unit:"mm", format:"a4" });
+  const p = prov(o.proveedorId) || {}, t = totalOc(o), W = 210, M = 14;
+  doc.setFillColor(29,42,74); doc.rect(0,0,W,4,"F");
+  doc.addImage(LOGO, "JPEG", W-M-52, 9, 52, 18);
+  doc.setFont("helvetica","bold"); doc.setFontSize(20); doc.setTextColor(29,42,74); doc.text("ORDEN DE COMPRA", M, 18);
+  doc.setFontSize(14); doc.text(o.numero, M, 26);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9.5); doc.setTextColor(80,90,105);
+  doc.text("COSESA Servicios Industriales", M, 32);
+  doc.text("Fecha de emisión: "+fFecha(o.fecha), M, 37);
+  const caja = (x, y, w, h, titulo, filas) => { doc.setDrawColor(210,216,226); doc.roundedRect(x,y,w,h,2,2); doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(120,130,145); doc.text(titulo.toUpperCase(), x+3, y+5);
+    doc.setFontSize(9.5); let yy = y+10; filas.forEach(([k,v]) => { doc.setFont("helvetica","bold"); doc.setTextColor(40,48,62); doc.text(k, x+3, yy); doc.setFont("helvetica","normal"); doc.text(doc.splitTextToSize(String(v||"—"), w-34)[0], x+31, yy); yy += 5; }); };
+  caja(M, 42, 88, 42, "Proveedor", [["Razón social", p.razon],["CUIT", p.cuit],["Cond. IVA", p.condIva],["Dirección", [p.direccion,p.localidad].filter(Boolean).join(", ")],["Teléfono", p.telefono],["Email", p.email]]);
+  caja(M+92, 42, W-2*M-92, 42, "Datos de la compra", [["Comprador", nombreDe("compradores",o.compradorId)],["Centro costos", centrosTxtOc(o)],["Depósito", nombreDe("depositos",o.depositoId)],["Forma de pago", nombreDe("formasPago",o.formaPagoId)],["Entrega", (o.modoEntrega==="retiro"?"Retira COSESA":"Entrega en COSESA")+(o.entrega?" · "+fFecha(o.entrega):"")],["Moneda", o.moneda==="USD"?"Dólares (USD)":"Pesos (ARS)"]]);
+  doc.autoTable({ startY: 90, margin:{left:M,right:M}, head:[["Código","Descripción","Cant.","Unidad","Precio unit.","Subtotal"]],
+    body:(o.items||[]).map(i => [i.codigo||"", i.descripcion + (i.obs ? "\nObs.: "+i.obs : "") + (abrevDeps(i) ? "\n"+abrevDeps(i) : ""), qty(i.cantidad), i.unidad, money(i.precio,o.moneda), money(i.cantidad*i.precio,o.moneda)]),
+    styles:{fontSize:9, cellPadding:2.2}, headStyles:{fillColor:[29,42,74], textColor:255}, columnStyles:{2:{halign:"right"},4:{halign:"right"},5:{halign:"right"}}, alternateRowStyles:{fillColor:[246,248,251]} });
+  let y = doc.lastAutoTable.finalY + 6;
+  doc.setFontSize(10); [["Subtotal", money(t.sub,o.moneda)],["IVA "+o.iva+" %", money(t.iva,o.moneda)]].forEach(([k,v]) => { doc.setFont("helvetica","normal"); doc.text(k, W-M-60, y); doc.text(v, W-M, y, {align:"right"}); y += 5.5; });
+  doc.setFont("helvetica","bold"); doc.setFontSize(12); doc.text("TOTAL", W-M-60, y+1); doc.text(money(t.total,o.moneda), W-M, y+1, {align:"right"}); y += 10;
+  // Leyenda para el proveedor, bien visible
+  if(y > 250){ doc.addPage(); y = 20; }
+  doc.setFillColor(253,243,205); doc.setDrawColor(242,194,48); doc.setLineWidth(0.6); doc.roundedRect(M, y, W-2*M, 15, 2, 2, "FD"); doc.setLineWidth(0.2);
+  doc.setTextColor(29,42,74); doc.setFont("helvetica","bold"); doc.setFontSize(10.5);
+  doc.text("Enviar factura a info@cosesahidro.com", M+4, y+6);
+  doc.text("Cargar en factura y remito el número de esta orden de compra: "+o.numero, M+4, y+11.5);
+  doc.setTextColor(40,48,62); y += 21;
+  if(o.obs){ doc.setFontSize(9); doc.setFont("helvetica","bold"); doc.text("Observaciones", M, y); doc.setFont("helvetica","normal"); const l = doc.splitTextToSize(o.obs, W-2*M); doc.text(l, M, y+5); y += 8 + l.length*4.2; }
+  if(o.solicitudNumero){ doc.setFontSize(8.5); doc.setTextColor(120,130,145); doc.text("Solicitud de compra: "+o.solicitudNumero, M, y); y += 6; }
+  // Anotaciones: el texto cargado, o renglones en blanco para escribir a mano
+  { const notas = o.notas ? doc.splitTextToSize(o.notas, W-2*M-6) : null; const h = notas ? 10 + notas.length*4.4 : 30;
+    if(y + h > 240){ doc.addPage(); y = 20; }
+    doc.setDrawColor(200,206,216); doc.roundedRect(M, y, W-2*M, h, 2, 2); doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(120,130,145); doc.text("ANOTACIONES", M+3, y+5);
+    doc.setFont("helvetica","normal"); doc.setFontSize(9.5); doc.setTextColor(40,48,62);
+    if(notas) doc.text(notas, M+3, y+10); else { doc.setDrawColor(225,229,236); for(let k=1;k<=3;k++) doc.line(M+3, y+5+k*7.5, W-M-3, y+5+k*7.5); }
+    y += h + 4; }
+  y = Math.max(y + 12, 250); if(y > ((o.modificaciones||[]).length ? 262 : 275)){ doc.addPage(); y = 40; }
+  doc.setDrawColor(150,158,170); doc.setTextColor(40,48,62); doc.setFontSize(10);
+  doc.line(M, y, M+70, y); doc.line(W-M-70, y, W-M, y);
+  doc.setFont("helvetica","bold"); doc.text("Comprador: "+nombreDe("compradores",o.compradorId), M, y+5);
+  const apr = aprobadorDe(o);
+  doc.text("Aprobó: "+(apr ? apr.iniciales : "pendiente"), W-M-70, y+5);
+  doc.setFont("helvetica","normal"); doc.setFontSize(8.5); if(apr) doc.text(apr.nombre+(apr.fecha ? " · "+apr.fecha : ""), W-M-70, y+9.5);
+  if((o.modificaciones||[]).length){
+    const txt = doc.splitTextToSize("MODIFICADA: "+o.modificaciones.map(x => x.fecha+" por "+x.por+" — "+x.motivo).join(" | "), W-2*M);
+    doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(178,106,0); doc.text(txt.slice(0,3), M, 284 - (Math.min(txt.length,3)-1)*3.6);
+    doc.setFont("helvetica","normal");
+  }
+  doc.setFontSize(8); doc.setTextColor(140,148,160); doc.text("Emitida por "+(o.emitidaPor||"—")+" el "+(o.emitida||""), M, 290);
+  const blob = doc.output("blob"), nombre = o.numero+".pdf";
+  const url = URL.createObjectURL(blob), a = document.createElement("a");
+  a.href = url; a.download = nombre; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000); toast("PDF "+nombre+" descargado");
+}
+
+/* ---------------- Arranque ---------------- */
+iniciarDatos();
+}
+</script>
+</body>
+</html>

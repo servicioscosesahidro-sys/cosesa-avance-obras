@@ -567,6 +567,12 @@ PERMISOS = [
      "Módulo Mantenimiento", True),
     ("modulo_mantenimiento_admin", "Administrar el módulo Mantenimiento: equipos, planes, repuestos, importar horas, anular órdenes",
      "Módulo Mantenimiento", False),
+    ("modulo_compras", "Usar el módulo Compras: solicitudes, órdenes de compra, recepción en depósito y gastos",
+     "Módulo Compras", False),
+    ("modulo_compras_aprobar", "Aprobar o rechazar solicitudes de compra y aprobar (firmar) órdenes de compra",
+     "Módulo Compras", False),
+    ("modulo_compras_admin", "Administrar Compras: centros de costos, depósitos, compradores, formas de pago y numeración de OC",
+     "Módulo Compras", False),
 ]
 PERMISOS_KEYS = [k for k, _l, _g, _d in PERMISOS]
 PERMISOS_DEFAULT = {k for k, _l, _g, d in PERMISOS if d}
@@ -621,6 +627,10 @@ ENDPOINT_PERMISO = {
     "mantenimiento_api_solicitud_estado": "modulo_mantenimiento",
     "mantenimiento_easytrack_leer": "modulo_mantenimiento", "mantenimiento_easytrack_estado": "modulo_mantenimiento",
     "mantenimiento_easytrack_sincronizar": "modulo_mantenimiento",
+    # Módulo Compras (compras_app.py)
+    "compras_app": "modulo_compras", "compras_api_datos": "modulo_compras", "compras_api_guardar": "modulo_compras",
+    "compras_api_borrar": "modulo_compras", "compras_api_numero": "modulo_compras",
+    "compras_api_numero_proximo": "modulo_compras",
 }
 
 # Cómo encontrar la obra a partir del parámetro de la URL.
@@ -4009,6 +4019,13 @@ _mant_app.init_app(app, _types.SimpleNamespace(
 ))
 _mant_app.init_easytrack(app, _types.SimpleNamespace(
     get_current_user=get_current_user, cosesa_required=cosesa_required, puede=puede, is_admin=is_admin,
+))
+
+# Módulo Compras (solicitudes, órdenes de compra, recepción y gastos por centro de costos)
+import compras_app as _compras_app
+_compras_app.init_app(app, _types.SimpleNamespace(
+    get_db=get_db, get_current_user=get_current_user, cosesa_required=cosesa_required,
+    puede=puede, is_admin=is_admin,
 ))
 
 # Pantalla de inicio de la Plataforma COSESA (módulos)
