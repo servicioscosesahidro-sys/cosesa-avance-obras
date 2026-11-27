@@ -169,10 +169,16 @@ const MAESTROS = {
   centros: { titulo:"Centros de costos", campos:[["codigo","Código"],["nombre","Nombre"],["responsable","Responsable"],["activo","Activo"]],
     sin:{codigo:["codigo","cod","centro","cc","centro de costo","centro de costos","nro"],nombre:["nombre","descripcion","detalle","denominacion"],responsable:["responsable","encargado"],activo:["activo","estado","habilitado"]},
     clave:"codigo", req:"nombre" },
-  depositos: { titulo:"Depósitos", campos:[["codigo","Código (01, 02…)"],["nombre","Nombre"],["centroId","Centro de costos"],["direccion","Dirección"]], clave:"codigo", req:"nombre" },
-  compradores: { titulo:"Compradores", campos:[["nombre","Nombre"],["siglas","Siglas (CG, JS…)"],["email","Email"]], clave:"nombre", req:"nombre" },
+  depositos: { titulo:"Depósitos", campos:[["codigo","Código (01, 02…)"],["nombre","Nombre"],["centroId","Centro de costos"],["direccion","Dirección"]],
+    sin:{codigo:["codigo","cod","nro","numero","codigo deposito"],nombre:["nombre","descripcion","nombre deposito","deposito"],centroId:["centro de costos","centro de costo","centro","cc","codigo centro"],direccion:["direccion","domicilio","ubicacion"]},
+    clave:"codigo", req:"nombre" },
+  compradores: { titulo:"Compradores", campos:[["nombre","Nombre"],["siglas","Siglas (CG, JS…)"],["email","Email"]],
+    sin:{nombre:["nombre","comprador","apellido y nombre","nombre y apellido"],siglas:["siglas","sigla","iniciales"],email:["email","mail","correo","e-mail"]},
+    clave:"nombre", req:"nombre" },
   aprobadores: { titulo:"Aprobadores", campos:[["nombre","Nombre"],["iniciales","Iniciales"]], clave:"nombre", req:"nombre" },
-  formasPago: { titulo:"Formas de pago", campos:[["nombre","Nombre"],["detalle","Detalle"]], clave:"nombre", req:"nombre" }
+  formasPago: { titulo:"Formas de pago", campos:[["nombre","Nombre"],["detalle","Detalle"]],
+    sin:{nombre:["nombre","forma de pago","forma","condicion de pago"],detalle:["detalle","descripcion","observaciones","plazo"]},
+    clave:"nombre", req:"nombre" }
 };
 const S = { m:{}, sol:[], oc:[], cfg:{ proxNumero:11 }, listo:{m:false,sol:false,oc:false} };
 Object.keys(MAESTROS).forEach(k => S.m[k] = []);
@@ -1091,7 +1097,7 @@ function vMaestro(tipo){
   const lista = S.m[tipo].filter(x => !q || norm(M.campos.map(c => x[c[0]]).join(" ")).includes(q));
   const vis = lista.slice(0, 300);
   $("#view").innerHTML = '<div class="row sp" style="margin-bottom:12px;"><input id="mq" placeholder="Buscar en '+esc(M.titulo.toLowerCase())+'" value="'+esc(buscaM)+'" style="max-width:340px">'+
-    (puedeM(tipo) ? '<div class="row"><button class="btn" id="mImp">Importar Excel</button><button class="btn p" id="mNew">+ Agregar</button></div>' : '<span class="hint">Solo lo cambia un administrador de Compras.</span>')+'</div>'+
+    (puedeM(tipo) ? '<div class="row"><button class="btn" id="mPlant">⬇ Planilla modelo</button><button class="btn" id="mImp">Importar Excel</button><button class="btn p" id="mNew">+ Agregar</button></div>' : '<span class="hint">Solo lo cambia un administrador de Compras.</span>')+'</div>'+
     '<div class="card scroll" style="padding:6px 10px;"><div class="hint" style="padding:6px 4px">'+S.m[tipo].length+' cargados'+(lista.length>300?' · mostrando 300 de '+lista.length+' (usá el buscador)':'')+'</div>'+
     (vis.length ? '<table class="stack"><thead><tr>'+M.campos.map(c => '<th>'+esc(c[1])+'</th>').join("")+'<th></th></tr></thead><tbody>'+
       vis.map(x => '<tr>'+M.campos.map(c => '<td>'+esc(c[0]==="centroId" ? (x.centroId ? centroTxt(x.centroId) : "—") : (x[c[0]]??""))+'</td>').join("")+(puedeM(tipo) ? '<td style="white-space:nowrap"><button class="btn s" data-ed="'+esc(x.id)+'">Editar</button> <button class="btn s d" data-del="'+esc(x.id)+'">✕</button></td>' : '<td></td>')+'</tr>').join("")+'</tbody></table>'
@@ -1099,6 +1105,7 @@ function vMaestro(tipo){
   $("#mq").oninput = e => { buscaM = e.target.value; const pos = e.target.selectionStart; render(); const el = $("#mq"); el.focus(); el.setSelectionRange(pos,pos); };
   if($("#mNew")) $("#mNew").onclick = () => editarMaestro(tipo, null);
   if($("#mImp")) $("#mImp").onclick = () => importarExcel(tipo);
+  if($("#mPlant")) $("#mPlant").onclick = () => descargarPlantilla(tipo);
   document.querySelectorAll("[data-ed]").forEach(b => b.onclick = () => editarMaestro(tipo, b.dataset.ed));
   document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => borrarMaestro(tipo, b.dataset.del));
 }
@@ -1134,13 +1141,66 @@ function editarMaestro(tipo, id, despues){
     cerrarModal(); await guardarMaestro(tipo); toast("Guardado"); if(despues) despues(); else render();
   };
 }
+/* Planillas modelo para importar: títulos que el importador reconoce + filas de ejemplo */
+const PLANTILLAS = {
+  proveedores: { cols:["Código","Razón social","CUIT","Condición IVA","Dirección","Localidad","Teléfono","Email","Contacto"],
+    filas:[["P001","Ferretería Ejemplo SA","30-71234567-8","Responsable Inscripto","Av. San Martín 1200","Mendoza","261 425-1111","ventas@ejemplo.com","Laura Díaz"],
+           ["P002","Hidráulica Modelo SRL","30-70999888-1","Responsable Inscripto","Carril Rodríguez Peña 3400","Godoy Cruz","261 430-0200","info@ejemplo.com","Martín Ríos"]],
+    notas:["Obligatorio: Razón social.","Si el CUIT ya existe, el proveedor se actualiza (no se duplica).","Condición IVA: Responsable Inscripto, Monotributo, Exento, etc."] },
+  articulos: { cols:["Código","Descripción","Unidad","Rubro"],
+    filas:[["EPP-001","Guantes de nitrilo talle 9","par","EPP"],["LUB-005","Aceite hidráulico ISO 68","l","Lubricantes"],["HID-031","Boquilla rotativa 1000 bar","un","Hidráulica"]],
+    notas:["Obligatorio: Descripción.","Si el Código ya existe, el artículo se actualiza.","Unidad: un, par, l, kg, m, caja, etc."] },
+  centros: { cols:["Código","Nombre","Responsable","Activo"],
+    filas:[["CC-100","Taller central","",'Sí'],["CC-200","Obras de limpieza hidrocinética","","Sí"],["CC-300","Administración","","Sí"]],
+    notas:["Obligatorio: Nombre.","Si el Código ya existe, el centro se actualiza.","Importá los centros de costos antes que los depósitos."] },
+  depositos: { cols:["Código","Nombre","Centro de costos","Dirección"],
+    filas:[["01","Depósito central","CC-100",""],["02","Pañol de taller","CC-100",""],["50","Depósito de obras","CC-200",""]],
+    notas:["Obligatorio: Nombre.","Centro de costos: el código del centro (por ejemplo CC-100) o su nombre, tal como está cargado en Centros de costos.","Si el Código ya existe, el depósito se actualiza."] },
+  compradores: { cols:["Nombre","Siglas","Email"],
+    filas:[["Cesar Gallego","CG",""],["Julio Sanchez","JS",""],["Ivan Lucentini","IL",""]],
+    notas:["Obligatorio: Nombre.","Siglas: 2 letras; si dos compradores tienen las mismas iniciales, agregá una tercera letra.","Si las dejás vacías, se arman solas con el nombre."] },
+  formasPago: { cols:["Nombre","Detalle"],
+    filas:[["Contado","Contra entrega"],["Transferencia a 30 días","Desde fecha de factura"],["Cuenta corriente 30 días",""]],
+    notas:["Obligatorio: Nombre."] }
+};
+function descargarPlantilla(tipo){
+  const P = PLANTILLAS[tipo], M = MAESTROS[tipo], nombre = "Planilla modelo - "+M.titulo;
+  const bajar = (blob, archivo) => { const url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = archivo; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000); };
+  if(typeof XLSX !== "undefined"){
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([P.cols, ...P.filas]);
+    ws["!cols"] = P.cols.map((c,i) => ({ wch: Math.max(c.length, ...P.filas.map(f => String(f[i]||"").length)) + 3 }));
+    XLSX.utils.book_append_sheet(wb, ws, M.titulo.slice(0,31));
+    const wi = XLSX.utils.aoa_to_sheet([["Cómo usar esta planilla"],[""],["1. Borrá las filas de ejemplo y cargá tus datos debajo de los títulos (no cambies los títulos)."],["2. En Compras, tocá \"Importar Excel\" y elegí este archivo."],[""],...P.notas.map(n => ["• "+n])]);
+    wi["!cols"] = [{ wch: 110 }];
+    XLSX.utils.book_append_sheet(wb, wi, "Instrucciones");
+    const out = XLSX.write(wb, { bookType:"xlsx", type:"array" });
+    bajar(new Blob([out], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), nombre+".xlsx");
+  } else {
+    const csv = [P.cols, ...P.filas].map(f => f.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(";")).join("\r\n");
+    bajar(new Blob(["﻿"+csv], { type:"text/csv;charset=utf-8" }), nombre+".csv");
+  }
+  toast("Planilla modelo descargada");
+}
+/* Ajustes de cada fila importada según el tipo de dato */
+function prepararFila(tipo, f){
+  if(tipo === "depositos" && f.centroId){
+    const c = S.m.centros.find(x => norm(x.codigo) === norm(f.centroId) || norm(x.nombre) === norm(f.centroId));
+    if(c) f.centroId = c.id; else { f._ccNo = f.centroId; delete f.centroId; }
+  }
+  if(tipo === "compradores" && f.siglas) f.siglas = f.siglas.toUpperCase().replace(/[^A-ZÑ]/g,"");
+  return f;
+}
 function importarExcel(tipo){
   const M = MAESTROS[tipo];
-  const m = modal('<h3>Importar '+esc(M.titulo.toLowerCase())+' desde Excel</h3><p class="hint">Archivo .xlsx, .xls o .csv con una fila de títulos. Columnas que reconoce: '+M.campos.map(c => esc(c[1])).join(", ")+'.</p>'+
+  const m = modal('<h3>Importar '+esc(M.titulo.toLowerCase())+' desde Excel</h3>'+
+    '<div class="banner info row sp" style="gap:10px"><span>Usá la <b>planilla modelo</b>: tiene los títulos de columna que el sistema reconoce y filas de ejemplo.</span><button class="btn s" id="iPlant" type="button">⬇ Descargar planilla modelo</button></div>'+
+    '<p class="hint">Archivo .xlsx, .xls o .csv con una fila de títulos. Columnas que reconoce: '+(PLANTILLAS[tipo] ? PLANTILLAS[tipo].cols : M.campos.map(c => c[1])).map(esc).join(", ")+'. Si un dato ya existe (mismo '+esc((PLANTILLAS[tipo] && tipo!=="compradores" && tipo!=="formasPago" && tipo!=="proveedores") ? "código" : tipo==="proveedores" ? "CUIT" : "nombre")+'), se actualiza en vez de duplicarse.</p>'+
     '<input type="file" id="iFile" accept=".xlsx,.xls,.csv"><div id="iPrev" style="margin-top:12px"></div>'+
     '<div class="acts"><button class="btn" id="mNo">Cancelar</button><button class="btn p" id="mSi" disabled>Importar</button></div>', true);
   let filas = [];
   m.querySelector("#mNo").onclick = cerrarModal;
+  m.querySelector("#iPlant").onclick = () => descargarPlantilla(tipo);
   m.querySelector("#iFile").onchange = async e => {
     const f = e.target.files[0]; if(!f) return;
     try{
@@ -1152,19 +1212,21 @@ function importarExcel(tipo){
       heads.forEach(h => { const nh = norm(h).replace(/[^a-z0-9/ .-]/g," ").replace(/\s+/g," ").trim(); for(const [k, syn] of Object.entries(M.sin||{})) if(!mapa[k] && syn.some(s => nh === s)) { mapa[k] = h; return; } });
       heads.forEach(h => { const nh = norm(h); for(const [k, syn] of Object.entries(M.sin||{})) if(!mapa[k] && !Object.values(mapa).includes(h) && syn.some(s => nh.includes(s))) { mapa[k] = h; return; } });
       if(!mapa[M.req]) throw new Error("No encontré la columna de "+M.campos.find(c=>c[0]===M.req)[1]+". Columnas del archivo: "+heads.join(", "));
-      filas = rows.map(r => { const o = {}; Object.entries(mapa).forEach(([k,h]) => o[k] = String(r[h]??"").trim()); return o; }).filter(o => o[M.req]);
+      filas = rows.map(r => { const o = {}; Object.entries(mapa).forEach(([k,h]) => o[k] = String(r[h]??"").trim()); return o; }).filter(o => o[M.req]).map(o => prepararFila(tipo, o));
+      const sinCentro = filas.filter(f => f._ccNo);
       const existentes = filas.filter(f => f[M.clave] && S.m[tipo].some(y => norm(y[M.clave]) === norm(f[M.clave]))).length;
       m.querySelector("#iPrev").innerHTML = '<div class="banner info">'+filas.length+' filas leídas · '+(filas.length-existentes)+' nuevas · '+existentes+' ya existen (se actualizan)</div>'+
+        (sinCentro.length ? '<div class="banner warn">'+sinCentro.length+' depósito(s) con un centro de costos que no está cargado ('+[...new Set(sinCentro.map(f => f._ccNo))].map(esc).join(", ")+'): se importan sin centro. Cargá primero los centros de costos o corregí la planilla.</div>' : '')+
         '<p class="hint">Columnas: '+Object.entries(mapa).map(([k,h]) => esc(M.campos.find(c=>c[0]===k)[1])+' ← "'+esc(h)+'"').join(" · ")+'</p>'+
-        '<div class="scroll"><table><thead><tr>'+M.campos.map(c => '<th>'+esc(c[1])+'</th>').join("")+'</tr></thead><tbody>'+filas.slice(0,5).map(f => '<tr>'+M.campos.map(c => '<td>'+esc(f[c[0]]||"")+'</td>').join("")+'</tr>').join("")+'</tbody></table></div>';
+        '<div class="scroll"><table><thead><tr>'+M.campos.map(c => '<th>'+esc(c[1])+'</th>').join("")+'</tr></thead><tbody>'+filas.slice(0,5).map(f => '<tr>'+M.campos.map(c => '<td>'+esc(c[0]==="centroId" ? (f.centroId ? centroTxt(f.centroId) : (f._ccNo ? f._ccNo+" (no existe)" : "")) : (f[c[0]]||""))+'</td>').join("")+'</tr>').join("")+'</tbody></table></div>';
       m.querySelector("#mSi").disabled = false;
     }catch(err){ m.querySelector("#iPrev").innerHTML = '<div class="banner bad">'+esc(err.message)+'</div>'; m.querySelector("#mSi").disabled = true; }
   };
   m.querySelector("#mSi").onclick = async ev => {
     ev.target.disabled = true; ev.target.textContent = "Importando…";
     let nuevos = 0, act = 0;
-    filas.forEach(f => { const ex = f[M.clave] ? S.m[tipo].find(y => norm(y[M.clave]) === norm(f[M.clave])) : null;
-      if(ex){ Object.keys(f).forEach(k => { if(f[k]) ex[k] = f[k]; }); act++; } else { S.m[tipo].push(Object.assign({ id: uid(tipo.slice(0,2)) }, f)); nuevos++; } });
+    filas.forEach(f => { delete f._ccNo; const ex = f[M.clave] ? S.m[tipo].find(y => norm(y[M.clave]) === norm(f[M.clave])) : null;
+      if(ex){ Object.keys(f).forEach(k => { if(f[k]) ex[k] = f[k]; }); act++; } else { const n = Object.assign({ id: uid(tipo.slice(0,2)) }, f); if(tipo === "compradores" && !n.siglas) n.siglas = siglasAuto(n.nombre, n.id); S.m[tipo].push(n); nuevos++; } });
     try{ await guardarMaestro(tipo); cerrarModal(); toast(nuevos+" agregados, "+act+" actualizados"); render(); }
     catch(e){ ev.target.disabled = false; ev.target.textContent = "Importar"; toast("No se pudo guardar: "+(e.message||e.code), true); }
   };
@@ -1182,7 +1244,7 @@ function parseCsv(txt){
 /* ---------------- Configuración ---------------- */
 function vConfig(){
   const adm = PERM.admin;
-  const bloque = (tipo, desc) => { const M = MAESTROS[tipo]; return '<div class="card"><div class="row sp"><div><h2>'+esc(M.titulo)+'</h2><p class="hint" style="margin:0">'+desc+'</p></div>'+(adm ? '<button class="btn s p" data-add="'+tipo+'">+ Agregar</button>' : '')+'</div>'+
+  const bloque = (tipo, desc) => { const M = MAESTROS[tipo]; return '<div class="card"><div class="row sp"><div><h2>'+esc(M.titulo)+'</h2><p class="hint" style="margin:0">'+desc+'</p></div>'+(adm ? '<div class="row" style="gap:6px"><button class="btn s" data-cplant="'+tipo+'" title="Descargar planilla modelo">⬇ Planilla</button><button class="btn s" data-cimp="'+tipo+'">Importar</button><button class="btn s p" data-add="'+tipo+'">+ Agregar</button></div>' : '')+'</div>'+
     (S.m[tipo].length ? '<table style="margin-top:8px"><tbody>'+(tipo==="depositos" ? depsOrdenados() : S.m[tipo]).map(x => '<tr><td><b>'+esc(tipo==="depositos" ? depTxt(x) : tipo==="compradores" ? siglasComprador(x)+" · "+x.nombre : x.nombre)+'</b>'+
       (tipo==="depositos" ? '<div class="hint">Centro de costos: '+esc(x.centroId ? centroTxt(x.centroId) : "sin asignar")+'</div>' : (x.detalle||x.direccion||x.email?'<div class="hint">'+esc(x.detalle||x.direccion||x.email)+'</div>':''))+'</td>'+
       (adm ? '<td style="text-align:right;white-space:nowrap"><button class="btn s" data-ced="'+tipo+'|'+esc(x.id)+'">Editar</button> <button class="btn s d" data-cdel="'+tipo+'|'+esc(x.id)+'">✕</button></td>' : '')+'</tr>').join("")+'</tbody></table>' : '<p class="hint">No hay cargados todavía.</p>')+'</div>'; };
@@ -1193,6 +1255,8 @@ function vConfig(){
     '<div class="card"><h2>Numeración de órdenes de compra</h2><p class="hint">Formato OC + 7 dígitos. La próxima OC que se emita va a ser <b class="mono">'+esc(ocNum(S.cfg.proxNumero||1))+'</b>.</p>'+
       (adm ? '<div class="row"><input id="cfN" type="number" min="1" value="'+(S.cfg.proxNumero||1)+'" style="width:160px"><button class="btn" id="cfG">Guardar número</button></div>' : '')+'</div>';
   document.querySelectorAll("[data-add]").forEach(b => b.onclick = () => editarMaestro(b.dataset.add, null));
+  document.querySelectorAll("[data-cimp]").forEach(b => b.onclick = () => importarExcel(b.dataset.cimp));
+  document.querySelectorAll("[data-cplant]").forEach(b => b.onclick = () => descargarPlantilla(b.dataset.cplant));
   document.querySelectorAll("[data-ced]").forEach(b => { const [t,i] = b.dataset.ced.split("|"); b.onclick = () => editarMaestro(t, i); });
   document.querySelectorAll("[data-cdel]").forEach(b => { const [t,i] = b.dataset.cdel.split("|"); b.onclick = () => borrarMaestro(t, i); });
   if($("#cfG")) $("#cfG").onclick = async () => { const n = Math.max(1, Math.round(Number($("#cfN").value)||1));
